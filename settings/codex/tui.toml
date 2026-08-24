@@ -1,0 +1,3 @@
+[tui]
+status_line = ["project-name", "git-branch", "model-with-reasoning", "fast-mode", "permissions", "approval-mode", "context-used", "five-hour-limit", "weekly-limit"]
+status_line_use_colors = true

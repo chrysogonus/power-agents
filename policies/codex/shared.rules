@@ -1,0 +1,13 @@
+# Allow the repository-local pytest executable to run without approval.
+prefix_rule(
+    pattern = [".venv/bin/pytest"],
+    decision = "allow",
+    justification = "Running tests through the repository-local pytest executable is approved.",
+    match = [
+        ".venv/bin/pytest",
+        ".venv/bin/pytest tests/test_example.py",
+    ],
+    not_match = [
+        "python -m pytest",
+    ],
+)

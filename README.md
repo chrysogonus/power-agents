@@ -9,6 +9,14 @@ skills shared across Codex and Claude Code.
 ~/power-agents/
 ├── instructions/
 │   └── general-global.md
+├── policies/
+│   └── codex/
+│       └── shared.rules
+├── settings/
+│   ├── claude/
+│   │   └── statusline-command.sh
+│   └── codex/
+│       └── tui.toml
 ├── skills/
 │   ├── README.md
 │   └── <skill-name>/
@@ -18,17 +26,24 @@ skills shared across Codex and Claude Code.
 ```
 
 The repository contains the only copies of shared instructions and skills.
-Agent-specific configuration paths use symlinks to this repository:
+Most agent-specific configuration paths use symlinks to this repository. Codex
+TUI settings are merged into its existing configuration so machine-local state
+is preserved.
 
-| Agent | Installed path | Canonical target |
-| --- | --- | --- |
-| Codex skills | `~/.agents/skills` | `~/power-agents/skills` |
-| Claude Code skills | `~/.claude/skills` | `~/power-agents/skills` |
-| Codex instructions | `~/.codex/AGENTS.md` | `~/power-agents/instructions/general-global.md` |
-| Claude Code instructions | `~/.claude/CLAUDE.md` | `~/power-agents/instructions/general-global.md` |
+| Configuration | Installed path | Canonical source | Method |
+| --- | --- | --- | --- |
+| Codex skills | `~/.agents/skills` | `~/power-agents/skills` | Symlink |
+| Claude Code skills | `~/.claude/skills` | `~/power-agents/skills` | Symlink |
+| Codex instructions | `~/.codex/AGENTS.md` | `~/power-agents/instructions/general-global.md` | Symlink |
+| Claude Code instructions | `~/.claude/CLAUDE.md` | `~/power-agents/instructions/general-global.md` | Symlink |
+| Codex authored rules | `~/.codex/rules/shared.rules` | `~/power-agents/policies/codex/shared.rules` | Symlink |
+| Claude Code status line | `~/.claude/statusline-command.sh` | `~/power-agents/settings/claude/statusline-command.sh` | Symlink |
+| Codex TUI settings | `~/.codex/config.toml` | `~/power-agents/settings/codex/tui.toml` | Managed keys |
 
 Application-managed state, caches, plugins, and bundled skills remain in each
-application's own directory and are not managed by this repository.
+application's own directory and are not managed by this repository. In
+particular, Codex continues to own `~/.codex/rules/default.rules` for rules
+created through interactive approvals.
 
 ## Installation
 
@@ -40,11 +55,11 @@ cd ~/power-agents
 ./install.sh
 ```
 
-The installer is safe to rerun. It refuses to replace real files, directories,
-or incorrect symlinks. Move any configuration worth keeping into this
-repository, remove the conflicting path, and rerun the installer. This
-fail-fast behavior prevents backup copies from becoming competing sources of
-truth.
+The installer is safe to rerun. For symlink-managed paths, it refuses to replace
+real files, directories, or incorrect symlinks. Move any configuration worth
+keeping into this repository, remove the conflicting path, and rerun the
+installer. The regular `~/.codex/config.toml` file is the exception: the
+installer preserves it and updates only the centrally managed TUI keys.
 
 ## Syncing
 
@@ -64,6 +79,25 @@ skill format. Each skill must live at `skills/<skill-name>/SKILL.md`, and its
 frontmatter `name` must exactly match the directory name. Because both agents
 link the complete `skills` directory, additions and edits are available without
 creating new per-skill links.
+
+## Updating the Authored Command Policy
+
+Edit `policies/codex/shared.rules`. Keep rules created through Codex approval
+prompts in the application-managed `~/.codex/rules/default.rules` file.
+
+Test the authored rules against a command with:
+
+```bash
+codex execpolicy check --pretty \
+  --rules ~/.codex/rules/shared.rules \
+  -- .venv/bin/pytest
+```
+
+## Updating the Codex Status Line
+
+Edit `settings/codex/tui.toml`, then rerun `./install.sh`. The installer replaces
+only `tui.status_line` and `tui.status_line_use_colors` in
+`~/.codex/config.toml`; all other Codex settings remain local.
 
 ## New-Machine Setup
 
