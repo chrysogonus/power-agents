@@ -21,6 +21,7 @@ skills shared across Codex and Claude Code.
 │   ├── README.md
 │   └── <skill-name>/
 │       └── SKILL.md
+├── Makefile
 ├── install.sh
 └── sync.sh
 ```
@@ -52,7 +53,7 @@ Clone the repository into `~/power-agents`, then run the installer:
 ```bash
 git clone git@github-personal:chrysogonus/power-rangents.git ~/power-agents
 cd ~/power-agents
-./install.sh
+make install
 ```
 
 The installer is safe to rerun. For symlink-managed paths, it refuses to replace
@@ -66,26 +67,40 @@ installer preserves it and updates only the centrally managed TUI keys.
 Pull fast-forward updates and reinstall links in one command:
 
 ```bash
-~/power-agents/sync.sh
+make -C ~/power-agents sync
 ```
 
 `sync.sh` uses `git pull --ff-only`, so it stops rather than creating a merge
 commit when local and remote history have diverged.
 
+## Commands
+
+Run `make` to list the available commands:
+
+```text
+make install  # Install the agent configuration
+make sync     # Pull fast-forward updates and reinstall the configuration
+make test     # Run the isolated behavioral tests
+make check    # Run all required repository checks
+```
+
+The Make targets delegate to the repository scripts, which remain available for
+direct use.
+
 ## Quality Checks
 
-The required local checks use Bash, Git, `jq`, and
+The required local checks use Make, Bash, Git, `jq`, and
 [ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the two
-non-core tools with:
+additional tools with:
 
 ```bash
-sudo apt-get install jq shellcheck
+sudo apt-get install make jq shellcheck
 ```
 
 Run the same blocking checks as CI with:
 
 ```bash
-./scripts/check.sh
+make check
 ```
 
 This command parses and statically analyzes every repository shell script,
@@ -136,7 +151,7 @@ only `tui.status_line` and `tui.status_line_use_colors` in
    git config --local user.email "your-address@example.com"
    ```
 
-5. Run `./install.sh`.
+5. Run `make install`.
 6. Restart active agent sessions so they reload global instructions and skills.
 
 ## Resolving an Installation Conflict

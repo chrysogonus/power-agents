@@ -270,6 +270,24 @@ test_status_line() {
   [[ "$actual" == "$expected" ]] || fail "Status line output was unexpected"
 }
 
+test_make_targets() {
+  local actual
+  local target
+
+  actual="$(make --no-print-directory -C "$ROOT")"
+  assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
+
+  for target in install sync test check; do
+    actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
+    case "$target" in
+      install) [[ "$actual" == "./install.sh" ]] ;;
+      sync) [[ "$actual" == "./sync.sh" ]] ;;
+      test) [[ "$actual" == "./tests/run.sh" ]] ;;
+      check) [[ "$actual" == "./scripts/check.sh" ]] ;;
+    esac || fail "Unexpected make $target command: $actual"
+  done
+}
+
 test_skill_metadata
 pass "skill structure and metadata"
 test_clean_install_and_idempotence
@@ -280,3 +298,5 @@ test_install_conflicts
 pass "file, directory, and incorrect-symlink conflict refusal"
 test_status_line
 pass "status-line output"
+test_make_targets
+pass "Make targets"

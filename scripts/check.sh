@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-for command in git jq shellcheck; do
+for command in git jq make shellcheck; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
     echo "       See README.md#quality-checks for setup instructions." >&2
