@@ -4,9 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_INSTRUCTIONS="$ROOT/instructions/general-global.md"
 SKILLS="$ROOT/skills"
-BACKUP_BASE="$HOME/.agents-backups"
-BACKUP_ROOT=""
-RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 
 if [[ ! -f "$GLOBAL_INSTRUCTIONS" ]]; then
   echo "ERROR: Missing $GLOBAL_INSTRUCTIONS" >&2
@@ -60,32 +57,24 @@ validate_skills() {
   return "$failed"
 }
 
-ensure_backup_root() {
-  if [[ -z "$BACKUP_ROOT" ]]; then
-    BACKUP_ROOT="$BACKUP_BASE/$RUN_ID"
-    mkdir -p "$BACKUP_ROOT"
-  fi
-}
+validate_link_target() {
+  local source="$1"
+  local target="$2"
 
-backup_target() {
-  local target="$1"
-  local relative_target
-  local backup
-
-  ensure_backup_root
-
-  relative_target="${target#"$HOME"/}"
-  if [[ "$relative_target" == "$target" ]]; then
-    relative_target="$(basename "$target")"
+  if [[ -L "$target" && "$target" -ef "$source" ]]; then
+    return 0
   fi
 
-  backup="$BACKUP_ROOT/$relative_target"
-  mkdir -p "$(dirname "$backup")"
-  mv "$target" "$backup"
-  echo "BACKUP: $target -> $backup"
+  if [[ -e "$target" || -L "$target" ]]; then
+    echo "ERROR: Refusing to replace existing path: $target" >&2
+    echo "       Move its canonical content into $ROOT, then remove it." >&2
+    return 1
+  fi
+
+  return 0
 }
 
-backup_and_link() {
+install_link() {
   local source="$1"
   local target="$2"
 
@@ -94,68 +83,80 @@ backup_and_link() {
     return
   fi
 
-  if [[ -e "$target" || -L "$target" ]]; then
-    backup_target "$target"
-  fi
-
   ln -s "$source" "$target"
   echo "LINK: $target -> $source"
 }
 
-migrate_legacy_codex_skills() {
+validate_legacy_codex_skills() {
   local legacy_root="$HOME/.codex/skills"
   local legacy_skill
+  local failed=0
   local skill_dir
 
-  [[ -d "$legacy_root" ]] || return
+  [[ -d "$legacy_root" ]] || return 0
 
   for skill_dir in "$SKILLS"/*; do
     [[ -d "$skill_dir" ]] || continue
     legacy_skill="$legacy_root/$(basename "$skill_dir")"
 
     if [[ -e "$legacy_skill" || -L "$legacy_skill" ]]; then
-      backup_target "$legacy_skill"
-      echo "MIGRATE: Codex reads $skill_dir directly"
+      echo "ERROR: Duplicate Codex skill exists: $legacy_skill" >&2
+      echo "       Codex reads the canonical skill through ~/.agents/skills." >&2
+      failed=1
     fi
   done
+
+  return "$failed"
 }
 
 validate_skills
 
 mkdir -p \
+  "$HOME/.agents" \
   "$HOME/.codex" \
-  "$HOME/.claude/skills" \
-  "$HOME/.copilot"
+  "$HOME/.claude"
+
+failed=0
+validate_link_target \
+  "$GLOBAL_INSTRUCTIONS" \
+  "$HOME/.codex/AGENTS.md" || failed=1
+validate_link_target \
+  "$GLOBAL_INSTRUCTIONS" \
+  "$HOME/.claude/CLAUDE.md" || failed=1
+validate_link_target \
+  "$SKILLS" \
+  "$HOME/.agents/skills" || failed=1
+validate_link_target \
+  "$SKILLS" \
+  "$HOME/.claude/skills" || failed=1
+validate_legacy_codex_skills || failed=1
+
+if ((failed)); then
+  exit 1
+fi
 
 echo
 echo "Installing global agent configuration..."
 echo
 
 # Shared instructions.
-backup_and_link \
+install_link \
   "$GLOBAL_INSTRUCTIONS" \
   "$HOME/.codex/AGENTS.md"
 
-backup_and_link \
+install_link \
   "$GLOBAL_INSTRUCTIONS" \
   "$HOME/.claude/CLAUDE.md"
 
-backup_and_link \
-  "$GLOBAL_INSTRUCTIONS" \
-  "$HOME/.copilot/copilot-instructions.md"
+# Codex discovers ~/.agents/skills. Claude Code discovers ~/.claude/skills.
+# Both paths resolve to the same canonical directory.
+install_link \
+  "$SKILLS" \
+  "$HOME/.agents/skills"
 
-# Codex and GitHub Copilot discover ~/.agents/skills directly. Remove only
-# same-named legacy Codex copies so each canonical skill is registered once.
-migrate_legacy_codex_skills
-
-# Claude Code expects personal skills under ~/.claude/skills. Link individual
-# skills so independently managed Claude skills remain available.
-for skill_dir in "$SKILLS"/*; do
-  [[ -d "$skill_dir" ]] || continue
-  backup_and_link \
-    "$skill_dir" \
-    "$HOME/.claude/skills/$(basename "$skill_dir")"
-done
+install_link \
+  "$SKILLS" \
+  "$HOME/.claude/skills"
 
 echo
 echo "Done."
@@ -165,9 +166,3 @@ echo "  $GLOBAL_INSTRUCTIONS"
 echo
 echo "Canonical skills:"
 echo "  $SKILLS"
-
-if [[ -n "$BACKUP_ROOT" ]]; then
-  echo
-  echo "Backups created:"
-  echo "  $BACKUP_ROOT"
-fi
