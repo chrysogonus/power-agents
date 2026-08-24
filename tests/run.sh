@@ -58,6 +58,11 @@ expect_installer_failure() {
   assert_contains "$test_home/install.log" "ERROR: Refusing to replace existing path:"
 }
 
+render_status_line() {
+  env -u SSH_CONNECTION -u SSH_TTY bash \
+    "$ROOT/settings/claude/statusline-command.sh"
+}
+
 frontmatter_value() {
   local file="$1"
   local key="$2"
@@ -220,6 +225,61 @@ EOF
     fail "Repeated install changed reconciled Codex config"
 }
 
+test_codex_command_policy() {
+  local command
+  local decision
+  local policy_output
+  local pytest_rule
+  local rules="$ROOT/policies/codex/shared.rules"
+  local -a command_parts
+
+  pytest_rule="$(awk '
+    /^prefix_rule\([[:space:]]*$/ {
+      rule = $0 ORS
+      next
+    }
+
+    rule != "" {
+      rule = rule $0 ORS
+    }
+
+    rule != "" && /^\)[[:space:]]*$/ {
+      if (rule ~ /pattern[[:space:]]*=[[:space:]]*\["[.]venv\/bin\/pytest"\]/) {
+        printf "%s", rule
+        exit
+      }
+      rule = ""
+    }
+  ' "$rules")"
+
+  if [[ "$pytest_rule" != *'decision = "prompt"'* ||
+    "$pytest_rule" == *'decision = "allow"'* ]]; then
+    fail "Codex policy does not require approval for unsandboxed project tests"
+  fi
+
+  if ! command -v codex >/dev/null 2>&1; then
+    return
+  fi
+
+  for command in \
+    ".venv/bin/pytest" \
+    ".venv/bin/pytest tests/test_example.py" \
+    ".venv/bin/pytest -c /tmp/attacker.ini /tmp/attacker_test.py"; do
+    read -r -a command_parts <<<"$command"
+    policy_output="$(codex execpolicy check \
+      --rules "$rules" -- "${command_parts[@]}")"
+    decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
+    [[ "$decision" == "prompt" ]] ||
+      fail "Codex policy returned '$decision' for: $command"
+  done
+
+  policy_output="$(codex execpolicy check \
+    --rules "$rules" -- python -m pytest)"
+  decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
+  [[ "$decision" == "none" ]] ||
+    fail "Codex policy unexpectedly matched: python -m pytest"
+}
+
 test_install_conflicts() {
   local file_home="$TEST_ROOT/file-conflict-home"
   local directory_home="$TEST_ROOT/directory-conflict-home"
@@ -251,14 +311,14 @@ test_install_conflicts() {
 test_status_line() {
   local actual
   local expected
+  local injected_json
   local repo="$TEST_ROOT/status-repo"
 
   git init -q -b feature/test "$repo"
   actual="$({
     printf '%s\n' \
       "{\"workspace\":{\"current_dir\":\"$repo\",\"repo\":{\"name\":\"power-agents\"}},\"model\":{\"display_name\":\"GPT-5\"},\"effort\":{\"level\":\"high\"},\"fast_mode\":true,\"context_window\":{\"used_percentage\":68.6},\"rate_limits\":{\"five_hour\":{\"used_percentage\":74.6},\"seven_day\":{\"used_percentage\":90.2}}}"
-  } | env -u SSH_CONNECTION -u SSH_TTY bash \
-    "$ROOT/settings/claude/statusline-command.sh")"
+  } | render_status_line)"
 
   expected=$'\033[1;34mpower-agents\033[0m \033[35mfeature/test\033[0m'
   expected+=$'\033[2m │ \033[0m\033[36mGPT-5\033[0m\033[2m · \033[0m'
@@ -268,6 +328,35 @@ test_status_line() {
   expected+=$'\033[31m7d 90%\033[0m'
 
   [[ "$actual" == "$expected" ]] || fail "Status line output was unexpected"
+
+  injected_json="$(jq -cn \
+    --arg cwd "$TEST_ROOT" \
+    --arg repo 'trusted\e[31mINJECT' \
+    '{workspace: {current_dir: $cwd, repo: {name: $repo}}}')"
+  actual="$(printf '%s\n' "$injected_json" | render_status_line)"
+  expected=$'\033[1;34mtrusted\\e[31mINJECT\033[0m'
+  [[ "$actual" == "$expected" ]] ||
+    fail "Status line expanded a literal backslash escape from workspace text"
+
+  injected_json="$(jq -cn \
+    --arg cwd "$TEST_ROOT" \
+    --arg repo $'trusted\033]52;c;PAYLOAD\a' \
+    --arg model $'GPT\u009b31mINJECT' \
+    --arg effort $'high\nINJECT' \
+    '{
+      workspace: {current_dir: $cwd, repo: {name: $repo}},
+      model: {display_name: $model},
+      effort: {level: $effort}
+    }')"
+  [[ "$injected_json" == *'\u001b'* ]] ||
+    fail "Status-line injection fixture does not contain a JSON ESC character"
+
+  actual="$(printf '%s\n' "$injected_json" | render_status_line)"
+  expected=$'\033[1;34mtrusted]52;c;PAYLOAD\033[0m'
+  expected+=$'\033[2m │ \033[0m\033[36mGPT31mINJECT\033[0m'
+  expected+=$'\033[2m · \033[0m\033[36mhighINJECT\033[0m'
+  [[ "$actual" == "$expected" ]] ||
+    fail "Status line emitted control characters from workspace text"
 }
 
 test_make_targets() {
@@ -294,6 +383,8 @@ test_clean_install_and_idempotence
 pass "clean install and idempotence"
 test_codex_config_reconciliation
 pass "Codex config preservation and managed-key reconciliation"
+test_codex_command_policy
+pass "Codex command policy requires approval for unsandboxed project tests"
 test_install_conflicts
 pass "file, directory, and incorrect-symlink conflict refusal"
 test_status_line

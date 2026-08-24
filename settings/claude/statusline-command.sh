@@ -2,19 +2,30 @@
 
 input=$(cat)
 
+sanitize_display() {
+  jq -Rrs 'gsub("[\u0000-\u001f\u007f-\u009f]"; "")'
+}
+
 fields=()
 while IFS= read -r field; do
   fields+=("$field")
 done < <(
   jq -r '
+    def display_text:
+      if type == "string" then
+        gsub("[\u0000-\u001f\u007f-\u009f]"; "")
+      else
+        ""
+      end;
+
     def percentage:
       if . == null then "" else round | tostring end;
 
     [
-      (.workspace.current_dir // .cwd // ""),
-      (.workspace.repo.name // ""),
-      (.model.display_name // ""),
-      (.effort.level // ""),
+      ((.workspace.current_dir // .cwd // "") | display_text),
+      ((.workspace.repo.name // "") | display_text),
+      ((.model.display_name // "") | display_text),
+      ((.effort.level // "") | display_text),
       (if .fast_mode == true then "fast" else "" end),
       (.context_window.used_percentage | percentage),
       (.rate_limits.five_hour.used_percentage | percentage),
@@ -24,6 +35,7 @@ done < <(
 )
 
 cwd=${fields[0]:-$PWD}
+cwd=$(printf '%s' "$cwd" | sanitize_display)
 repo=${fields[1]:-}
 model=${fields[2]:-}
 effort=${fields[3]:-}
@@ -38,18 +50,20 @@ directory_name=${trimmed_cwd##*/}
 location=${repo:-$directory_name}
 
 if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]; then
-  location="$(whoami)@$(hostname -s) $location"
+  remote_identity=$(printf '%s@%s' "$(whoami)" "$(hostname -s)" | sanitize_display)
+  location="$remote_identity $location"
 fi
 
-branch=$(git --no-optional-locks -C "$cwd" branch --show-current 2>/dev/null)
+branch=$(git --no-optional-locks -C "$cwd" branch --show-current 2>/dev/null |
+  sanitize_display)
 
-BLUE='\033[1;34m'
-MAGENTA='\033[35m'
-CYAN='\033[36m'
-YELLOW='\033[33m'
-RED='\033[31m'
-DIM='\033[2m'
-RESET='\033[0m'
+BLUE=$'\033[1;34m'
+MAGENTA=$'\033[35m'
+CYAN=$'\033[36m'
+YELLOW=$'\033[33m'
+RED=$'\033[31m'
+DIM=$'\033[2m'
+RESET=$'\033[0m'
 
 join_parts() {
   local separator="$1"
@@ -58,7 +72,7 @@ join_parts() {
   local part
 
   for part in "$@"; do
-    printf "%b%s" "$prefix" "$part"
+    printf "%s%s" "$prefix" "$part"
     prefix="$separator"
   done
 }
@@ -74,7 +88,7 @@ format_usage() {
     color="$YELLOW"
   fi
 
-  printf "%b%s %s%%%b" "$color" "$label" "$value" "$RESET"
+  printf "%s%s %s%%%s" "$color" "$label" "$value" "$RESET"
 }
 
 output="${BLUE}${location}${RESET}"
@@ -113,4 +127,4 @@ if ((${#rate_limit_parts[@]})); then
   output="${output}${DIM} │ ${RESET}$(join_parts "${DIM} · ${RESET}" "${rate_limit_parts[@]}")"
 fi
 
-printf "%b" "$output"
+printf "%s" "$output"
