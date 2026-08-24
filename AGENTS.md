@@ -13,6 +13,6 @@ Codex and Claude Code.
 - Keep agent-specific settings under `settings/<agent>/`.
 - Run `./install.sh` after configuration changes. It must remain idempotent and
   preserve unmanaged values in `~/.codex/config.toml`.
-- For shell changes, run `bash -n install.sh sync.sh` and
-  `bash -n settings/claude/statusline-command.sh`; finish with
-  `git diff --check`.
+- Run `./scripts/check.sh` before finishing changes. It includes Bash syntax and
+  static analysis for every shell script, isolated behavioral tests, and
+  `git diff --check` coverage.

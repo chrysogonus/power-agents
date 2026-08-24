@@ -72,6 +72,30 @@ Pull fast-forward updates and reinstall links in one command:
 `sync.sh` uses `git pull --ff-only`, so it stops rather than creating a merge
 commit when local and remote history have diverged.
 
+## Quality Checks
+
+The required local checks use Bash, Git, `jq`, and
+[ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the two
+non-core tools with:
+
+```bash
+sudo apt-get install jq shellcheck
+```
+
+Run the same blocking checks as CI with:
+
+```bash
+./scripts/check.sh
+```
+
+This command parses and statically analyzes every repository shell script,
+validates skill metadata, exercises the installer under temporary isolated home
+directories, checks the status-line output, and rejects whitespace errors or
+unresolved conflict markers. The installer tests never use the invoking user's
+home directory. `jq` is already a status-line runtime dependency; ShellCheck is
+the only check-specific dependency and is limited to warning-or-higher findings
+to avoid subjective style noise.
+
 ## Adding or Updating a Skill
 
 See the [skills documentation](skills/README.md) for the current inventory and

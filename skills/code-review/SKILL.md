@@ -255,4 +255,3 @@ Be direct, specific, and practical.
 Avoid vague advice such as “improve error handling” unless you explain exactly where, why, and how.
 
 Do not over-index on style. Prioritize correctness, security, privacy, reliability, and maintainability.
-
