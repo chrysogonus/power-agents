@@ -4,9 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_INSTRUCTIONS="$ROOT/instructions/general-global.md"
 SKILLS="$ROOT/skills"
+CLAUDE_SETTINGS="$ROOT/settings/claude/settings.json"
 CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: Required command not found: jq" >&2
+  exit 1
+fi
 
 if [[ ! -f "$GLOBAL_INSTRUCTIONS" ]]; then
   echo "ERROR: Missing $GLOBAL_INSTRUCTIONS" >&2
@@ -20,6 +26,11 @@ fi
 
 if [[ ! -f "$CLAUDE_STATUS_LINE" ]]; then
   echo "ERROR: Missing $CLAUDE_STATUS_LINE" >&2
+  exit 1
+fi
+
+if [[ ! -f "$CLAUDE_SETTINGS" ]]; then
+  echo "ERROR: Missing $CLAUDE_SETTINGS" >&2
   exit 1
 fi
 
@@ -110,6 +121,21 @@ validate_codex_tui_settings() {
   fi
 }
 
+validate_claude_settings() {
+  if ! jq -e '
+    type == "object" and
+    keys == ["statusLine"] and
+    .statusLine == {
+      "type": "command",
+      "command": "~/.claude/statusline-command.sh"
+    }
+  ' "$CLAUDE_SETTINGS" >/dev/null 2>&1; then
+    echo "ERROR: Invalid Claude settings fragment: $CLAUDE_SETTINGS" >&2
+    echo "       Expected only the managed statusLine command." >&2
+    return 1
+  fi
+}
+
 validate_link_target() {
   local source="$1"
   local target="$2"
@@ -186,6 +212,65 @@ install_skill_links() {
       "$skill_dir" \
       "$target_root/$(basename "$skill_dir")"
   done
+}
+
+validate_claude_settings_target() {
+  local target="$HOME/.claude/settings.json"
+
+  if [[ -L "$target" ]]; then
+    echo "ERROR: Refusing to update symlinked Claude settings: $target" >&2
+    echo "       Replace it with a regular file so local settings can be preserved." >&2
+    return 1
+  fi
+
+  if [[ -e "$target" && ! -f "$target" ]]; then
+    echo "ERROR: Claude settings are not a regular file: $target" >&2
+    return 1
+  fi
+
+  [[ -f "$target" ]] || return 0
+
+  if ! jq -e 'type == "object"' "$target" >/dev/null 2>&1; then
+    echo "ERROR: Invalid Claude settings JSON: $target" >&2
+    echo "       Fix the file before installing so local settings can be preserved." >&2
+    return 1
+  fi
+}
+
+sync_claude_settings() {
+  local source="$CLAUDE_SETTINGS"
+  local target="$HOME/.claude/settings.json"
+  local input="/dev/null"
+  local temporary
+
+  if [[ -f "$target" ]]; then
+    input="$target"
+  fi
+
+  temporary="$(mktemp "$HOME/.claude/settings.json.tmp.XXXXXX")"
+  if [[ -f "$target" ]] && ! cp -p "$target" "$temporary"; then
+    rm -f "$temporary"
+    return 1
+  fi
+
+  if ! jq -s 'reduce .[] as $settings ({}; . + $settings)' \
+    "$input" "$source" >"$temporary"; then
+    rm -f "$temporary"
+    return 1
+  fi
+
+  if [[ -f "$target" ]] && cmp -s "$temporary" "$target"; then
+    rm -f "$temporary"
+    echo "OK: $target (Claude managed settings)"
+    return
+  fi
+
+  if ! mv "$temporary" "$target"; then
+    rm -f "$temporary"
+    return 1
+  fi
+
+  echo "UPDATE: $target (Claude managed settings)"
 }
 
 validate_codex_config_target() {
@@ -348,6 +433,7 @@ validate_legacy_codex_skills() {
 }
 
 validate_skills
+validate_claude_settings
 validate_codex_tui_settings
 
 mkdir -p \
@@ -368,6 +454,7 @@ validate_skill_links_target "$HOME/.claude/skills" || failed=1
 validate_link_target \
   "$CLAUDE_STATUS_LINE" \
   "$HOME/.claude/statusline-command.sh" || failed=1
+validate_claude_settings_target || failed=1
 validate_link_target \
   "$CODEX_SHARED_RULES" \
   "$HOME/.codex/rules/shared.rules" || failed=1
@@ -401,6 +488,10 @@ install_link \
   "$CLAUDE_STATUS_LINE" \
   "$HOME/.claude/statusline-command.sh"
 
+# Claude keeps machine-local state in settings.json, so only the centrally
+# managed statusLine key is reconciled.
+sync_claude_settings
+
 install_link \
   "$CODEX_SHARED_RULES" \
   "$HOME/.codex/rules/shared.rules"
@@ -420,6 +511,9 @@ echo "  $SKILLS"
 echo
 echo "Canonical Claude status line:"
 echo "  $CLAUDE_STATUS_LINE"
+echo
+echo "Canonical Claude settings:"
+echo "  $CLAUDE_SETTINGS"
 echo
 echo "Canonical Codex TUI settings:"
 echo "  $CODEX_TUI_SETTINGS"

@@ -157,6 +157,7 @@ test_skill_metadata() {
 }
 
 test_clean_install_and_idempotence() {
+  local claude_settings_before
   local config_before
   local test_home="$TEST_ROOT/clean-home"
 
@@ -178,20 +179,90 @@ test_clean_install_and_idempotence() {
   assert_same_link \
     "$ROOT/settings/claude/statusline-command.sh" \
     "$test_home/.claude/statusline-command.sh"
+  [[ -x "$test_home/.claude/statusline-command.sh" ]] ||
+    fail "Installed Claude status-line command is not executable"
+  jq -e '
+    . == {
+      "statusLine": {
+        "type": "command",
+        "command": "~/.claude/statusline-command.sh"
+      }
+    }
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Clean install produced unexpected Claude settings"
   assert_same_link \
     "$ROOT/policies/codex/shared.rules" \
     "$test_home/.codex/rules/shared.rules"
   cmp -s "$ROOT/settings/codex/tui.toml" "$test_home/.codex/config.toml" ||
     fail "Clean install produced unexpected Codex config"
 
+  claude_settings_before="$(cksum "$test_home/.claude/settings.json")"
   config_before="$(cksum "$test_home/.codex/config.toml")"
   run_installer "$test_home"
+  [[ "$(cksum "$test_home/.claude/settings.json")" == "$claude_settings_before" ]] ||
+    fail "Repeated install changed Claude settings"
   [[ "$(cksum "$test_home/.codex/config.toml")" == "$config_before" ]] ||
     fail "Repeated install changed Codex config"
   assert_skill_links "$test_home/.agents/skills"
   assert_skill_links "$test_home/.claude/skills"
   [[ -z "$(find "$test_home/.codex" -name 'config.toml.tmp.*' -print -quit)" ]] ||
     fail "Installer left a temporary Codex config behind"
+  [[ -z "$(find "$test_home/.claude" -name 'settings.json.tmp.*' -print -quit)" ]] ||
+    fail "Installer left a temporary Claude settings file behind"
+}
+
+test_claude_settings_reconciliation() {
+  local test_home="$TEST_ROOT/claude-settings-home"
+
+  mkdir -p "$test_home/.claude"
+  cat >"$test_home/.claude/settings.json" <<'EOF'
+{
+  "model": "opus",
+  "permissions": {
+    "allow": ["Read"]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "old-status-line",
+    "padding": 4
+  }
+}
+EOF
+
+  run_installer "$test_home"
+  jq -e '
+    . == {
+      "model": "opus",
+      "permissions": {
+        "allow": ["Read"]
+      },
+      "statusLine": {
+        "type": "command",
+        "command": "~/.claude/statusline-command.sh"
+      }
+    }
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Installer did not preserve and reconcile Claude settings"
+}
+
+test_claude_settings_rejection() {
+  local test_home="$TEST_ROOT/invalid-claude-settings-home"
+
+  mkdir -p "$test_home/.claude"
+  printf '%s\n' '{"model":' >"$test_home/.claude/settings.json"
+
+  if run_installer "$test_home"; then
+    fail "Installer unexpectedly accepted invalid Claude settings"
+  fi
+
+  assert_contains "$test_home/install.log" \
+    "ERROR: Invalid Claude settings JSON:"
+  [[ "$(<"$test_home/.claude/settings.json")" == '{"model":' ]] ||
+    fail "Installer changed rejected Claude settings"
+  [[ ! -e "$test_home/.codex/AGENTS.md" ]] ||
+    fail "Installer partially installed after rejecting Claude settings"
+  [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
+    fail "Installer partially installed after rejecting Claude settings"
 }
 
 test_skill_link_migration() {
@@ -526,6 +597,7 @@ test_sync_signature_verification() {
   git -C "$source" config user.email "power-agents@example.invalid"
   git -C "$source" config user.signingkey "$fingerprint"
   git -C "$source" config gpg.format openpgp
+  git -C "$source" config commit.gpgsign false
 
   cp "$ROOT/sync.sh" "$source/sync.sh"
   cat >"$source/install.sh" <<'EOF'
@@ -632,6 +704,10 @@ test_skill_metadata
 pass "skill structure and metadata"
 test_clean_install_and_idempotence
 pass "clean install, unrelated-skill preservation, and idempotence"
+test_claude_settings_reconciliation
+pass "Claude settings preservation and managed-key reconciliation"
+test_claude_settings_rejection
+pass "invalid Claude settings fail without partial installation"
 test_skill_link_migration
 pass "legacy whole-directory skill links migrate to per-skill links"
 test_codex_config_reconciliation

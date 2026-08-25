@@ -14,6 +14,7 @@ skills shared across Codex and Claude Code.
 │       └── shared.rules
 ├── settings/
 │   ├── claude/
+│   │   ├── settings.json
 │   │   └── statusline-command.sh
 │   └── codex/
 │       └── tui.toml
@@ -37,6 +38,7 @@ is preserved.
 | Claude Code skills | `~/.claude/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
 | Codex instructions | `~/.codex/AGENTS.md` | `~/power-agents/instructions/general-global.md` | Symlink |
 | Claude Code instructions | `~/.claude/CLAUDE.md` | `~/power-agents/instructions/general-global.md` | Symlink |
+| Claude Code settings | `~/.claude/settings.json` | `~/power-agents/settings/claude/settings.json` | Managed keys |
 | Codex authored rules | `~/.codex/rules/shared.rules` | `~/power-agents/policies/codex/shared.rules` | Symlink |
 | Claude Code status line | `~/.claude/statusline-command.sh` | `~/power-agents/settings/claude/statusline-command.sh` | Symlink |
 | Codex TUI settings | `~/.codex/config.toml` | `~/power-agents/settings/codex/tui.toml` | Managed keys |
@@ -63,11 +65,13 @@ version of this installer are migrated to per-skill links. Move any conflicting
 configuration worth keeping into this repository, remove the conflicting path,
 and rerun the installer.
 
-The regular `~/.codex/config.toml` file is the exception to symlink management:
-the installer preserves it and updates only the centrally managed TUI keys. An
-existing TUI configuration must use an explicit `[tui]` table; top-level
-`tui.status_line = ...` and `tui = {...}` forms are rejected before installation
-because appending another `[tui]` table would produce invalid TOML.
+The regular machine-local settings files are exceptions to symlink management.
+The installer preserves unrelated values while updating only Claude Code's
+`statusLine` key in `~/.claude/settings.json` and the centrally managed TUI keys
+in `~/.codex/config.toml`. An existing Codex TUI configuration must use an
+explicit `[tui]` table; top-level `tui.status_line = ...` and `tui = {...}` forms
+are rejected before installation because appending another `[tui]` table would
+produce invalid TOML.
 
 ## Syncing
 
@@ -128,13 +132,13 @@ make check
 ```
 
 This command parses and statically analyzes every repository shell script,
-validates skill metadata, exercises the installer under temporary isolated home
-directories, checks the status-line output, and rejects whitespace errors or
-unresolved conflict markers. It works from either a Git checkout or an exported
-source archive without `.git`. The installer tests never use the invoking
-user's home directory. `jq` is already a status-line runtime dependency;
-ShellCheck is the only check-specific dependency and is limited to
-warning-or-higher findings to avoid subjective style noise.
+validates skill metadata, exercises settings reconciliation and the installer
+under temporary isolated home directories, checks the status-line output, and
+rejects whitespace errors or unresolved conflict markers. It works from either
+a Git checkout or an exported source archive without `.git`. The installer tests
+never use the invoking user's home directory. `jq` is an installer and
+status-line runtime dependency; ShellCheck is the only check-specific dependency
+and is limited to warning-or-higher findings to avoid subjective style noise.
 
 ## Adding or Updating a Skill
 
