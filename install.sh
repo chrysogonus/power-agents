@@ -140,6 +140,54 @@ install_link() {
   echo "LINK: $target -> $source"
 }
 
+validate_skill_links_target() {
+  local skill_dir
+  local target_root="$1"
+
+  if [[ -L "$target_root" ]]; then
+    if [[ "$target_root" -ef "$SKILLS" ]]; then
+      return 0
+    fi
+
+    echo "ERROR: Refusing to replace existing path: $target_root" >&2
+    echo "       Move its canonical content into $ROOT, then remove it." >&2
+    return 1
+  fi
+
+  if [[ -e "$target_root" && ! -d "$target_root" ]]; then
+    echo "ERROR: Refusing to replace existing path: $target_root" >&2
+    echo "       Move its canonical content into $ROOT, then remove it." >&2
+    return 1
+  fi
+
+  [[ -d "$target_root" ]] || return 0
+
+  for skill_dir in "$SKILLS"/*; do
+    [[ -d "$skill_dir" ]] || continue
+    validate_link_target \
+      "$skill_dir" \
+      "$target_root/$(basename "$skill_dir")" || return 1
+  done
+}
+
+install_skill_links() {
+  local skill_dir
+  local target_root="$1"
+
+  if [[ -L "$target_root" && "$target_root" -ef "$SKILLS" ]]; then
+    unlink "$target_root"
+    echo "MIGRATE: $target_root (per-skill links)"
+  fi
+
+  mkdir -p "$target_root"
+  for skill_dir in "$SKILLS"/*; do
+    [[ -d "$skill_dir" ]] || continue
+    install_link \
+      "$skill_dir" \
+      "$target_root/$(basename "$skill_dir")"
+  done
+}
+
 validate_codex_config_target() {
   local target="$HOME/.codex/config.toml"
 
@@ -151,6 +199,31 @@ validate_codex_config_target() {
 
   if [[ -e "$target" && ! -f "$target" ]]; then
     echo "ERROR: Codex config is not a regular file: $target" >&2
+    return 1
+  fi
+
+  [[ -f "$target" ]] || return 0
+
+  if awk '
+    BEGIN {
+      in_root = 1
+    }
+
+    in_root && /^[[:space:]]*(tui|"tui"|\047tui\047)[[:space:]]*[.=]/ {
+      found = 1
+      exit
+    }
+
+    /^[[:space:]]*\[\[?[^]]+\]\]?[[:space:]]*(#.*)?$/ {
+      in_root = 0
+    }
+
+    END {
+      exit !found
+    }
+  ' "$target"; then
+    echo "ERROR: Unsupported top-level tui setting in Codex config: $target" >&2
+    echo "       Use an explicit [tui] table so managed settings can be updated safely." >&2
     return 1
   fi
 }
@@ -290,12 +363,8 @@ validate_link_target \
 validate_link_target \
   "$GLOBAL_INSTRUCTIONS" \
   "$HOME/.claude/CLAUDE.md" || failed=1
-validate_link_target \
-  "$SKILLS" \
-  "$HOME/.agents/skills" || failed=1
-validate_link_target \
-  "$SKILLS" \
-  "$HOME/.claude/skills" || failed=1
+validate_skill_links_target "$HOME/.agents/skills" || failed=1
+validate_skill_links_target "$HOME/.claude/skills" || failed=1
 validate_link_target \
   "$CLAUDE_STATUS_LINE" \
   "$HOME/.claude/statusline-command.sh" || failed=1
@@ -323,14 +392,9 @@ install_link \
   "$HOME/.claude/CLAUDE.md"
 
 # Codex discovers ~/.agents/skills. Claude Code discovers ~/.claude/skills.
-# Both paths resolve to the same canonical directory.
-install_link \
-  "$SKILLS" \
-  "$HOME/.agents/skills"
-
-install_link \
-  "$SKILLS" \
-  "$HOME/.claude/skills"
+# Link each canonical skill so unrelated local skills remain untouched.
+install_skill_links "$HOME/.agents/skills"
+install_skill_links "$HOME/.claude/skills"
 
 # Agent-specific configuration that remains canonical in this repository.
 install_link \

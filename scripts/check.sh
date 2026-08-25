@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-for command in git jq make shellcheck; do
+for command in git gpg jq make shellcheck; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
     echo "       See README.md#quality-checks for setup instructions." >&2
@@ -12,9 +12,21 @@ for command in git jq make shellcheck; do
   fi
 done
 
-mapfile -d '' shell_files < <(
-  git ls-files --cached --others --exclude-standard -z -- '*.sh'
-)
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  mapfile -d '' shell_files < <(
+    git ls-files --cached --others --exclude-standard -z -- '*.sh'
+  )
+  mapfile -d '' repository_files < <(
+    git ls-files --cached --others --exclude-standard -z
+  )
+else
+  mapfile -d '' shell_files < <(
+    find . -path './.git' -prune -o -type f -name '*.sh' -print0
+  )
+  mapfile -d '' repository_files < <(
+    find . -path './.git' -prune -o -type f -print0
+  )
+fi
 
 if ((${#shell_files[@]} == 0)); then
   echo "ERROR: No shell scripts found to check." >&2
@@ -33,9 +45,6 @@ echo "Running behavioral tests..."
 "$ROOT/tests/run.sh"
 
 echo "Checking tracked files and the working tree for whitespace errors..."
-mapfile -d '' repository_files < <(
-  git ls-files --cached --others --exclude-standard -z
-)
 whitespace_failed=0
 for repository_file in "${repository_files[@]}"; do
   if check_output="$(git diff --no-index --check /dev/null "$repository_file" 2>&1)"; then

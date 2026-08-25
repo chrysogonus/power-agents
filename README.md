@@ -33,8 +33,8 @@ is preserved.
 
 | Configuration | Installed path | Canonical source | Method |
 | --- | --- | --- | --- |
-| Codex skills | `~/.agents/skills` | `~/power-agents/skills` | Symlink |
-| Claude Code skills | `~/.claude/skills` | `~/power-agents/skills` | Symlink |
+| Codex skills | `~/.agents/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
+| Claude Code skills | `~/.claude/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
 | Codex instructions | `~/.codex/AGENTS.md` | `~/power-agents/instructions/general-global.md` | Symlink |
 | Claude Code instructions | `~/.claude/CLAUDE.md` | `~/power-agents/instructions/general-global.md` | Symlink |
 | Codex authored rules | `~/.codex/rules/shared.rules` | `~/power-agents/policies/codex/shared.rules` | Symlink |
@@ -51,27 +51,51 @@ created through interactive approvals.
 Clone the repository into `~/power-agents`, then run the installer:
 
 ```bash
-git clone git@github-personal:chrysogonus/power-rangents.git ~/power-agents
+git clone git@github-personal:chrysogonus/power-agents.git ~/power-agents
 cd ~/power-agents
 make install
 ```
 
-The installer is safe to rerun. For symlink-managed paths, it refuses to replace
-real files, directories, or incorrect symlinks. Move any configuration worth
-keeping into this repository, remove the conflicting path, and rerun the
-installer. The regular `~/.codex/config.toml` file is the exception: the
-installer preserves it and updates only the centrally managed TUI keys.
+The installer is safe to rerun. It preserves unrelated skills in both agents'
+skill directories and refuses to replace a same-name skill, real file, or
+incorrect symlink. Existing whole-directory skill links created by an older
+version of this installer are migrated to per-skill links. Move any conflicting
+configuration worth keeping into this repository, remove the conflicting path,
+and rerun the installer.
+
+The regular `~/.codex/config.toml` file is the exception to symlink management:
+the installer preserves it and updates only the centrally managed TUI keys. An
+existing TUI configuration must use an explicit `[tui]` table; top-level
+`tui.status_line = ...` and `tui = {...}` forms are rejected before installation
+because appending another `[tui]` table would produce invalid TOML.
 
 ## Syncing
 
-Pull fast-forward updates and reinstall links in one command:
+Sync verifies every incoming commit before updating the working tree or running
+the installer. Configure Git to sign commits with your OpenPGP key, then put the
+key's full primary fingerprint in an allowlist outside this repository:
+
+```bash
+git config --local gpg.format openpgp
+git config --local commit.gpgsign true
+gpg --fingerprint "$(git config user.signingkey)"
+mkdir -p ~/.config/power-agents
+${EDITOR:-vi} ~/.config/power-agents/trusted-signing-keys
+```
+
+The allowlist accepts one full fingerprint per line; blank lines and lines
+starting with `#` are ignored. Once it is configured, fetch, verify,
+fast-forward, and reinstall in one command:
 
 ```bash
 make -C ~/power-agents sync
 ```
 
-`sync.sh` uses `git pull --ff-only`, so it stops rather than creating a merge
-commit when local and remote history have diverged.
+`sync.sh` verifies every commit in the incoming range with `git verify-commit`
+and requires its primary-key fingerprint to appear in the external allowlist.
+It rejects unsigned, invalid, expired, revoked, or unlisted signatures and
+divergent history without changing `HEAD` or running incoming code. An
+up-to-date checkout may still rerun the already-trusted installer.
 
 ## Commands
 
@@ -79,7 +103,7 @@ Run `make` to list the available commands:
 
 ```text
 make install  # Install the agent configuration
-make sync     # Pull fast-forward updates and reinstall the configuration
+make sync     # Verify, fast-forward, and reinstall the configuration
 make test     # Run the isolated behavioral tests
 make check    # Run all required repository checks
 ```
@@ -89,12 +113,12 @@ direct use.
 
 ## Quality Checks
 
-The required local checks use Make, Bash, Git, `jq`, and
-[ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the two
-additional tools with:
+The required local checks use Make, Bash, Git, GnuPG, `jq`, and
+[ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the
+dependencies with:
 
 ```bash
-sudo apt-get install make jq shellcheck
+sudo apt-get install make gnupg jq shellcheck
 ```
 
 Run the same blocking checks as CI with:
@@ -106,18 +130,19 @@ make check
 This command parses and statically analyzes every repository shell script,
 validates skill metadata, exercises the installer under temporary isolated home
 directories, checks the status-line output, and rejects whitespace errors or
-unresolved conflict markers. The installer tests never use the invoking user's
-home directory. `jq` is already a status-line runtime dependency; ShellCheck is
-the only check-specific dependency and is limited to warning-or-higher findings
-to avoid subjective style noise.
+unresolved conflict markers. It works from either a Git checkout or an exported
+source archive without `.git`. The installer tests never use the invoking
+user's home directory. `jq` is already a status-line runtime dependency;
+ShellCheck is the only check-specific dependency and is limited to
+warning-or-higher findings to avoid subjective style noise.
 
 ## Adding or Updating a Skill
 
 See the [skills documentation](skills/README.md) for the current inventory and
 skill format. Each skill must live at `skills/<skill-name>/SKILL.md`, and its
-frontmatter `name` must exactly match the directory name. Because both agents
-link the complete `skills` directory, additions and edits are available without
-creating new per-skill links.
+frontmatter `name` must exactly match the directory name. Rerun `./install.sh`
+after adding a skill so both agents receive its per-skill link. Edits to an
+already linked skill are available immediately.
 
 ## Updating the Authored Command Policy
 
@@ -156,6 +181,20 @@ only `tui.status_line` and `tui.status_line_use_colors` in
 
 ## Resolving an Installation Conflict
 
-The installer never moves or deletes conflicting data. Inspect the path named
-in the error, move any configuration worth keeping into this repository, then
-remove the conflict and rerun `./install.sh`.
+The installer never moves or deletes conflicting user data. It only replaces a
+legacy whole-directory skill link when that link resolves to this repository.
+Inspect the path named in any error, move configuration worth keeping into this
+repository, then remove the conflict and rerun `./install.sh`.
+
+## Manual Uninstall
+
+There is no automated uninstaller. Before removing anything, use `readlink` to
+verify that each managed symlink in the table above resolves into this checkout.
+Use `unlink` only on verified links, including each repository-owned entry under
+`~/.agents/skills/` and `~/.claude/skills/`; keep those directories and all
+unrelated skills intact. Older installations may instead have a verified
+whole-directory `skills` symlink, which can be unlinked as one path.
+
+Finally, edit `~/.codex/config.toml` and remove `status_line` and
+`status_line_use_colors` from `[tui]` if those managed values are no longer
+wanted. Keep the `[tui]` table when it contains other local settings.

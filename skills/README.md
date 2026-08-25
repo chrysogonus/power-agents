@@ -38,5 +38,6 @@ directory.
 ## Adding a Skill
 
 Create the directory and `SKILL.md`, then run `./install.sh` from the repository
-root to validate all skill names and installed links. Existing symlinks expose
-the new skill to Codex and Claude Code without additional per-skill setup.
+root to validate all skill names and create the new per-skill links for Codex
+and Claude Code. Existing unrelated skills in either agent's skill directory
+remain untouched.

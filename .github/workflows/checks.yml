@@ -21,7 +21,13 @@ jobs:
           persist-credentials: false
 
       - name: Install check dependencies
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends jq shellcheck
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends gnupg jq shellcheck
 
       - name: Run checks
         run: make check
+
+      - name: Run checks from a source archive
+        run: |
+          archive_dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$archive_dir"
+          make -C "$archive_dir" check

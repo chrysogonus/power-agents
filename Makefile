@@ -8,7 +8,7 @@ help:
 		'' \
 		'Targets:' \
 		"  install  Install this repository's agent configuration" \
-		'  sync     Pull fast-forward updates and reinstall configuration' \
+		'  sync     Verify, fast-forward, and reinstall configuration' \
 		'  test     Run the isolated behavioral tests' \
 		'  check    Run all required repository checks'
 
