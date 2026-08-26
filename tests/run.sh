@@ -159,11 +159,21 @@ test_skill_metadata() {
 test_clean_install_and_idempotence() {
   local claude_settings_before
   local config_before
+  local local_broken_target="$TEST_ROOT/missing-local-skill"
+  local stale_skill_name="removed-repository-skill"
   local test_home="$TEST_ROOT/clean-home"
 
   mkdir -p "$test_home/.agents/skills" "$test_home/.claude/skills"
   printf '%s\n' "keep this Codex skill" >"$test_home/.agents/skills/local-skill"
   printf '%s\n' "keep this Claude skill" >"$test_home/.claude/skills/local-skill"
+  ln -s "$local_broken_target" \
+    "$test_home/.agents/skills/local-broken-skill"
+  ln -s "$local_broken_target" \
+    "$test_home/.claude/skills/local-broken-skill"
+  ln -s "$ROOT/skills/$stale_skill_name" \
+    "$test_home/.agents/skills/$stale_skill_name"
+  ln -s "$ROOT/skills/$stale_skill_name" \
+    "$test_home/.claude/skills/$stale_skill_name"
   run_installer "$test_home"
 
   assert_same_link \
@@ -176,6 +186,20 @@ test_clean_install_and_idempotence() {
     fail "Installer changed an unrelated Codex skill"
   [[ "$(<"$test_home/.claude/skills/local-skill")" == "keep this Claude skill" ]] ||
     fail "Installer changed an unrelated Claude skill"
+  [[ "$(readlink "$test_home/.agents/skills/local-broken-skill")" == \
+    "$local_broken_target" ]] ||
+    fail "Installer changed an unrelated broken Codex skill link"
+  [[ "$(readlink "$test_home/.claude/skills/local-broken-skill")" == \
+    "$local_broken_target" ]] ||
+    fail "Installer changed an unrelated broken Claude skill link"
+  [[ ! -L "$test_home/.agents/skills/$stale_skill_name" ]] ||
+    fail "Installer kept a stale repository-owned Codex skill link"
+  [[ ! -L "$test_home/.claude/skills/$stale_skill_name" ]] ||
+    fail "Installer kept a stale repository-owned Claude skill link"
+  assert_contains "$test_home/install.log" \
+    "REMOVE: $test_home/.agents/skills/$stale_skill_name"
+  assert_contains "$test_home/install.log" \
+    "REMOVE: $test_home/.claude/skills/$stale_skill_name"
   assert_same_link \
     "$ROOT/settings/claude/statusline-command.sh" \
     "$test_home/.claude/statusline-command.sh"
@@ -481,10 +505,13 @@ test_install_conflicts() {
 
 test_status_line() {
   local actual
+  local c1_control
   local error_output="$TEST_ROOT/status-line.err"
   local expected
   local injected_json
   local repo="$TEST_ROOT/status-repo"
+
+  printf -v c1_control '\302\233'
 
   git init -q -b feature/test "$repo"
   actual="$({
@@ -513,7 +540,7 @@ test_status_line() {
   injected_json="$(jq -cn \
     --arg cwd "$TEST_ROOT" \
     --arg repo $'trusted\033]52;c;PAYLOAD\a' \
-    --arg model $'GPT\u009b31mINJECT' \
+    --arg model "GPT${c1_control}31mINJECT" \
     --arg effort $'high\nINJECT' \
     '{
       workspace: {current_dir: $cwd, repo: {name: $repo}},
@@ -522,6 +549,8 @@ test_status_line() {
     }')"
   [[ "$injected_json" == *'\u001b'* ]] ||
     fail "Status-line injection fixture does not contain a JSON ESC character"
+  [[ "$injected_json" == *"$c1_control"* ]] ||
+    fail "Status-line injection fixture does not contain a C1 control character"
 
   actual="$(printf '%s\n' "$injected_json" | render_status_line)"
   expected=$'\033[1;34mtrusted]52;c;PAYLOAD\033[0m'
@@ -566,7 +595,10 @@ test_sync_signature_verification() {
   local clone
   local fingerprint
   local gpg_home
+  local reported_primary
+  local reported_signer
   local remote
+  local signing_fingerprint
   local source
   local sync_home
   local sync_root="$TEST_ROOT/sync-verification"
@@ -584,12 +616,21 @@ test_sync_signature_verification() {
   chmod 700 "$gpg_home"
   GNUPGHOME="$gpg_home" gpg --batch --quiet --pinentry-mode loopback \
     --passphrase '' --quick-generate-key \
-    'Power Agents Test <power-agents@example.invalid>' rsa2048 sign 0
+    'Power Agents Test <power-agents@example.invalid>' rsa2048 cert 0
   fingerprint="$(GNUPGHOME="$gpg_home" gpg --batch --with-colons \
     --list-secret-keys 2>/dev/null |
     awk -F: '$1 == "fpr" { print $10; exit }')"
   [[ "$fingerprint" =~ ^[[:xdigit:]]{40}$ ]] ||
-    fail "Test signing key did not have a full OpenPGP fingerprint"
+    fail "Test primary key did not have a full OpenPGP fingerprint"
+  GNUPGHOME="$gpg_home" gpg --batch --quiet --pinentry-mode loopback \
+    --passphrase '' --quick-add-key "$fingerprint" rsa2048 sign 0
+  signing_fingerprint="$(GNUPGHOME="$gpg_home" gpg --batch --with-colons \
+    --list-secret-keys 2>/dev/null |
+    awk -F: '$1 == "fpr" { count++; if (count == 2) { print $10; exit } }')"
+  [[ "$signing_fingerprint" =~ ^[[:xdigit:]]{40}$ ]] ||
+    fail "Test signing subkey did not have a full OpenPGP fingerprint"
+  [[ "$signing_fingerprint" != "$fingerprint" ]] ||
+    fail "Test signing subkey unexpectedly matched the primary key"
 
   git init -q --bare -b main "$remote"
   git init -q -b main "$source"
@@ -619,6 +660,14 @@ EOF
   GNUPGHOME="$gpg_home" git -C "$source" commit -q \
     -S"$fingerprint" -am "trusted signed update"
   trusted_commit="$(git -C "$source" rev-parse HEAD)"
+  read -r reported_signer reported_primary < <(
+    GNUPGHOME="$gpg_home" git -C "$source" show -s \
+      --format='%GF %GP' "$trusted_commit" 2>/dev/null
+  )
+  [[ "$reported_signer" == "$signing_fingerprint" ]] ||
+    fail "Test commit was not signed by the signing subkey"
+  [[ "$reported_primary" == "$fingerprint" ]] ||
+    fail "Git did not report the expected primary signing-key fingerprint"
   git -C "$source" push -q
 
   if HOME="$sync_home" GNUPGHOME="$gpg_home" \
@@ -703,7 +752,7 @@ test_make_targets() {
 test_skill_metadata
 pass "skill structure and metadata"
 test_clean_install_and_idempotence
-pass "clean install, unrelated-skill preservation, and idempotence"
+pass "clean install, stale-link cleanup, unrelated-skill preservation, and idempotence"
 test_claude_settings_reconciliation
 pass "Claude settings preservation and managed-key reconciliation"
 test_claude_settings_rejection

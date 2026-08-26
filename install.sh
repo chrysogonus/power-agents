@@ -197,7 +197,10 @@ validate_skill_links_target() {
 }
 
 install_skill_links() {
+  local expected_target
+  local skill_link
   local skill_dir
+  local skill_name
   local target_root="$1"
 
   if [[ -L "$target_root" && "$target_root" -ef "$SKILLS" ]]; then
@@ -206,6 +209,18 @@ install_skill_links() {
   fi
 
   mkdir -p "$target_root"
+
+  for skill_link in "$target_root"/*; do
+    [[ -L "$skill_link" ]] || continue
+    skill_name="$(basename "$skill_link")"
+    expected_target="$SKILLS/$skill_name"
+    [[ ! -e "$expected_target" ]] || continue
+    [[ "$(readlink "$skill_link")" == "$expected_target" ]] || continue
+
+    unlink "$skill_link"
+    echo "REMOVE: $skill_link (stale repository skill link)"
+  done
+
   for skill_dir in "$SKILLS"/*; do
     [[ -d "$skill_dir" ]] || continue
     install_link \

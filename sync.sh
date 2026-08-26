@@ -21,7 +21,7 @@ verify_trusted_commit() {
 
   read -r signature_status fingerprint < <(
     git -C "$ROOT" -c gpg.format=openpgp \
-      show -s --format='%G? %GF' "$commit" 2>/dev/null
+      show -s --format='%G? %GP' "$commit" 2>/dev/null
   )
 
   if [[ "$signature_status" != "G" && "$signature_status" != "U" ]]; then

@@ -59,11 +59,12 @@ make install
 ```
 
 The installer is safe to rerun. It preserves unrelated skills in both agents'
-skill directories and refuses to replace a same-name skill, real file, or
-incorrect symlink. Existing whole-directory skill links created by an older
-version of this installer are migrated to per-skill links. Move any conflicting
-configuration worth keeping into this repository, remove the conflicting path,
-and rerun the installer.
+skill directories, removes stale per-skill links whose names and targets exactly
+match links previously created from this repository, and refuses to replace a
+same-name skill, real file, or incorrect symlink. Existing whole-directory skill
+links created by an older version of this installer are migrated to per-skill
+links. Move any conflicting configuration worth keeping into this repository,
+remove the conflicting path, and rerun the installer.
 
 The regular machine-local settings files are exceptions to symlink management.
 The installer preserves unrelated values while updating only Claude Code's
@@ -185,8 +186,9 @@ only `tui.status_line` and `tui.status_line_use_colors` in
 
 ## Resolving an Installation Conflict
 
-The installer never moves or deletes conflicting user data. It only replaces a
-legacy whole-directory skill link when that link resolves to this repository.
+The installer never moves or deletes conflicting user data. It replaces a legacy
+whole-directory skill link when that link resolves to this repository and
+removes stale per-skill links that exactly match links it previously created.
 Inspect the path named in any error, move configuration worth keeping into this
 repository, then remove the conflict and rerun `./install.sh`.
 
