@@ -58,6 +58,13 @@ cd ~/power-agents
 make install
 ```
 
+The installer requires `jq`, Python 3, and the Python `tomlkit` module. On
+Debian or Ubuntu, install them with:
+
+```bash
+sudo apt-get install jq python3 python3-tomlkit
+```
+
 The installer is safe to rerun. It preserves unrelated skills in both agents'
 skill directories, removes stale per-skill links whose names and targets exactly
 match links previously created from this repository, and refuses to replace a
@@ -69,10 +76,10 @@ remove the conflicting path, and rerun the installer.
 The regular machine-local settings files are exceptions to symlink management.
 The installer preserves unrelated values while updating only Claude Code's
 `statusLine` key in `~/.claude/settings.json` and the centrally managed TUI keys
-in `~/.codex/config.toml`. An existing Codex TUI configuration must use an
-explicit `[tui]` table; top-level `tui.status_line = ...` and `tui = {...}` forms
-are rejected before installation because appending another `[tui]` table would
-produce invalid TOML.
+in `~/.codex/config.toml`. The Codex configuration is parsed and edited with a
+format-preserving TOML library. Before replacing it, the installer parses the
+result and verifies that the managed values are exact and all unmanaged values
+are semantically unchanged.
 
 ## Syncing
 
@@ -116,14 +123,21 @@ make check    # Run all required repository checks
 The Make targets delegate to the repository scripts, which remain available for
 direct use.
 
+## License
+
+Original repository content is available under the [MIT License](LICENSE).
+Third-party components retain their respective terms and attribution; see
+[Third-Party Notices](THIRD_PARTY_NOTICES.md).
+
 ## Quality Checks
 
-The required local checks use Make, Bash, Git, GnuPG, `jq`, and
+The required local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with
+`tomlkit`, and
 [ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the
 dependencies with:
 
 ```bash
-sudo apt-get install make gnupg jq shellcheck
+sudo apt-get install make gnupg jq python3 python3-tomlkit shellcheck
 ```
 
 Run the same blocking checks as CI with:
@@ -161,6 +175,12 @@ codex execpolicy check --pretty \
   --rules ~/.codex/rules/shared.rules \
   -- .venv/bin/pytest
 ```
+
+The shared policy prompts for common relative virtual-environment pytest
+executables, `python`/`python3 -m pytest`, and relative virtual-environment
+Python launchers. Prefix rules match literal argument prefixes, so they cannot
+exhaustively cover virtual environments invoked through arbitrary absolute
+paths.
 
 ## Updating the Codex Status Line
 

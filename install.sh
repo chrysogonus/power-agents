@@ -8,9 +8,18 @@ CLAUDE_SETTINGS="$ROOT/settings/claude/settings.json"
 CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
+CODEX_CONFIG_RECONCILER="$ROOT/scripts/reconcile-codex-config.py"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "ERROR: Required command not found: jq" >&2
+for command in jq python3; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "ERROR: Required command not found: $command" >&2
+    exit 1
+  fi
+done
+
+if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
+  echo "ERROR: Required Python module not found: tomlkit" >&2
+  echo "       See README.md#installation for setup instructions." >&2
   exit 1
 fi
 
@@ -41,6 +50,11 @@ fi
 
 if [[ ! -f "$CODEX_SHARED_RULES" ]]; then
   echo "ERROR: Missing $CODEX_SHARED_RULES" >&2
+  exit 1
+fi
+
+if [[ ! -f "$CODEX_CONFIG_RECONCILER" ]]; then
+  echo "ERROR: Missing $CODEX_CONFIG_RECONCILER" >&2
   exit 1
 fi
 
@@ -87,34 +101,8 @@ validate_skills() {
 }
 
 validate_codex_tui_settings() {
-  if ! awk '
-    /^[[:space:]]*($|#)/ {
-      next
-    }
-
-    /^[[:space:]]*\[tui\][[:space:]]*$/ {
-      sections++
-      next
-    }
-
-    /^[[:space:]]*status_line[[:space:]]*=/ {
-      status_lines++
-      next
-    }
-
-    /^[[:space:]]*status_line_use_colors[[:space:]]*=/ {
-      color_settings++
-      next
-    }
-
-    {
-      invalid++
-    }
-
-    END {
-      exit !(sections == 1 && status_lines == 1 && color_settings == 1 && invalid == 0)
-    }
-  ' "$CODEX_TUI_SETTINGS"; then
+  if ! python3 "$CODEX_CONFIG_RECONCILER" \
+    validate-managed "$CODEX_TUI_SETTINGS"; then
     echo "ERROR: Invalid Codex TUI settings fragment: $CODEX_TUI_SETTINGS" >&2
     echo "       Expected one [tui] section with status_line and status_line_use_colors." >&2
     return 1
@@ -304,26 +292,9 @@ validate_codex_config_target() {
 
   [[ -f "$target" ]] || return 0
 
-  if awk '
-    BEGIN {
-      in_root = 1
-    }
-
-    in_root && /^[[:space:]]*(tui|"tui"|\047tui\047)[[:space:]]*[.=]/ {
-      found = 1
-      exit
-    }
-
-    /^[[:space:]]*\[\[?[^]]+\]\]?[[:space:]]*(#.*)?$/ {
-      in_root = 0
-    }
-
-    END {
-      exit !found
-    }
-  ' "$target"; then
-    echo "ERROR: Unsupported top-level tui setting in Codex config: $target" >&2
-    echo "       Use an explicit [tui] table so managed settings can be updated safely." >&2
+  if ! python3 "$CODEX_CONFIG_RECONCILER" validate-config "$target"; then
+    echo "ERROR: Invalid or unsupported Codex config: $target" >&2
+    echo "       Fix the file before installing so local settings can be preserved." >&2
     return 1
   fi
 }
@@ -332,18 +303,7 @@ sync_codex_tui_settings() {
   local source="$CODEX_TUI_SETTINGS"
   local target="$HOME/.codex/config.toml"
   local input="/dev/null"
-  local status_line
-  local status_line_use_colors
   local temporary
-
-  status_line="$(sed -n '/^[[:space:]]*status_line[[:space:]]*=/ {
-    s/^[[:space:]]*//
-    p
-  }' "$source")"
-  status_line_use_colors="$(sed -n '/^[[:space:]]*status_line_use_colors[[:space:]]*=/ {
-    s/^[[:space:]]*//
-    p
-  }' "$source")"
 
   if [[ -f "$target" ]]; then
     input="$target"
@@ -355,58 +315,8 @@ sync_codex_tui_settings() {
     return 1
   fi
 
-  if ! awk \
-    -v status_line="$status_line" \
-    -v status_line_use_colors="$status_line_use_colors" '
-      function emit_managed_settings() {
-        print status_line
-        print status_line_use_colors
-      }
-
-      {
-        if (skipping_status_line) {
-          if ($0 ~ /\][[:space:]]*(#.*)?$/) {
-            skipping_status_line = 0
-          }
-          next
-        }
-
-        if ($0 ~ /^[[:space:]]*\[[^]]+\][[:space:]]*(#.*)?$/) {
-          if ($0 ~ /^[[:space:]]*\[tui\][[:space:]]*(#.*)?$/) {
-            in_tui = 1
-            found_tui = 1
-            print
-            emit_managed_settings()
-            next
-          }
-
-          in_tui = 0
-        }
-
-        if (in_tui && $0 ~ /^[[:space:]]*status_line[[:space:]]*=/) {
-          if ($0 !~ /\][[:space:]]*(#.*)?$/) {
-            skipping_status_line = 1
-          }
-          next
-        }
-
-        if (in_tui && $0 ~ /^[[:space:]]*status_line_use_colors[[:space:]]*=/) {
-          next
-        }
-
-        print
-      }
-
-      END {
-        if (!found_tui) {
-          if (NR > 0) {
-            print ""
-          }
-          print "[tui]"
-          emit_managed_settings()
-        }
-      }
-    ' "$input" >"$temporary"; then
+  if ! python3 "$CODEX_CONFIG_RECONCILER" \
+    reconcile "$source" "$input" "$temporary"; then
     rm -f "$temporary"
     return 1
   fi

@@ -4,13 +4,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-for command in git gpg jq make shellcheck; do
+for command in git gpg jq make python3 shellcheck; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
     echo "       See README.md#quality-checks for setup instructions." >&2
     exit 1
   fi
 done
+
+if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
+  echo "ERROR: Required Python module not found: tomlkit" >&2
+  echo "       See README.md#quality-checks for setup instructions." >&2
+  exit 1
+fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   mapfile -d '' shell_files < <(

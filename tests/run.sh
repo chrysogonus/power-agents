@@ -3,6 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/power-agents-tests.XXXXXX")"
+TOMLKIT_SITE_PACKAGES="$(python3 -c '
+from pathlib import Path
+import tomlkit
+print(Path(tomlkit.__file__).parent.parent)
+')"
 
 cleanup() {
   rm -rf -- "$TEST_ROOT"
@@ -61,7 +66,9 @@ run_installer() {
   esac
 
   mkdir -p "$test_home"
-  HOME="$test_home" "$ROOT/install.sh" >"$test_home/install.log" 2>&1
+  HOME="$test_home" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1
 }
 
 expect_installer_failure() {
@@ -340,9 +347,9 @@ model = "machine-local-model"
 custom_flag = true
 
 [tui] # keep this comment
-$managed_status
-$managed_colors
 theme = "dark"
+$managed_status # old managed value
+$managed_colors
 notifications = ["local-command"]
 
 [projects."/work/local"]
@@ -360,34 +367,34 @@ EOF
     fail "Repeated install changed reconciled Codex config"
 }
 
-test_codex_config_representation_conflicts() {
+test_invalid_codex_config_rejection() {
   local config
-  local form
+  local kind
   local test_home
 
-  for form in dotted inline; do
-    test_home="$TEST_ROOT/config-$form-home"
+  for kind in invalid incompatible; do
+    test_home="$TEST_ROOT/config-$kind-home"
     mkdir -p "$test_home/.codex"
-    case "$form" in
-      dotted) config='tui.status_line = ["old"]' ;;
-      inline) config='tui = { status_line = ["old"] }' ;;
+    case "$kind" in
+      invalid) config='model = "unterminated' ;;
+      incompatible) config='tui = "not-a-table"' ;;
     esac
     printf '%s\n' "$config" >"$test_home/.codex/config.toml"
 
     if run_installer "$test_home"; then
-      fail "Installer unexpectedly accepted a top-level $form tui setting"
+      fail "Installer unexpectedly accepted a $kind Codex config"
     fi
 
     assert_contains "$test_home/install.log" \
-      "ERROR: Unsupported top-level tui setting in Codex config:"
+      "ERROR: Invalid or unsupported Codex config:"
     [[ "$(<"$test_home/.codex/config.toml")" == "$config" ]] ||
-      fail "Installer changed a rejected $form Codex config"
+      fail "Installer changed a rejected $kind Codex config"
     [[ ! -e "$test_home/.codex/AGENTS.md" ]] ||
-      fail "Installer partially installed after rejecting a $form Codex config"
+      fail "Installer partially installed after rejecting a $kind Codex config"
     [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
-      fail "Installer partially installed after rejecting a $form Codex config"
+      fail "Installer partially installed after rejecting a $kind Codex config"
     [[ -z "$(find "$test_home/.codex" -name 'config.toml.tmp.*' -print -quit)" ]] ||
-      fail "Installer left a temporary file after rejecting a $form Codex config"
+      fail "Installer left a temporary file after rejecting a $kind Codex config"
   done
 }
 
@@ -409,33 +416,22 @@ EOF
 test_codex_command_policy() {
   local command
   local decision
+  local expected_pattern
   local policy_output
-  local pytest_rule
   local rules="$ROOT/policies/codex/shared.rules"
   local -a command_parts
 
-  pytest_rule="$(awk '
-    /^prefix_rule\([[:space:]]*$/ {
-      rule = $0 ORS
-      next
-    }
+  for expected_pattern in \
+    'pattern = [[".venv/bin/pytest", "./.venv/bin/pytest"]]' \
+    'pattern = [["python", "python3"], "-m", "pytest"]' \
+    'pattern = [[".venv/bin/python", "./.venv/bin/python", ".venv/bin/python3", "./.venv/bin/python3"], "-m", "pytest"]'; do
+    assert_contains "$rules" "$expected_pattern"
+  done
 
-    rule != "" {
-      rule = rule $0 ORS
-    }
-
-    rule != "" && /^\)[[:space:]]*$/ {
-      if (rule ~ /pattern[[:space:]]*=[[:space:]]*\["[.]venv\/bin\/pytest"\]/) {
-        printf "%s", rule
-        exit
-      }
-      rule = ""
-    }
-  ' "$rules")"
-
-  if [[ "$pytest_rule" != *'decision = "prompt"'* ||
-    "$pytest_rule" == *'decision = "allow"'* ]]; then
-    fail "Codex policy does not require approval for unsandboxed project tests"
+  [[ "$(grep -c 'decision = "prompt"' "$rules")" == 3 ]] ||
+    fail "Codex policy does not prompt for every managed pytest invocation"
+  if grep -q 'decision = "allow"' "$rules"; then
+    fail "Codex pytest policy unexpectedly contains an allow decision"
   fi
 
   if ! command -v codex >/dev/null 2>&1; then
@@ -445,7 +441,14 @@ test_codex_command_policy() {
   for command in \
     ".venv/bin/pytest" \
     ".venv/bin/pytest tests/test_example.py" \
-    ".venv/bin/pytest -c /tmp/attacker.ini /tmp/attacker_test.py"; do
+    ".venv/bin/pytest -c /tmp/attacker.ini /tmp/attacker_test.py" \
+    "./.venv/bin/pytest" \
+    "python -m pytest" \
+    "python3 -m pytest tests/test_example.py" \
+    ".venv/bin/python -m pytest" \
+    ".venv/bin/python3 -m pytest" \
+    "./.venv/bin/python -m pytest tests/test_example.py" \
+    "./.venv/bin/python3 -m pytest"; do
     read -r -a command_parts <<<"$command"
     policy_output="$(codex execpolicy check \
       --rules "$rules" -- "${command_parts[@]}")"
@@ -454,11 +457,18 @@ test_codex_command_policy() {
       fail "Codex policy returned '$decision' for: $command"
   done
 
-  policy_output="$(codex execpolicy check \
-    --rules "$rules" -- python -m pytest)"
-  decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
-  [[ "$decision" == "none" ]] ||
-    fail "Codex policy unexpectedly matched: python -m pytest"
+  for command in \
+    "pytest" \
+    "python -m unittest" \
+    "/work/project/.venv/bin/pytest" \
+    "/work/project/.venv/bin/python -m pytest"; do
+    read -r -a command_parts <<<"$command"
+    policy_output="$(codex execpolicy check \
+      --rules "$rules" -- "${command_parts[@]}")"
+    decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
+    [[ "$decision" == "none" ]] ||
+      fail "Codex policy unexpectedly matched: $command"
+  done
 }
 
 test_install_conflicts() {
@@ -751,6 +761,8 @@ test_make_targets() {
 
 test_skill_metadata
 pass "skill structure and metadata"
+python3 "$ROOT/tests/test_reconcile_codex_config.py"
+pass "Codex TOML reconciler"
 test_clean_install_and_idempotence
 pass "clean install, stale-link cleanup, unrelated-skill preservation, and idempotence"
 test_claude_settings_reconciliation
@@ -761,8 +773,8 @@ test_skill_link_migration
 pass "legacy whole-directory skill links migrate to per-skill links"
 test_codex_config_reconciliation
 pass "Codex config preservation and managed-key reconciliation"
-test_codex_config_representation_conflicts
-pass "unsupported Codex TUI representations fail without partial installation"
+test_invalid_codex_config_rejection
+pass "invalid and incompatible Codex configs fail without partial installation"
 test_nested_tui_dotted_key
 pass "nested dotted TUI-like keys remain unmanaged"
 test_codex_command_policy

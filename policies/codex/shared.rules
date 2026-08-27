@@ -1,13 +1,42 @@
-# Require approval before the repository-local pytest executable runs unsandboxed.
+# Require approval before common pytest entry points run outside the sandbox.
 prefix_rule(
-    pattern = [".venv/bin/pytest"],
+    pattern = [[".venv/bin/pytest", "./.venv/bin/pytest"]],
     decision = "prompt",
-    justification = "Repository-controlled executables and tests must not run unsandboxed without approval.",
+    justification = "Repository tests can execute repository-controlled code and require approval outside the sandbox.",
     match = [
         ".venv/bin/pytest",
         ".venv/bin/pytest tests/test_example.py",
+        "./.venv/bin/pytest -c /tmp/attacker.ini /tmp/attacker_test.py",
     ],
     not_match = [
+        "/work/project/.venv/bin/pytest",
         "python -m pytest",
+    ],
+)
+
+prefix_rule(
+    pattern = [["python", "python3"], "-m", "pytest"],
+    decision = "prompt",
+    justification = "Repository tests can execute repository-controlled code and require approval outside the sandbox.",
+    match = [
+        "python -m pytest",
+        "python3 -m pytest tests/test_example.py",
+    ],
+    not_match = [
+        "python -m unittest",
+    ],
+)
+
+prefix_rule(
+    pattern = [[".venv/bin/python", "./.venv/bin/python", ".venv/bin/python3", "./.venv/bin/python3"], "-m", "pytest"],
+    decision = "prompt",
+    justification = "Repository tests can execute repository-controlled code and require approval outside the sandbox.",
+    match = [
+        ".venv/bin/python -m pytest",
+        "./.venv/bin/python3 -m pytest tests/test_example.py",
+    ],
+    not_match = [
+        ".venv/bin/python -m unittest",
+        "/work/project/.venv/bin/python -m pytest",
     ],
 )
