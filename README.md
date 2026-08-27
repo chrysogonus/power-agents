@@ -117,7 +117,8 @@ Run `make` to list the available commands:
 make install  # Install the agent configuration
 make sync     # Verify, fast-forward, and reinstall the configuration
 make test     # Run the isolated behavioral tests
-make check    # Run all required repository checks
+make check    # Run checks against the current working tree
+make ci       # Run the same complete pipeline as GitHub Actions
 ```
 
 The Make targets delegate to the repository scripts, which remain available for
@@ -140,13 +141,18 @@ dependencies with:
 sudo apt-get install make gnupg jq python3 python3-tomlkit shellcheck
 ```
 
-Run the same blocking checks as CI with:
+Run the complete GitHub-equivalent pipeline locally after committing and before
+pushing:
 
 ```bash
-make check
+make ci
 ```
 
-This command parses and statically analyzes every repository shell script,
+`make ci` runs the checks once against the current working tree and once against
+a source archive of `HEAD`, matching GitHub Actions. During development, use
+`make check` to run only the faster working-tree pass.
+
+The checks parse and statically analyze every repository shell script,
 validates skill metadata, exercises settings reconciliation and the installer
 under temporary isolated home directories, checks the status-line output, and
 rejects whitespace errors or unresolved conflict markers. It works from either

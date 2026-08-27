@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync test check
+.PHONY: help install sync test check ci
 
 help:
 	@printf '%s\n' \
@@ -10,7 +10,8 @@ help:
 		"  install  Install this repository's agent configuration" \
 		'  sync     Verify, fast-forward, and reinstall configuration' \
 		'  test     Run the isolated behavioral tests' \
-		'  check    Run all required repository checks'
+		'  check    Run checks against the current working tree' \
+		'  ci       Run the same complete pipeline as GitHub Actions'
 
 install:
 	./install.sh
@@ -23,3 +24,6 @@ test:
 
 check:
 	./scripts/check.sh
+
+ci:
+	./scripts/ci.sh

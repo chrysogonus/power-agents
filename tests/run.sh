@@ -748,15 +748,27 @@ test_make_targets() {
   actual="$(make --no-print-directory -C "$ROOT")"
   assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
 
-  for target in install sync test check; do
+  for target in install sync test check ci; do
     actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
     case "$target" in
       install) [[ "$actual" == "./install.sh" ]] ;;
       sync) [[ "$actual" == "./sync.sh" ]] ;;
       test) [[ "$actual" == "./tests/run.sh" ]] ;;
       check) [[ "$actual" == "./scripts/check.sh" ]] ;;
+      ci) [[ "$actual" == "./scripts/ci.sh" ]] ;;
     esac || fail "Unexpected make $target command: $actual"
   done
+}
+
+test_ci_workflow() {
+  local workflow="$ROOT/.github/workflows/checks.yml"
+
+  assert_contains "$workflow" "python3-tomlkit"
+  assert_contains "$workflow" "run: make ci"
+
+  if grep -Fq "run: make check" "$workflow"; then
+    fail "GitHub workflow bypasses the shared CI target"
+  fi
 }
 
 test_skill_metadata
@@ -787,3 +799,5 @@ test_sync_signature_verification
 pass "sync verifies every incoming commit before activation"
 test_make_targets
 pass "Make targets"
+test_ci_workflow
+pass "GitHub workflow uses the shared CI pipeline and dependencies"
