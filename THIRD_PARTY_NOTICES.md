@@ -29,6 +29,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Contributor Covenant
+
+`CODE_OF_CONDUCT.md` is adapted from the
+[Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html),
+version 2.1, and is distributed under the
+[Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).
+
+Copyright (c) 2020 Coraline Ada Ehmke and the Contributor Covenant
+contributors.
+
 ## Security Best Practices Skill
 
 The files under `skills/security-best-practices/` are distributed under the

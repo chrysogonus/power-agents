@@ -1,0 +1,40 @@
+name: Change request
+description: Propose a new skill, policy, setting, or workflow change.
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is inconvenient, missing, or error prone today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Repository area
+      options:
+        - Installer (install.sh)
+        - Sync (sync.sh)
+        - Checks or tests (scripts/, tests/)
+        - Skills (skills/)
+        - Codex policy (policies/codex/shared.rules)
+        - Settings or status line (settings/)
+        - Instructions (instructions/)
+        - Documentation
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

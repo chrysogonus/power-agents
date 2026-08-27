@@ -124,6 +124,17 @@ make ci       # Run the same complete pipeline as GitHub Actions
 The Make targets delegate to the repository scripts, which remain available for
 direct use.
 
+## Security
+
+The [Security Policy](SECURITY.md) describes the supported version, the trust
+model enforced by `sync.sh`, and how to report a suspected vulnerability
+privately. Do not open a public issue for one.
+
+## Contributing
+
+See [Contributing](CONTRIBUTING.md) for the required workflow and the
+[Code of Conduct](CODE_OF_CONDUCT.md) for participation expectations.
+
 ## License
 
 Original repository content is available under the [MIT License](LICENSE).

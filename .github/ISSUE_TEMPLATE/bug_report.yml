@@ -1,0 +1,81 @@
+name: Bug report
+description: Report incorrect behavior in the installer, sync, checks, or shared configuration.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report suspected vulnerabilities here. Follow
+        [SECURITY.md](https://github.com/chrysogonus/power-agents/blob/main/SECURITY.md)
+        instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Installer (install.sh)
+        - Sync (sync.sh)
+        - Checks or tests (scripts/, tests/)
+        - Skills (skills/)
+        - Codex policy (policies/codex/shared.rules)
+        - Settings or status line (settings/)
+        - Instructions (instructions/)
+        - Documentation
+        - Other or unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      description: Which agent is affected.
+      options:
+        - Codex
+        - Claude Code
+        - Both
+        - Not agent specific
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the relevant output verbatim.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Operating system and shell, plus the versions of any tools involved.
+        Useful commands: `bash --version`, `git --version`, `jq --version`,
+        `python3 --version`, `python3 -c 'import tomlkit; print(tomlkit.__version__)'`,
+        `shellcheck --version`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: make check output
+      description: Output of `make check`, if it is relevant to the report.
+      render: shell
+    validations:
+      required: false
