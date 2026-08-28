@@ -41,12 +41,16 @@ any incoming code. Every commit in the incoming range must carry a valid
 OpenPGP signature whose primary-key fingerprint appears in an allowlist stored
 outside this repository at `~/.config/power-agents/trusted-signing-keys`.
 Unsigned, invalid, expired, revoked, or unlisted signatures and divergent
-history are all rejected without moving `HEAD`. See
+history are all rejected without moving `HEAD`. Sync also refuses tracked or
+staged local changes. If installation fails after a verified fast-forward, sync
+restores the previous commit and reruns its installer so symlinked and copied
+configuration return to the prior version. See
 [Syncing](README.md#syncing) for setup.
 
 The installer refuses to replace a same-name skill, a real file, or an incorrect
-symlink. It preserves unmanaged values when reconciling the configured Claude
-and Codex settings files and rolls back an installation if activation fails.
+symlink. It canonicalizes configuration roots before rejecting `/` or duplicate
+locations, preserves unmanaged values when reconciling the configured Claude
+and Codex settings files, and rolls back an installation if activation fails.
 
 ## Out of Scope
 

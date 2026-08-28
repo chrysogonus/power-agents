@@ -79,8 +79,10 @@ make install
 
 The installer honors Codex's documented `CODEX_HOME` and Claude Code's
 documented `CLAUDE_CONFIG_DIR`; when set, each must be an absolute directory
-other than `/`, and the shared, Codex, and Claude roots must be distinct. See the
-official
+other than `/`, and the shared, Codex, and Claude roots must resolve to distinct
+locations. The installer canonicalizes these paths before use, so aliases that
+contain `..`, redundant separators, or symlinks cannot bypass either check. See
+the official
 [Codex environment-variable reference](https://learn.chatgpt.com/docs/config-file/environment-variables)
 and [Claude Code environment-variable reference](https://code.claude.com/docs/en/env-vars).
 
@@ -135,6 +137,12 @@ and requires its primary-key fingerprint to appear in the external allowlist.
 It rejects unsigned, invalid, expired, revoked, or unlisted signatures and
 divergent history without changing `HEAD` or running incoming code. An
 up-to-date checkout may still rerun the already-trusted installer.
+
+Sync requires a working tree with no tracked or staged changes; untracked files
+are preserved. If the incoming installer fails after a fast-forward, or the
+sync receives a handled signal during activation, sync restores the previous
+commit and reruns its installer to restore the prior configuration. This
+recovery cannot run after `SIGKILL`, a process crash, or machine failure.
 
 ## Commands
 

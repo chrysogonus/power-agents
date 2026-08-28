@@ -10,10 +10,11 @@ CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
 CODEX_CONFIG_RECONCILER="$ROOT/scripts/reconcile-codex-config.py"
 SKILL_VALIDATOR="$ROOT/scripts/validate-skills.py"
-AGENTS_ROOT="$HOME/.agents"
+INSTALL_HOME="$HOME"
+AGENTS_ROOT=""
 CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
 CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
+CLAUDE_STATUS_LINE_COMMAND=""
 TRANSACTION_DIR=""
 # shellcheck disable=SC2034 # Read by the ERR trap at runtime.
 TRANSACTION_ACTIVE=0
@@ -115,14 +116,28 @@ trap 'handle_signal 129' HUP
 trap 'handle_signal 130' INT
 trap 'handle_signal 143' TERM
 
-validate_install_root() {
+canonicalize_install_root() {
   local label="$1"
   local path="$2"
+  local result_variable="$3"
+  local canonical
 
-  if [[ "$path" != /* || "$path" == "/" ]]; then
+  if [[ "$path" != /* ]]; then
     echo "ERROR: $label must be an absolute directory other than /: $path" >&2
     return 1
   fi
+
+  if ! canonical="$(realpath -m -- "$path")"; then
+    echo "ERROR: Could not resolve $label: $path" >&2
+    return 1
+  fi
+
+  if [[ "$canonical" == "/" ]]; then
+    echo "ERROR: $label must be an absolute directory other than /: $path" >&2
+    return 1
+  fi
+
+  printf -v "$result_variable" '%s' "$canonical"
 }
 
 validate_distinct_install_roots() {
@@ -159,12 +174,22 @@ ensure_directory() {
   fi
 }
 
-for command in jq python3; do
+for command in jq python3 realpath; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
     exit 1
   fi
 done
+
+canonicalize_install_root "HOME" "$INSTALL_HOME" INSTALL_HOME
+canonicalize_install_root \
+  "Codex configuration root" "$CODEX_ROOT" CODEX_ROOT
+canonicalize_install_root \
+  "Claude configuration root" "$CLAUDE_ROOT" CLAUDE_ROOT
+AGENTS_ROOT="$INSTALL_HOME/.agents"
+canonicalize_install_root \
+  "Shared configuration root" "$AGENTS_ROOT" AGENTS_ROOT
+CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
 
 if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: tomlkit" >&2
@@ -534,9 +559,6 @@ validate_legacy_codex_skills() {
 validate_skills
 validate_claude_settings
 validate_codex_tui_settings
-validate_install_root "HOME" "$HOME"
-validate_install_root "Codex configuration root" "$CODEX_ROOT"
-validate_install_root "Claude configuration root" "$CLAUDE_ROOT"
 validate_distinct_install_roots
 
 failed=0

@@ -259,7 +259,10 @@ test_custom_agent_roots() {
 }
 
 test_invalid_agent_roots() {
+  local actual_root
+  local alias_root
   local label
+  local root_alias_home
   local shared_root
   local test_home
   local variable
@@ -301,6 +304,70 @@ EOF
     "ERROR: Shared, Codex, and Claude configuration roots must be distinct."
   [[ ! -e "$test_home/.agents" && ! -e "$shared_root" ]] ||
     fail "Installer partially installed after rejecting colliding roots"
+
+  test_home="$TEST_ROOT/aliased-agent-root-home"
+  actual_root="$test_home/config"
+  alias_root="$test_home/missing/../config"
+  mkdir -p "$test_home"
+  if HOME="$test_home" \
+    CODEX_HOME="$actual_root" \
+    CLAUDE_CONFIG_DIR="$alias_root" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer accepted lexically distinct aliases of the same root"
+  fi
+  assert_contains "$test_home/install.log" \
+    "ERROR: Shared, Codex, and Claude configuration roots must be distinct."
+  [[ ! -e "$test_home/.agents" && ! -e "$actual_root" ]] ||
+    fail "Installer partially installed after rejecting aliased roots"
+
+  test_home="$TEST_ROOT/symlinked-agent-root-home"
+  actual_root="$test_home/config"
+  alias_root="$test_home/config-link"
+  mkdir -p "$actual_root"
+  ln -s "$actual_root" "$alias_root"
+  if HOME="$test_home" \
+    CODEX_HOME="$actual_root" \
+    CLAUDE_CONFIG_DIR="$alias_root" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer accepted symlink aliases of the same root"
+  fi
+  assert_contains "$test_home/install.log" \
+    "ERROR: Shared, Codex, and Claude configuration roots must be distinct."
+  [[ ! -e "$test_home/.agents" && -z "$(find "$actual_root" -mindepth 1 -print -quit)" ]] ||
+    fail "Installer partially installed after rejecting symlinked roots"
+
+  test_home="$TEST_ROOT/symlinked-shared-root-home"
+  actual_root="$test_home/config"
+  mkdir -p "$actual_root"
+  ln -s "$actual_root" "$test_home/.agents"
+  if HOME="$test_home" \
+    CODEX_HOME="$actual_root" \
+    CLAUDE_CONFIG_DIR="$test_home/.claude" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer accepted shared and Codex roots resolving to the same location"
+  fi
+  assert_contains "$test_home/install.log" \
+    "ERROR: Shared, Codex, and Claude configuration roots must be distinct."
+  [[ -z "$(find "$actual_root" -mindepth 1 -print -quit)" && \
+    ! -e "$test_home/.claude" ]] ||
+    fail "Installer partially installed after rejecting a shared-root alias"
+
+  root_alias_home="$TEST_ROOT/root-alias-home"
+  mkdir -p "$root_alias_home"
+  if HOME="$root_alias_home" \
+    CODEX_HOME="/tmp/.." \
+    CLAUDE_CONFIG_DIR="$root_alias_home/.claude" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$root_alias_home/install.log" 2>&1; then
+    fail "Installer accepted an alias of the filesystem root"
+  fi
+  assert_contains "$root_alias_home/install.log" \
+    "ERROR: Codex configuration root must be an absolute directory other than /: /tmp/.."
+  [[ ! -e "$root_alias_home/.agents" && ! -e "$root_alias_home/.claude" ]] ||
+    fail "Installer partially installed after rejecting a root alias"
 }
 
 test_transaction_rollback() {
@@ -796,11 +863,28 @@ test_status_line() {
     fail "Status line displayed a null percentage value"
   [[ ! -s "$error_output" ]] ||
     fail "Status line wrote errors for a null percentage value"
+
+  injected_json='{
+    "workspace": {"current_dir": "/tmp", "repo": {"name": "power-agents"}},
+    "context_window": {"used_percentage": 1e999},
+    "rate_limits": {
+      "five_hour": {"used_percentage": -1},
+      "seven_day": {"used_percentage": 101}
+    }
+  }'
+  actual="$(printf '%s\n' "$injected_json" | render_status_line 2>"$error_output")"
+  expected=$'\033[1;34mpower-agents\033[0m'
+  [[ "$actual" == "$expected" ]] ||
+    fail "Status line displayed an out-of-range percentage value"
+  [[ ! -s "$error_output" ]] ||
+    fail "Status line wrote errors for out-of-range percentage values"
 }
 
 test_sync_signature_verification() {
   local allowlist
   local clone
+  local dirty_kind
+  local failed_commit
   local fingerprint
   local gpg_home
   local reported_primary
@@ -912,12 +996,61 @@ EOF
     fail "Sync ran the installer for an unlisted signing key"
 
   printf '%s\n' "$fingerprint" >"$allowlist"
+  for dirty_kind in unstaged staged; do
+    printf '%s\n' "$dirty_kind-local-change" >"$clone/version"
+    if [[ "$dirty_kind" == "staged" ]]; then
+      git -C "$clone" add version
+    fi
+    if HOME="$sync_home" GNUPGHOME="$gpg_home" \
+      "$clone/sync.sh" >"$sync_root/dirty-$dirty_kind.log" 2>&1; then
+      fail "Sync accepted a $dirty_kind tracked change"
+    fi
+    assert_contains "$sync_root/dirty-$dirty_kind.log" \
+      "Tracked or staged changes are present; commit or discard them before syncing."
+    [[ "$(git -C "$clone" rev-parse HEAD)" != "$trusted_commit" ]] ||
+      fail "Sync changed HEAD with a $dirty_kind tracked change"
+    [[ "$(<"$clone/version")" == "$dirty_kind-local-change" ]] ||
+      fail "Sync changed a $dirty_kind tracked change"
+    git -C "$clone" reset -q HEAD -- version
+    git -C "$clone" checkout -q -- version
+  done
+
+  printf '%s\n' "keep this untracked file" >"$clone/local-note"
   HOME="$sync_home" GNUPGHOME="$gpg_home" \
     "$clone/sync.sh" >"$sync_root/trusted-update.log" 2>&1
   [[ "$(git -C "$clone" rev-parse HEAD)" == "$trusted_commit" ]] ||
     fail "Sync did not fast-forward to a trusted signed commit"
   [[ "$(<"$sync_home/installed-version")" == "signed" ]] ||
     fail "Sync did not install the trusted signed update"
+  [[ "$(<"$clone/local-note")" == "keep this untracked file" ]] ||
+    fail "Sync changed an unrelated untracked file"
+
+  printf '%s\n' "failed-install" >"$source/version"
+  cat >"$source/install.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cp "$ROOT/version" "$HOME/installed-version"
+exit 91
+EOF
+  GNUPGHOME="$gpg_home" git -C "$source" commit -q \
+    -S"$fingerprint" -am "signed update with failing installer"
+  failed_commit="$(git -C "$source" rev-parse HEAD)"
+  git -C "$source" push -q
+
+  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
+    "$clone/sync.sh" >"$sync_root/failed-install.log" 2>&1; then
+    fail "Sync accepted an update whose installer failed"
+  fi
+  assert_contains "$sync_root/failed-install.log" \
+    "ERROR: Sync failed after update activation; restoring the previous version."
+  assert_contains "$sync_root/failed-install.log" \
+    "Previous checkout and installed configuration restored."
+  [[ "$(git -C "$clone" rev-parse HEAD)" == "$trusted_commit" ]] ||
+    fail "Sync did not restore HEAD after installer failure at $failed_commit"
+  [[ "$(<"$sync_home/installed-version")" == "signed" ]] ||
+    fail "Sync did not restore the installed version after installer failure"
 
   printf '%s\n' "signed-two" >"$source/version"
   GNUPGHOME="$gpg_home" git -C "$source" commit -q \
@@ -987,7 +1120,7 @@ pass "clean install, stale-link cleanup, unrelated-skill preservation, and idemp
 test_custom_agent_roots
 pass "custom Codex and Claude configuration roots"
 test_invalid_agent_roots
-pass "unsafe relative agent roots fail before installation"
+pass "unsafe, root-aliased, and colliding agent roots fail before installation"
 test_transaction_rollback
 pass "transactional rollback after a managed-file activation failure"
 test_claude_settings_reconciliation
@@ -1023,9 +1156,9 @@ fi
 test_install_conflicts
 pass "file, same-name skill, and incorrect-symlink conflict refusal"
 test_status_line
-pass "status-line output"
+pass "status-line output and input validation"
 test_sync_signature_verification
-pass "sync verifies every incoming commit before activation"
+pass "sync verifies incoming commits and rolls back failed activation"
 test_make_targets
 pass "Make targets"
 test_ci_workflow

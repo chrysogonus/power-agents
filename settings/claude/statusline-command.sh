@@ -19,7 +19,11 @@ done < <(
       end;
 
     def percentage:
-      if type == "number" then round | tostring else "" end;
+      if type == "number" and . >= 0 and . <= 100 then
+        round | tostring
+      else
+        ""
+      end;
 
     [
       ((.workspace.current_dir // .cwd // "") | display_text),
