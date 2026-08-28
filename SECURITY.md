@@ -45,13 +45,13 @@ history are all rejected without moving `HEAD`. See
 [Syncing](README.md#syncing) for setup.
 
 The installer refuses to replace a same-name skill, a real file, or an incorrect
-symlink, and it preserves unmanaged values when reconciling
-`~/.claude/settings.json` and `~/.codex/config.toml`.
+symlink. It preserves unmanaged values when reconciling the configured Claude
+and Codex settings files and rolls back an installation if activation fails.
 
 ## Out of Scope
 
 - Application-managed state this repository does not control, including
-  `~/.codex/rules/default.rules`, caches, plugins, and bundled skills.
+  Codex's interactive rules, caches, plugins, and bundled skills.
 - Risks inherent to running a coding agent with tool access, including agent
   behavior, model output, and prompt injection through content an agent reads.
 - Third-party components listed in

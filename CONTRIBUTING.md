@@ -7,10 +7,10 @@ the workflow around them.
 
 ## Ground Rules
 
-Edit files in this repository, never their installed copies under `~/.agents`,
-`~/.codex`, or `~/.claude`. Those paths are symlinks or reconciled
-configuration, and edits made there are lost or cause the installer to refuse
-to run.
+Edit files in this repository, never their installed copies under `~/.agents`
+or the configured Codex and Claude roots. Those paths are symlinks or
+reconciled configuration, and edits made there are lost or cause the installer
+to refuse to run.
 
 Keep content where it belongs:
 
@@ -18,20 +18,22 @@ Keep content where it belongs:
 - One skill per `skills/<name>/SKILL.md`, with frontmatter `name` matching the
   directory name
 - Authored Codex rules in `policies/codex/shared.rules`; rules created through
-  Codex approval prompts stay in the application-managed
-  `~/.codex/rules/default.rules`
+  Codex approval prompts stay in the application-managed Codex root
 - Agent-specific settings under `settings/<agent>/`
 
 ## Workflow
 
 1. Make the change in this repository.
 2. Run `./install.sh`. It must stay idempotent and must preserve unmanaged
-   values in `~/.claude/settings.json` and `~/.codex/config.toml`.
+   values in the installed Claude and Codex settings files.
 3. Run `make check` while iterating. It parses and statically analyzes every
    shell script, validates skill metadata, exercises the installer under
    isolated temporary home directories, and rejects whitespace errors.
 4. Run `make ci` before pushing. It runs the same pipeline as GitHub Actions,
-   against both the working tree and a source archive of `HEAD`.
+   against both the working tree and a source archive of `HEAD`. GitHub also
+   requires current Codex and Claude Code compatibility checks; locally, install
+   both CLIs or set `POWER_AGENTS_REQUIRE_AGENT_RUNTIMES=1` to reject missing
+   runtimes instead of reporting `SKIP`.
 
 Install the required tooling first; see
 [Quality Checks](README.md#quality-checks).

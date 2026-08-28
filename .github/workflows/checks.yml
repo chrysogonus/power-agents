@@ -12,7 +12,7 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -26,5 +26,15 @@ jobs:
           sudo apt-get install --no-install-recommends \
             gnupg jq python3 python3-tomlkit shellcheck
 
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 22
+
+      - name: Install current agent runtimes
+        run: npm install --global @openai/codex@latest @anthropic-ai/claude-code@latest
+
       - name: Run CI pipeline
+        env:
+          POWER_AGENTS_REQUIRE_AGENT_RUNTIMES: 1
         run: make ci

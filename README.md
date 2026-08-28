@@ -32,20 +32,25 @@ Most agent-specific configuration paths use symlinks to this repository. Codex
 TUI settings are merged into its existing configuration so machine-local state
 is preserved.
 
+In the table below, *Codex root* means the directory selected by `CODEX_HOME`,
+or `~/.codex` when it is unset. *Claude root* means the directory selected by
+`CLAUDE_CONFIG_DIR`, or `~/.claude` when it is unset. The shared Codex skill
+directory remains `~/.agents/skills`.
+
 | Configuration | Installed path | Canonical source | Method |
 | --- | --- | --- | --- |
 | Codex skills | `~/.agents/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
-| Claude Code skills | `~/.claude/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
-| Codex instructions | `~/.codex/AGENTS.md` | `~/power-agents/instructions/general-global.md` | Symlink |
-| Claude Code instructions | `~/.claude/CLAUDE.md` | `~/power-agents/instructions/general-global.md` | Symlink |
-| Claude Code settings | `~/.claude/settings.json` | `~/power-agents/settings/claude/settings.json` | Managed keys |
-| Codex authored rules | `~/.codex/rules/shared.rules` | `~/power-agents/policies/codex/shared.rules` | Symlink |
-| Claude Code status line | `~/.claude/statusline-command.sh` | `~/power-agents/settings/claude/statusline-command.sh` | Symlink |
-| Codex TUI settings | `~/.codex/config.toml` | `~/power-agents/settings/codex/tui.toml` | Managed keys |
+| Claude Code skills | `<Claude root>/skills/<name>` | `~/power-agents/skills/<name>` | Per-skill symlink |
+| Codex instructions | `<Codex root>/AGENTS.md` | `~/power-agents/instructions/general-global.md` | Symlink |
+| Claude Code instructions | `<Claude root>/CLAUDE.md` | `~/power-agents/instructions/general-global.md` | Symlink |
+| Claude Code settings | `<Claude root>/settings.json` | `~/power-agents/settings/claude/settings.json` | Managed keys |
+| Codex authored rules | `<Codex root>/rules/shared.rules` | `~/power-agents/policies/codex/shared.rules` | Symlink |
+| Claude Code status line | `<Claude root>/statusline-command.sh` | `~/power-agents/settings/claude/statusline-command.sh` | Symlink |
+| Codex TUI settings | `<Codex root>/config.toml` | `~/power-agents/settings/codex/tui.toml` | Managed keys |
 
 Application-managed state, caches, plugins, and bundled skills remain in each
 application's own directory and are not managed by this repository. In
-particular, Codex continues to own `~/.codex/rules/default.rules` for rules
+particular, Codex continues to own `<Codex root>/rules/default.rules` for rules
 created through interactive approvals.
 
 ## Installation
@@ -65,6 +70,13 @@ Debian or Ubuntu, install them with:
 sudo apt-get install jq python3 python3-tomlkit
 ```
 
+The installer honors Codex's documented `CODEX_HOME` and Claude Code's
+documented `CLAUDE_CONFIG_DIR`; when set, each must be an absolute directory
+other than `/`, and the shared, Codex, and Claude roots must be distinct. See the
+official
+[Codex environment-variable reference](https://learn.chatgpt.com/docs/config-file/environment-variables)
+and [Claude Code environment-variable reference](https://code.claude.com/docs/en/env-vars).
+
 The installer is safe to rerun. It preserves unrelated skills in both agents'
 skill directories, removes stale per-skill links whose names and targets exactly
 match links previously created from this repository, and refuses to replace a
@@ -75,11 +87,12 @@ remove the conflicting path, and rerun the installer.
 
 The regular machine-local settings files are exceptions to symlink management.
 The installer preserves unrelated values while updating only Claude Code's
-`statusLine` key in `~/.claude/settings.json` and the centrally managed TUI keys
-in `~/.codex/config.toml`. The Codex configuration is parsed and edited with a
-format-preserving TOML library. Before replacing it, the installer parses the
-result and verifies that the managed values are exact and all unmanaged values
-are semantically unchanged.
+`statusLine` key in `<Claude root>/settings.json` and the centrally managed TUI
+keys in `<Codex root>/config.toml`. The Codex configuration is parsed and edited
+with a format-preserving TOML library. Before activation, the installer prepares
+and validates both complete settings files. Once activation begins, a surfaced
+failure rolls back files, links, and directories created or replaced during
+that run, restoring the pre-install configuration.
 
 ## Syncing
 
@@ -143,8 +156,8 @@ Third-party components retain their respective terms and attribution; see
 
 ## Quality Checks
 
-The required local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with
-`tomlkit`, and
+The core local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with `tomlkit`,
+and
 [ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the
 dependencies with:
 
@@ -152,25 +165,34 @@ dependencies with:
 sudo apt-get install make gnupg jq python3 python3-tomlkit shellcheck
 ```
 
-Run the complete GitHub-equivalent pipeline locally after committing and before
-pushing:
+Run the complete pipeline locally after committing and before pushing:
 
 ```bash
 make ci
 ```
 
 `make ci` runs the checks once against the current working tree and once against
-a source archive of `HEAD`, matching GitHub Actions. During development, use
-`make check` to run only the faster working-tree pass.
+a source archive of `HEAD`. During development, use `make check` to run only the
+faster working-tree pass.
 
-The checks parse and statically analyze every repository shell script,
-validates skill metadata, exercises settings reconciliation and the installer
-under temporary isolated home directories, checks the status-line output, and
-rejects whitespace errors or unresolved conflict markers. It works from either
-a Git checkout or an exported source archive without `.git`. The installer tests
-never use the invoking user's home directory. `jq` is an installer and
-status-line runtime dependency; ShellCheck is the only check-specific dependency
-and is limited to warning-or-higher findings to avoid subjective style noise.
+The checks parse and statically analyze every repository shell script, validate
+skill metadata, exercise settings reconciliation and the installer under
+temporary isolated home directories, check the status-line output, and reject
+whitespace errors or unresolved conflict markers. If `codex` is installed, the
+tests ask it to parse the managed TUI configuration and evaluate every authored
+command rule. If `claude` is installed, the tests run `claude doctor` against an
+isolated installed configuration and reject any invalid-settings report. Both
+checks also feed their runtime a known-invalid setting to prove that the
+validation path is active. A missing local runtime is reported as `SKIP`, never
+`PASS`. GitHub Actions installs the current npm releases of both agents and
+requires both compatibility checks; use
+`POWER_AGENTS_REQUIRE_AGENT_RUNTIMES=1 make ci` for the same requirement locally.
+
+The checks work from either a Git checkout or an exported source archive without
+`.git`. Installer and agent-runtime tests never use the invoking user's live
+configuration. `jq` is an installer and status-line runtime dependency;
+ShellCheck is the only check-specific dependency and is limited to
+warning-or-higher findings to avoid subjective style noise.
 
 ## Adding or Updating a Skill
 
@@ -183,13 +205,13 @@ already linked skill are available immediately.
 ## Updating the Authored Command Policy
 
 Edit `policies/codex/shared.rules`. Keep rules created through Codex approval
-prompts in the application-managed `~/.codex/rules/default.rules` file.
+prompts in the application-managed `<Codex root>/rules/default.rules` file.
 
 Test the authored rules against a command with:
 
 ```bash
 codex execpolicy check --pretty \
-  --rules ~/.codex/rules/shared.rules \
+  --rules "${CODEX_HOME:-$HOME/.codex}/rules/shared.rules" \
   -- .venv/bin/pytest
 ```
 
@@ -203,7 +225,7 @@ paths.
 
 Edit `settings/codex/tui.toml`, then rerun `./install.sh`. The installer replaces
 only `tui.status_line` and `tui.status_line_use_colors` in
-`~/.codex/config.toml`; all other Codex settings remain local.
+`<Codex root>/config.toml`; all other Codex settings remain local.
 
 ## New-Machine Setup
 
@@ -234,10 +256,10 @@ repository, then remove the conflict and rerun `./install.sh`.
 There is no automated uninstaller. Before removing anything, use `readlink` to
 verify that each managed symlink in the table above resolves into this checkout.
 Use `unlink` only on verified links, including each repository-owned entry under
-`~/.agents/skills/` and `~/.claude/skills/`; keep those directories and all
+`~/.agents/skills/` and `<Claude root>/skills/`; keep those directories and all
 unrelated skills intact. Older installations may instead have a verified
 whole-directory `skills` symlink, which can be unlinked as one path.
 
-Finally, edit `~/.codex/config.toml` and remove `status_line` and
+Finally, edit `<Codex root>/config.toml` and remove `status_line` and
 `status_line_use_colors` from `[tui]` if those managed values are no longer
 wanted. Keep the `[tui]` table when it contains other local settings.

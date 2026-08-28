@@ -23,6 +23,10 @@ pass() {
   echo "PASS: $*"
 }
 
+skip() {
+  echo "SKIP: $*"
+}
+
 assert_same_link() {
   local source="$1"
   local target="$2"
@@ -60,13 +64,29 @@ assert_contains() {
 run_installer() {
   local test_home="$1"
 
-  case "$test_home" in
-    "$TEST_ROOT"/*) ;;
-    *) fail "Refusing to run installer with non-test HOME: $test_home" ;;
-  esac
+  run_installer_with_roots \
+    "$test_home" \
+    "$test_home/.codex" \
+    "$test_home/.claude"
+}
+
+run_installer_with_roots() {
+  local claude_root="$3"
+  local codex_root="$2"
+  local path
+  local test_home="$1"
+
+  for path in "$test_home" "$codex_root" "$claude_root"; do
+    case "$path" in
+      "$TEST_ROOT"/*) ;;
+      *) fail "Refusing to run installer outside the test root: $path" ;;
+    esac
+  done
 
   mkdir -p "$test_home"
   HOME="$test_home" \
+    CODEX_HOME="$codex_root" \
+    CLAUDE_CONFIG_DIR="$claude_root" \
     PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
     "$ROOT/install.sh" >"$test_home/install.log" 2>&1
 }
@@ -212,11 +232,11 @@ test_clean_install_and_idempotence() {
     "$test_home/.claude/statusline-command.sh"
   [[ -x "$test_home/.claude/statusline-command.sh" ]] ||
     fail "Installed Claude status-line command is not executable"
-  jq -e '
+  jq -e --arg command "$test_home/.claude/statusline-command.sh" '
     . == {
       "statusLine": {
         "type": "command",
-        "command": "~/.claude/statusline-command.sh"
+        "command": $command
       }
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
@@ -242,6 +262,159 @@ test_clean_install_and_idempotence() {
     fail "Installer left a temporary Claude settings file behind"
 }
 
+test_custom_agent_roots() {
+  local claude_root="$TEST_ROOT/custom-root-home/config roots/claude"
+  local codex_root="$TEST_ROOT/custom-root-home/config roots/codex"
+  local test_home="$TEST_ROOT/custom-root-home"
+
+  run_installer_with_roots "$test_home" "$codex_root" "$claude_root"
+
+  assert_same_link \
+    "$ROOT/instructions/general-global.md" "$codex_root/AGENTS.md"
+  assert_same_link \
+    "$ROOT/instructions/general-global.md" "$claude_root/CLAUDE.md"
+  assert_skill_links "$test_home/.agents/skills"
+  assert_skill_links "$claude_root/skills"
+  assert_same_link \
+    "$ROOT/settings/claude/statusline-command.sh" \
+    "$claude_root/statusline-command.sh"
+  jq -e --arg command "$claude_root/statusline-command.sh" '
+    .statusLine == {
+      "type": "command",
+      "command": $command
+    }
+  ' "$claude_root/settings.json" >/dev/null ||
+    fail "Custom Claude root produced an incorrect status-line command"
+  assert_same_link \
+    "$ROOT/policies/codex/shared.rules" "$codex_root/rules/shared.rules"
+  cmp -s "$ROOT/settings/codex/tui.toml" "$codex_root/config.toml" ||
+    fail "Custom Codex root produced unexpected configuration"
+  [[ ! -e "$test_home/.codex" ]] ||
+    fail "Installer ignored CODEX_HOME"
+  [[ ! -e "$test_home/.claude" ]] ||
+    fail "Installer ignored CLAUDE_CONFIG_DIR"
+}
+
+test_invalid_agent_roots() {
+  local label
+  local shared_root
+  local test_home
+  local variable
+
+  while read -r variable label; do
+    test_home="$TEST_ROOT/invalid-${variable,,}-home"
+    mkdir -p "$test_home"
+    if env \
+      HOME="$test_home" \
+      CODEX_HOME="$test_home/safe-codex" \
+      CLAUDE_CONFIG_DIR="$test_home/safe-claude" \
+      "$variable=relative/config" \
+      PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+      "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+      fail "Installer accepted a relative $variable"
+    fi
+    assert_contains "$test_home/install.log" \
+      "ERROR: $label must be an absolute directory other than /: relative/config"
+    [[ ! -e "$test_home/.agents" && ! -e "$test_home/.codex" && \
+      ! -e "$test_home/.claude" && ! -e "$test_home/safe-codex" && \
+      ! -e "$test_home/safe-claude" ]] ||
+      fail "Installer partially installed after rejecting $variable"
+  done <<'EOF'
+CODEX_HOME Codex configuration root
+CLAUDE_CONFIG_DIR Claude configuration root
+EOF
+
+  test_home="$TEST_ROOT/shared-agent-root-home"
+  shared_root="$test_home/shared-root"
+  mkdir -p "$test_home"
+  if HOME="$test_home" \
+    CODEX_HOME="$shared_root" \
+    CLAUDE_CONFIG_DIR="$shared_root" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer accepted colliding Codex and Claude roots"
+  fi
+  assert_contains "$test_home/install.log" \
+    "ERROR: Shared, Codex, and Claude configuration roots must be distinct."
+  [[ ! -e "$test_home/.agents" && ! -e "$shared_root" ]] ||
+    fail "Installer partially installed after rejecting colliding roots"
+}
+
+test_transaction_rollback() {
+  local claude_settings_before
+  local codex_config_before
+  local real_mv
+  local shim="$TEST_ROOT/rollback-home/shim"
+  local test_home="$TEST_ROOT/rollback-home"
+  local transaction_tmp="$test_home/tmp"
+
+  mkdir -p "$test_home/.claude" "$test_home/.codex" "$shim" "$transaction_tmp"
+  cat >"$test_home/.claude/settings.json" <<'EOF'
+{
+  "model": "opus"
+}
+EOF
+  cat >"$test_home/.codex/config.toml" <<'EOF'
+model = "machine-local-model"
+EOF
+  cat >"$shim/mv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+count=0
+if [[ -f "$POWER_AGENTS_TEST_MV_COUNT" ]]; then
+  read -r count <"$POWER_AGENTS_TEST_MV_COUNT"
+fi
+((count += 1))
+printf '%s\n' "$count" >"$POWER_AGENTS_TEST_MV_COUNT"
+if ((count == POWER_AGENTS_FAIL_MV_AT)); then
+  exit 91
+fi
+exec "$POWER_AGENTS_REAL_MV" "$@"
+EOF
+  chmod +x "$shim/mv"
+
+  claude_settings_before="$(cksum "$test_home/.claude/settings.json")"
+  codex_config_before="$(cksum "$test_home/.codex/config.toml")"
+  real_mv="$(command -v mv)"
+
+  if HOME="$test_home" \
+    CODEX_HOME="$test_home/.codex" \
+    CLAUDE_CONFIG_DIR="$test_home/.claude" \
+    PATH="$shim:$PATH" \
+    TMPDIR="$transaction_tmp" \
+    POWER_AGENTS_FAIL_MV_AT=2 \
+    POWER_AGENTS_REAL_MV="$real_mv" \
+    POWER_AGENTS_TEST_MV_COUNT="$test_home/mv-count" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer unexpectedly succeeded after an activation failure"
+  fi
+
+  assert_contains "$test_home/install.log" \
+    "ERROR: Could not activate managed settings: $test_home/.codex/config.toml"
+  assert_contains "$test_home/install.log" \
+    "ERROR: Installation failed; restoring previous configuration."
+  [[ "$(cksum "$test_home/.claude/settings.json")" == \
+    "$claude_settings_before" ]] ||
+    fail "Rollback did not restore Claude settings"
+  [[ "$(cksum "$test_home/.codex/config.toml")" == "$codex_config_before" ]] ||
+    fail "Rollback did not restore Codex config"
+  [[ ! -e "$test_home/.codex/AGENTS.md" ]] ||
+    fail "Rollback left Codex instructions installed"
+  [[ ! -e "$test_home/.codex/rules" ]] ||
+    fail "Rollback left Codex rules installed"
+  [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
+    fail "Rollback left Claude instructions installed"
+  [[ ! -e "$test_home/.claude/skills" ]] ||
+    fail "Rollback left Claude skills installed"
+  [[ ! -e "$test_home/.claude/statusline-command.sh" ]] ||
+    fail "Rollback left the Claude status line installed"
+  [[ ! -e "$test_home/.agents" ]] ||
+    fail "Rollback left shared skills installed"
+  [[ -z "$(find "$transaction_tmp" -mindepth 1 -print -quit)" ]] ||
+    fail "Rollback left transaction data behind"
+}
+
 test_claude_settings_reconciliation() {
   local test_home="$TEST_ROOT/claude-settings-home"
 
@@ -261,7 +434,7 @@ test_claude_settings_reconciliation() {
 EOF
 
   run_installer "$test_home"
-  jq -e '
+  jq -e --arg command "$test_home/.claude/statusline-command.sh" '
     . == {
       "model": "opus",
       "permissions": {
@@ -269,7 +442,7 @@ EOF
       },
       "statusLine": {
         "type": "command",
-        "command": "~/.claude/statusline-command.sh"
+        "command": $command
       }
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
@@ -413,13 +586,9 @@ EOF
   assert_contains "$test_home/.codex/config.toml" "[tui]"
 }
 
-test_codex_command_policy() {
-  local command
-  local decision
+test_codex_policy_source() {
   local expected_pattern
-  local policy_output
   local rules="$ROOT/policies/codex/shared.rules"
-  local -a command_parts
 
   for expected_pattern in \
     'pattern = [[".venv/bin/pytest", "./.venv/bin/pytest"]]' \
@@ -433,9 +602,37 @@ test_codex_command_policy() {
   if grep -q 'decision = "allow"' "$rules"; then
     fail "Codex pytest policy unexpectedly contains an allow decision"
   fi
+}
 
-  if ! command -v codex >/dev/null 2>&1; then
-    return
+test_codex_runtime_compatibility() {
+  local command
+  local codex_home="$TEST_ROOT/codex-runtime-home/config"
+  local codex_version
+  local decision
+  local invalid_codex_home="$TEST_ROOT/codex-runtime-home/invalid-config"
+  local invalid_runtime_log="$TEST_ROOT/codex-runtime-home/invalid-codex.log"
+  local policy_output
+  local rules="$ROOT/policies/codex/shared.rules"
+  local runtime_log="$TEST_ROOT/codex-runtime-home/codex.log"
+  local test_home="$TEST_ROOT/codex-runtime-home"
+  local -a command_parts
+
+  mkdir -p "$codex_home"
+  cp "$ROOT/settings/codex/tui.toml" "$codex_home/config.toml"
+  codex_version="$(HOME="$test_home" CODEX_HOME="$codex_home" \
+    codex --version 2>>"$runtime_log")"
+  echo "INFO: Testing $codex_version"
+  if ! HOME="$test_home" CODEX_HOME="$codex_home" \
+    codex features list >"$runtime_log" 2>&1; then
+    sed 's/^/  /' "$runtime_log" >&2
+    fail "Codex rejected the managed TUI settings"
+  fi
+
+  mkdir -p "$invalid_codex_home"
+  printf '%s\n' '[tui]' 'status_line = 7' >"$invalid_codex_home/config.toml"
+  if HOME="$test_home" CODEX_HOME="$invalid_codex_home" \
+    codex features list >"$invalid_runtime_log" 2>&1; then
+    fail "Codex compatibility check accepted a known-invalid TUI setting"
   fi
 
   for command in \
@@ -450,8 +647,9 @@ test_codex_command_policy() {
     "./.venv/bin/python -m pytest tests/test_example.py" \
     "./.venv/bin/python3 -m pytest"; do
     read -r -a command_parts <<<"$command"
-    policy_output="$(codex execpolicy check \
-      --rules "$rules" -- "${command_parts[@]}")"
+    policy_output="$(HOME="$test_home" CODEX_HOME="$codex_home" \
+      codex execpolicy check \
+      --rules "$rules" -- "${command_parts[@]}" 2>>"$runtime_log")"
     decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
     [[ "$decision" == "prompt" ]] ||
       fail "Codex policy returned '$decision' for: $command"
@@ -463,12 +661,49 @@ test_codex_command_policy() {
     "/work/project/.venv/bin/pytest" \
     "/work/project/.venv/bin/python -m pytest"; do
     read -r -a command_parts <<<"$command"
-    policy_output="$(codex execpolicy check \
-      --rules "$rules" -- "${command_parts[@]}")"
+    policy_output="$(HOME="$test_home" CODEX_HOME="$codex_home" \
+      codex execpolicy check \
+      --rules "$rules" -- "${command_parts[@]}" 2>>"$runtime_log")"
     decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
     [[ "$decision" == "none" ]] ||
       fail "Codex policy unexpectedly matched: $command"
   done
+}
+
+test_claude_runtime_compatibility() {
+  local claude_root="$TEST_ROOT/claude-runtime-home/config/claude"
+  local claude_version
+  local codex_root="$TEST_ROOT/claude-runtime-home/config/codex"
+  local invalid_runtime_log="$TEST_ROOT/claude-runtime-home/invalid-claude-doctor.log"
+  local runtime_log="$TEST_ROOT/claude-runtime-home/claude-doctor.log"
+  local test_home="$TEST_ROOT/claude-runtime-home"
+
+  run_installer_with_roots "$test_home" "$codex_root" "$claude_root"
+  claude_version="$(HOME="$test_home" CLAUDE_CONFIG_DIR="$claude_root" \
+    claude --version)"
+  echo "INFO: Testing $claude_version"
+  if ! HOME="$test_home" \
+    CLAUDE_CONFIG_DIR="$claude_root" \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_AUTOUPDATER=1 \
+    claude doctor >"$runtime_log" 2>&1; then
+    sed 's/^/  /' "$runtime_log" >&2
+    fail "Claude Code doctor failed"
+  fi
+
+  assert_contains "$runtime_log" "Claude Code doctor"
+  if grep -Fq "Invalid settings" "$runtime_log"; then
+    sed 's/^/  /' "$runtime_log" >&2
+    fail "Claude Code rejected the installed settings"
+  fi
+
+  printf '%s\n' '{' >"$claude_root/settings.json"
+  HOME="$test_home" \
+    CLAUDE_CONFIG_DIR="$claude_root" \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_AUTOUPDATER=1 \
+    claude doctor >"$invalid_runtime_log" 2>&1 || true
+  assert_contains "$invalid_runtime_log" "Invalid settings"
 }
 
 test_install_conflicts() {
@@ -764,6 +999,10 @@ test_ci_workflow() {
   local workflow="$ROOT/.github/workflows/checks.yml"
 
   assert_contains "$workflow" "python3-tomlkit"
+  assert_contains "$workflow" "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38"
+  assert_contains "$workflow" "@openai/codex@latest"
+  assert_contains "$workflow" "@anthropic-ai/claude-code@latest"
+  assert_contains "$workflow" "POWER_AGENTS_REQUIRE_AGENT_RUNTIMES: 1"
   assert_contains "$workflow" "run: make ci"
 
   if grep -Fq "run: make check" "$workflow"; then
@@ -777,6 +1016,12 @@ python3 "$ROOT/tests/test_reconcile_codex_config.py"
 pass "Codex TOML reconciler"
 test_clean_install_and_idempotence
 pass "clean install, stale-link cleanup, unrelated-skill preservation, and idempotence"
+test_custom_agent_roots
+pass "custom Codex and Claude configuration roots"
+test_invalid_agent_roots
+pass "unsafe relative agent roots fail before installation"
+test_transaction_rollback
+pass "transactional rollback after a managed-file activation failure"
 test_claude_settings_reconciliation
 pass "Claude settings preservation and managed-key reconciliation"
 test_claude_settings_rejection
@@ -789,8 +1034,24 @@ test_invalid_codex_config_rejection
 pass "invalid and incompatible Codex configs fail without partial installation"
 test_nested_tui_dotted_key
 pass "nested dotted TUI-like keys remain unmanaged"
-test_codex_command_policy
-pass "Codex command policy requires approval for unsandboxed project tests"
+test_codex_policy_source
+pass "Codex command policy source requires approval for unsandboxed project tests"
+if command -v codex >/dev/null 2>&1; then
+  test_codex_runtime_compatibility
+  pass "Codex runtime validates managed TUI settings and command policy"
+elif [[ "${POWER_AGENTS_REQUIRE_AGENT_RUNTIMES:-0}" == 1 ]]; then
+  fail "Codex runtime compatibility is required, but codex is not installed"
+else
+  skip "Codex runtime compatibility (codex is not installed)"
+fi
+if command -v claude >/dev/null 2>&1; then
+  test_claude_runtime_compatibility
+  pass "Claude Code runtime validates installed settings"
+elif [[ "${POWER_AGENTS_REQUIRE_AGENT_RUNTIMES:-0}" == 1 ]]; then
+  fail "Claude runtime compatibility is required, but claude is not installed"
+else
+  skip "Claude runtime compatibility (claude is not installed)"
+fi
 test_install_conflicts
 pass "file, same-name skill, and incorrect-symlink conflict refusal"
 test_status_line
