@@ -72,7 +72,7 @@ sudo apt-get install bash coreutils git make jq python3 python3-tomlkit python3-
 Then clone the repository into `~/power-agents` and run the installer:
 
 ```bash
-git clone git@github-personal:chrysogonus/power-agents.git ~/power-agents
+git clone git@github.com:chrysogonus/power-agents.git ~/power-agents
 cd ~/power-agents
 make install
 ```
@@ -252,8 +252,7 @@ only `tui.status_line` and `tui.status_line_use_colors` in
 ## New-Machine Setup
 
 1. Install the agents you use and Git.
-2. Configure SSH access for the `github-personal` host alias, or clone with an
-   HTTPS URL and update the remote as needed.
+2. Configure SSH access to GitHub, or clone with an HTTPS URL instead.
 3. Clone this repository to `~/power-agents`.
 4. Optionally configure the repository-local Git identity:
 
