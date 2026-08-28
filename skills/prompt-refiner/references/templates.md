@@ -194,7 +194,6 @@ Return valid JSON matching the schema. No prose, no markdown.
 # Example
 Document: "<example snippet with one ambiguous field>"
 Output: { "<field_a>": "<value>", "<field_b>": null }
-Reason: "<why the ambiguous field is null>"
 
 <document>
 {{document_text}}

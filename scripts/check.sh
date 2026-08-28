@@ -4,6 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+if ((BASH_VERSINFO[0] < 4)); then
+  echo "ERROR: Bash 4 or newer is required." >&2
+  echo "       See README.md#quality-checks for setup instructions." >&2
+  exit 1
+fi
+
 for command in git gpg jq make python3 shellcheck; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
@@ -17,6 +23,15 @@ if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   echo "       See README.md#quality-checks for setup instructions." >&2
   exit 1
 fi
+
+if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  echo "ERROR: Required Python module not found: yaml (PyYAML)" >&2
+  echo "       See README.md#quality-checks for setup instructions." >&2
+  exit 1
+fi
+
+echo "Validating skills..."
+python3 "$ROOT/scripts/validate-skills.py" "$ROOT/skills"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   mapfile -d '' shell_files < <(

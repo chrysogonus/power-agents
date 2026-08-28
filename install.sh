@@ -9,6 +9,7 @@ CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
 CODEX_CONFIG_RECONCILER="$ROOT/scripts/reconcile-codex-config.py"
+SKILL_VALIDATOR="$ROOT/scripts/validate-skills.py"
 AGENTS_ROOT="$HOME/.agents"
 CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
 CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -171,6 +172,12 @@ if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  echo "ERROR: Required Python module not found: yaml (PyYAML)" >&2
+  echo "       See README.md#installation for setup instructions." >&2
+  exit 1
+fi
+
 if [[ ! -f "$GLOBAL_INSTRUCTIONS" ]]; then
   echo "ERROR: Missing $GLOBAL_INSTRUCTIONS" >&2
   exit 1
@@ -206,46 +213,16 @@ if [[ ! -f "$CODEX_CONFIG_RECONCILER" ]]; then
   exit 1
 fi
 
-skill_name_from_file() {
-  local skill_file="$1"
-
-  sed -n \
-    's/^name:[[:space:]]*["'\'' ]*\([^"'\'' ]*\)["'\'' ]*[[:space:]]*$/\1/p' \
-    "$skill_file" |
-    head -n 1
-}
+if [[ ! -f "$SKILL_VALIDATOR" ]]; then
+  echo "ERROR: Missing $SKILL_VALIDATOR" >&2
+  exit 1
+fi
 
 validate_skills() {
-  local failed=0
-  local folder_name
-  local skill_dir
-  local skill_name
-
-  for skill_dir in "$SKILLS"/*; do
-    [[ -d "$skill_dir" ]] || continue
-
-    folder_name="$(basename "$skill_dir")"
-
-    if [[ ! -f "$skill_dir/SKILL.md" ]]; then
-      echo "ERROR: Missing $skill_dir/SKILL.md" >&2
-      failed=1
-      continue
-    fi
-
-    skill_name="$(skill_name_from_file "$skill_dir/SKILL.md")"
-
-    if [[ -z "$skill_name" ]]; then
-      echo "ERROR: Missing or invalid name in $skill_dir/SKILL.md" >&2
-      failed=1
-    elif [[ "$skill_name" != "$folder_name" ]]; then
-      echo "ERROR: Skill folder and name do not match: $skill_dir" >&2
-      echo "       folder: $folder_name" >&2
-      echo "       name:   $skill_name" >&2
-      failed=1
-    fi
-  done
-
-  return "$failed"
+  if ! python3 "$SKILL_VALIDATOR" "$SKILLS"; then
+    echo "ERROR: Skill validation failed: $SKILLS" >&2
+    return 1
+  fi
 }
 
 validate_codex_tui_settings() {

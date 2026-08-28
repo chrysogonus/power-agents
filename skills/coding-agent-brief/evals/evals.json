@@ -1,0 +1,35 @@
+{
+  "skill_name": "coding-agent-brief",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Turn these rough notes into a task I can paste into Codex: checkout sometimes charges twice when the retry button is clicked; keep the existing API; add a regression test; do not implement it here.",
+      "expected_output": "A concise, motivation-first coding-agent brief describing the duplicate-charge bug, compatibility constraint, regression test, and observable completion criteria.",
+      "assertions": [
+        "The output is a handoff brief rather than an implementation.",
+        "The goal explains why duplicate charging must be prevented.",
+        "The existing API constraint and regression-test requirement are preserved.",
+        "The brief contains verifiable completion criteria."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Prep this Jira excerpt for Claude Code: users need CSV export from the invoice list, use the current filters, and avoid changing invoice permissions. The repo uses React and FastAPI.",
+      "expected_output": "A standalone coding-agent brief that separates current context, desired export behavior, permission constraints, stack details, and verification.",
+      "assertions": [
+        "The output can be understood without the original conversation.",
+        "Current filters and invoice permissions are explicit constraints.",
+        "The brief asks for proportionate tests or verification."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I already wrote this Cursor prompt: 'Fix the upload endpoint and add tests.' Please tighten the prompt without changing its meaning.",
+      "expected_output": "The request is identified as refinement of an existing prompt and routed to prompt-refiner instead of being converted into a new coding-agent brief.",
+      "assertions": [
+        "The response does not silently treat an existing prompt draft as raw task notes.",
+        "The response directs the request to prompt-refiner."
+      ]
+    }
+  ]
+}

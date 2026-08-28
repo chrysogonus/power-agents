@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
-            gnupg jq python3 python3-tomlkit shellcheck
+            gnupg jq python3 python3-tomlkit python3-yaml shellcheck
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0

@@ -105,82 +105,45 @@ render_status_line() {
     "$ROOT/settings/claude/statusline-command.sh"
 }
 
-frontmatter_value() {
-  local file="$1"
-  local key="$2"
-
-  awk -v key="$key" '
-    NR == 1 {
-      if ($0 != "---") {
-        exit
-      }
-      in_frontmatter = 1
-      next
-    }
-
-    in_frontmatter && $0 == "---" {
-      exit
-    }
-
-    in_frontmatter && index($0, key ":") == 1 {
-      value = substr($0, length(key) + 2)
-      sub(/^[[:space:]]*/, "", value)
-      sub(/[[:space:]]*$/, "", value)
-      print value
-      exit
-    }
-  ' "$file"
+test_project_instruction_entrypoints() {
+  [[ -L "$ROOT/CLAUDE.md" ]] ||
+    fail "CLAUDE.md must be a symlink to the authoritative project instructions"
+  [[ "$(readlink "$ROOT/CLAUDE.md")" == "AGENTS.md" ]] ||
+    fail "CLAUDE.md must link directly to AGENTS.md"
+  [[ "$ROOT/CLAUDE.md" -ef "$ROOT/AGENTS.md" ]] ||
+    fail "Claude and Codex project instruction entrypoints differ"
 }
 
-unquote() {
-  local value="$1"
+test_installer_rejects_invalid_skill_metadata() {
+  local invalid_repo="$TEST_ROOT/invalid-skill-repo"
+  local test_home="$TEST_ROOT/invalid-skill-home"
 
-  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-    value="${value#\"}"
-    value="${value%\"}"
-  elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-    value="${value#\'}"
-    value="${value%\'}"
+  mkdir -p "$invalid_repo" "$test_home"
+  cp -a "$ROOT/." "$invalid_repo/"
+  mkdir -p "$invalid_repo/skills/Invalid_Name"
+  cat >"$invalid_repo/skills/Invalid_Name/SKILL.md" <<'EOF'
+---
+name: Invalid_Name
+description: This directory name is not valid.
+---
+
+# Invalid Skill
+EOF
+
+  if HOME="$test_home" \
+    CODEX_HOME="$test_home/.codex" \
+    CLAUDE_CONFIG_DIR="$test_home/.claude" \
+    PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
+    "$invalid_repo/install.sh" >"$test_home/install.log" 2>&1; then
+    fail "Installer accepted invalid skill metadata"
   fi
 
-  printf '%s' "$value"
-}
-
-test_skill_metadata() {
-  local description
-  local folder_name
-  local name
-  local skill_dir
-  local skill_dirs=("$ROOT"/skills/*/)
-  local skill_file
-
-  ((${#skill_dirs[@]} > 0)) || fail "No skill directories found"
-
-  for skill_dir in "${skill_dirs[@]}"; do
-    folder_name="$(basename "$skill_dir")"
-    skill_file="${skill_dir}SKILL.md"
-    [[ "$folder_name" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] ||
-      fail "Invalid skill directory name: $folder_name"
-    [[ -f "$skill_file" ]] || fail "Missing skill metadata: $skill_file"
-    [[ "$(sed -n '1p' "$skill_file")" == "---" ]] ||
-      fail "SKILL.md must start with YAML frontmatter: $skill_file"
-    awk '
-      NR > 1 && $0 == "---" {
-        found_end = 1
-        exit
-      }
-
-      END {
-        exit !found_end
-      }
-    ' "$skill_file" || fail "Unclosed YAML frontmatter: $skill_file"
-
-    name="$(unquote "$(frontmatter_value "$skill_file" name)")"
-    description="$(unquote "$(frontmatter_value "$skill_file" description)")"
-    [[ "$name" == "$folder_name" ]] ||
-      fail "Skill name '$name' does not match directory '$folder_name'"
-    [[ -n "$description" ]] || fail "Missing skill description: $skill_file"
-  done
+  assert_contains "$test_home/install.log" "directory name must match"
+  assert_contains "$test_home/install.log" "Skill validation failed"
+  [[ ! -e "$test_home/.codex/AGENTS.md" ]] ||
+    fail "Installer partially installed after rejecting invalid skill metadata"
+  [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
+    fail "Installer partially installed after rejecting invalid skill metadata"
 }
 
 test_clean_install_and_idempotence() {
@@ -999,6 +962,7 @@ test_ci_workflow() {
   local workflow="$ROOT/.github/workflows/checks.yml"
 
   assert_contains "$workflow" "python3-tomlkit"
+  assert_contains "$workflow" "python3-yaml"
   assert_contains "$workflow" "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38"
   assert_contains "$workflow" "@openai/codex@latest"
   assert_contains "$workflow" "@anthropic-ai/claude-code@latest"
@@ -1010,8 +974,12 @@ test_ci_workflow() {
   fi
 }
 
-test_skill_metadata
-pass "skill structure and metadata"
+test_project_instruction_entrypoints
+pass "Claude and Codex share authoritative project instructions"
+python3 "$ROOT/tests/test_validate_skills.py"
+pass "shared skill metadata and evaluation validator"
+test_installer_rejects_invalid_skill_metadata
+pass "installer rejects invalid skill metadata before installation"
 python3 "$ROOT/tests/test_reconcile_codex_config.py"
 pass "Codex TOML reconciler"
 test_clean_install_and_idempotence

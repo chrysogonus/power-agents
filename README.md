@@ -7,6 +7,8 @@ skills shared across Codex and Claude Code.
 
 ```text
 ~/power-agents/
+├── AGENTS.md
+├── CLAUDE.md -> AGENTS.md
 ├── instructions/
 │   └── general-global.md
 ├── policies/
@@ -28,6 +30,8 @@ skills shared across Codex and Claude Code.
 ```
 
 The repository contains the only copies of shared instructions and skills.
+The root `CLAUDE.md` symlink exposes the same repository-specific instructions
+as `AGENTS.md`, so Codex and Claude Code use one authoritative project rule set.
 Most agent-specific configuration paths use symlinks to this repository. Codex
 TUI settings are merged into its existing configuration so machine-local state
 is preserved.
@@ -55,19 +59,22 @@ created through interactive approvals.
 
 ## Installation
 
-Clone the repository into `~/power-agents`, then run the installer:
+This repository supports GNU/Linux with Bash 4 or newer and GNU coreutils.
+macOS is not currently supported: the authenticated sync and quality-check
+scripts rely on Bash's `mapfile` and GNU `realpath` behavior.
+
+On Debian or Ubuntu, install the tools needed for a fresh installation first:
+
+```bash
+sudo apt-get install bash coreutils git make jq python3 python3-tomlkit python3-yaml
+```
+
+Then clone the repository into `~/power-agents` and run the installer:
 
 ```bash
 git clone git@github-personal:chrysogonus/power-agents.git ~/power-agents
 cd ~/power-agents
 make install
-```
-
-The installer requires `jq`, Python 3, and the Python `tomlkit` module. On
-Debian or Ubuntu, install them with:
-
-```bash
-sudo apt-get install jq python3 python3-tomlkit
 ```
 
 The installer honors Codex's documented `CODEX_HOME` and Claude Code's
@@ -93,6 +100,13 @@ with a format-preserving TOML library. Before activation, the installer prepares
 and validates both complete settings files. Once activation begins, a surfaced
 failure rolls back files, links, and directories created or replaced during
 that run, restoring the pre-install configuration.
+
+Claude settings are reconciled with `jq`, which represents JSON numbers as
+double-precision values. Numeric values that cannot be represented exactly may
+therefore be rounded when `settings.json` is rewritten; this includes integers
+with a magnitude greater than `9007199254740991`. Preservation applies to
+`jq`-representable semantic values, not original JSON formatting or arbitrary
+numeric precision.
 
 ## Syncing
 
@@ -156,13 +170,13 @@ Third-party components retain their respective terms and attribution; see
 
 ## Quality Checks
 
-The core local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with `tomlkit`,
-and
+The core local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with `tomlkit`
+and PyYAML, and
 [ShellCheck](https://www.shellcheck.net/). On Debian or Ubuntu, install the
 dependencies with:
 
 ```bash
-sudo apt-get install make gnupg jq python3 python3-tomlkit shellcheck
+sudo apt-get install make gnupg jq python3 python3-tomlkit python3-yaml shellcheck
 ```
 
 Run the complete pipeline locally after committing and before pushing:

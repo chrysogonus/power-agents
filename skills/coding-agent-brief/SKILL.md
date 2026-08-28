@@ -1,6 +1,6 @@
 ---
 name: coding-agent-brief
-description: Turns a user's raw task description plus context into an optimized, ready-to-paste prompt for a coding agent (Claude Code, Codex, Cursor, Copilot, etc.). Use whenever the user describes a coding task, bug, feature, or refactor they want to hand off to a coding agent, asks to "write a prompt for Claude Code", "prep this for Codex", "turn this into an agent task", or dumps rough notes/tickets/Slack messages about a code change and wants a clean handoff. Trigger even when the user doesn't say "prompt" but clearly wants a coding agent to do the work later. Do not use for refining an already-written prompt draft (use prompt-refiner) and do not implement the task yourself.
+description: Converts raw notes or context about a coding task, bug, feature, or refactor into a ready-to-paste brief for a coding agent such as Claude Code or Codex. Use when the user wants unfinished coding-task material handed off for later implementation, even if they do not say "prompt." Do not use to improve an already-written prompt draft; use prompt-refiner instead. Never implement the task yourself.
 ---
 
 # Coding Agent Brief

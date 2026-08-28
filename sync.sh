@@ -9,6 +9,16 @@ fail() {
   exit 1
 }
 
+if ((BASH_VERSINFO[0] < 4)); then
+  fail "Bash 4 or newer is required; see README.md#installation."
+fi
+
+for command in git realpath; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    fail "Required command not found: $command"
+  fi
+done
+
 verify_trusted_commit() {
   local commit="$1"
   local fingerprint
@@ -66,7 +76,8 @@ if [[ ! -f "$TRUSTED_SIGNERS" || ! -s "$TRUSTED_SIGNERS" ]]; then
   fail "Missing trusted signer allowlist: $TRUSTED_SIGNERS"
 fi
 
-root_path=$(realpath -e -- "$ROOT")
+root_path=$(realpath -e -- "$ROOT") ||
+  fail "GNU realpath is required; see README.md#installation."
 trusted_signers_path=$(realpath -e -- "$TRUSTED_SIGNERS") ||
   fail "Cannot resolve trusted signer allowlist: $TRUSTED_SIGNERS"
 case "$trusted_signers_path" in

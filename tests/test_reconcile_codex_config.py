@@ -42,6 +42,21 @@ class ReconcileCodexConfigTests(unittest.TestCase):
             text=True,
         )
 
+    def validate_managed(self, content: str) -> subprocess.CompletedProcess[str]:
+        source_path = self.directory / "managed.toml"
+        source_path.write_text(content, encoding="utf-8")
+        return subprocess.run(
+            [
+                "python3",
+                str(RECONCILER),
+                "validate-managed",
+                str(source_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
     def assert_reconciled(self, result: subprocess.CompletedProcess[str]) -> dict:
         self.assertEqual(result.returncode, 0, result.stderr)
         config = tomlkit.parse(
@@ -128,6 +143,32 @@ class ReconcileCodexConfigTests(unittest.TestCase):
                 self.assertEqual(
                     self.output_path.read_text(encoding="utf-8"), "unchanged\n"
                 )
+
+    def test_rejects_invalid_managed_value_types(self) -> None:
+        rejected_settings = {
+            "status line is not an array": (
+                '[tui]\nstatus_line = "project-name"\n'
+                "status_line_use_colors = true\n",
+                "managed tui.status_line must be an array of strings",
+            ),
+            "status line contains a non-string": (
+                '[tui]\nstatus_line = ["project-name", 7]\n'
+                "status_line_use_colors = true\n",
+                "managed tui.status_line must be an array of strings",
+            ),
+            "color setting is not boolean": (
+                '[tui]\nstatus_line = ["project-name"]\n'
+                'status_line_use_colors = "true"\n',
+                "managed tui.status_line_use_colors must be a boolean",
+            ),
+        }
+
+        for name, (content, expected_error) in rejected_settings.items():
+            with self.subTest(name=name):
+                result = self.validate_managed(content)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
 
     def test_reconciliation_is_idempotent(self) -> None:
         content = (

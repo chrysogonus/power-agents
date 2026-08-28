@@ -9,7 +9,7 @@
 ## Checklist
 
 - [ ] `./install.sh` rerun; it is still idempotent and preserved unmanaged
-      values in the configured Claude and Codex settings files
+      supported values in the configured Claude and Codex settings files
 - [ ] `make check` passes
 - [ ] `make ci` passes
 - [ ] Documentation updated (`README.md`, `skills/README.md`) where behavior or

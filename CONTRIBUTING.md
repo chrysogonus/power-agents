@@ -1,9 +1,9 @@
 # Contributing
 
 This repository is the canonical home for shared Codex and Claude Code
-configuration. Read [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md) first;
-they carry the authoritative project rules, and this document only summarizes
-the workflow around them.
+configuration. Read [`AGENTS.md`](AGENTS.md) first. The tracked
+[`CLAUDE.md`](CLAUDE.md) symlink gives Claude Code the same authoritative
+project rules, and this document only summarizes the workflow around them.
 
 ## Ground Rules
 
@@ -24,8 +24,9 @@ Keep content where it belongs:
 ## Workflow
 
 1. Make the change in this repository.
-2. Run `./install.sh`. It must stay idempotent and must preserve unmanaged
-   values in the installed Claude and Codex settings files.
+2. Run `./install.sh`. It must stay idempotent and must preserve supported
+   unmanaged values in the installed Claude and Codex settings files, subject
+   to the documented `jq` numeric limitation.
 3. Run `make check` while iterating. It parses and statically analyzes every
    shell script, validates skill metadata, exercises the installer under
    isolated temporary home directories, and rejects whitespace errors.

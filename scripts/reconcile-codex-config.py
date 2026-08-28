@@ -34,6 +34,15 @@ def validate_managed_settings(document: tomlkit.TOMLDocument) -> None:
             "status_line_use_colors"
         )
 
+    status_line = tui["status_line"]
+    if not isinstance(status_line, list) or not all(
+        isinstance(item, str) for item in status_line
+    ):
+        raise ValueError("managed tui.status_line must be an array of strings")
+
+    if not isinstance(tui["status_line_use_colors"], bool):
+        raise ValueError("managed tui.status_line_use_colors must be a boolean")
+
 
 def validate_config(document: tomlkit.TOMLDocument) -> None:
     tui = document.get("tui")

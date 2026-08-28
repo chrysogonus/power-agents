@@ -1,0 +1,34 @@
+{
+  "skill_name": "prompt-refiner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make this prompt clearer and shorter: 'Write a professional email about the delay. Make it good and not too long. The audience is customers whose orders are two days late.'",
+      "expected_output": "A copy-pasteable email-writing prompt with explicit audience, purpose, tone, length, and output requirements, without writing the customer email itself.",
+      "assertions": [
+        "The underlying customer email is not written.",
+        "The refined prompt preserves the two-day delay and customer audience.",
+        "Vague wording is replaced with observable requirements."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Refine this extraction prompt for an API pipeline: 'Read the document and return account_id and renewal_date. If either is unclear, use null.' The consumer requires JSON only.",
+      "expected_output": "A structured extraction prompt whose schema and example use valid JSON only, with null handling and no prose outside the JSON response contract.",
+      "assertions": [
+        "The refined prompt requires valid JSON with no prose or markdown.",
+        "The output schema includes account_id and renewal_date with null handling.",
+        "Every example response obeys the JSON-only contract."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Here are rough notes for a future code change: migrate our Flask auth routes to FastAPI, preserve cookie names, and give me something to paste into Claude Code. I have not drafted a prompt yet.",
+      "expected_output": "The request is identified as a raw coding-task handoff and routed to coding-agent-brief instead of being handled as general prompt refinement.",
+      "assertions": [
+        "The response does not blur raw coding-task notes with an existing prompt draft.",
+        "The response directs the request to coding-agent-brief."
+      ]
+    }
+  ]
+}
