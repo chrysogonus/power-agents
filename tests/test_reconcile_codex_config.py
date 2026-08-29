@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import runpy
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 import tomlkit
 
@@ -14,6 +16,13 @@ import tomlkit
 ROOT = Path(__file__).resolve().parents[1]
 RECONCILER = ROOT / "scripts" / "reconcile-codex-config.py"
 MANAGED_SETTINGS = ROOT / "settings" / "codex" / "tui.toml"
+
+
+class LegacyTOMLDocument:
+    """Minimal stand-in for tomlkit releases before unwrap() existed."""
+
+    def __init__(self, value: dict[str, Any]) -> None:
+        self.value = value
 
 
 class ReconcileCodexConfigTests(unittest.TestCase):
@@ -61,10 +70,10 @@ class ReconcileCodexConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         config = tomlkit.parse(
             self.output_path.read_text(encoding="utf-8")
-        ).unwrap()
+        ).value
         managed = tomlkit.parse(
             MANAGED_SETTINGS.read_text(encoding="utf-8")
-        ).unwrap()
+        ).value
         self.assertEqual(
             config["tui"]["status_line"], managed["tui"]["status_line"]
         )
@@ -73,6 +82,15 @@ class ReconcileCodexConfigTests(unittest.TestCase):
             managed["tui"]["status_line_use_colors"],
         )
         return config
+
+    def test_supports_legacy_tomlkit_document_api(self) -> None:
+        namespace = runpy.run_path(str(RECONCILER))
+        expected = {"tui": {"status_line": ["project-name"]}}
+
+        self.assertEqual(
+            namespace["document_values"](LegacyTOMLDocument(expected)),
+            expected,
+        )
 
     def test_reconciles_supported_tui_representations(self) -> None:
         cases = {

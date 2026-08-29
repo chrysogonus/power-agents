@@ -22,8 +22,16 @@ def parse_file(path: Path) -> tomlkit.TOMLDocument:
         raise ValueError(f"invalid TOML in {path}: {error}") from error
 
 
+def document_values(document: tomlkit.TOMLDocument) -> dict[str, Any]:
+    """Return plain values across supported tomlkit versions."""
+    unwrap = getattr(document, "unwrap", None)
+    if unwrap is not None:
+        return unwrap()
+    return document.value
+
+
 def validate_managed_settings(document: tomlkit.TOMLDocument) -> None:
-    values = document.unwrap()
+    values = document_values(document)
     if set(values) != {"tui"} or not isinstance(values["tui"], dict):
         raise ValueError("managed settings must contain only a [tui] table")
 
@@ -67,8 +75,8 @@ def reconcile(source_path: Path, input_path: Path, output_path: Path) -> None:
 
     document = parse_file(input_path)
     validate_config(document)
-    original_values = document.unwrap()
-    managed_values = source.unwrap()["tui"]
+    original_values = document_values(document)
+    managed_values = document_values(source)["tui"]
 
     tui = document.get("tui")
     if tui is None:
@@ -84,7 +92,7 @@ def reconcile(source_path: Path, input_path: Path, output_path: Path) -> None:
     except tomlkit.exceptions.ParseError as error:
         raise ValueError(f"generated invalid TOML: {error}") from error
 
-    candidate_values = candidate.unwrap()
+    candidate_values = document_values(candidate)
     candidate_tui = candidate_values.get("tui")
     if not isinstance(candidate_tui, dict) or any(
         candidate_tui.get(key) != managed_values[key] for key in MANAGED_KEYS
