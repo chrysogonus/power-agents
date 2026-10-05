@@ -1,21 +1,42 @@
 # Skills
 
-Reusable, agent-agnostic skills: a folder per skill, each with a `SKILL.md`.
+Skills are reusable instructions that tell an agent how to handle a particular
+kind of task. This repository contains **15 skills**: five core skills and ten
+imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
+
+## Install and Use
+
+Follow the repository's [quick installation guide](../README.md#installation).
+`make install` links every skill for both Codex and Claude Code; there is no
+separate skill-installation step.
+
+Ask for a skill explicitly, or let the agent select one from your request:
+
+| Agent | Example prompt |
+| --- | --- |
+| Codex | `$deep-review review the changes on this branch` |
+| Claude Code | `/deep-review review the changes on this branch` |
+
+For a minimal implementation or bug fix, use `ponytail`. For a general code
+review, use `deep-review`. To write findings to `CODE_REVIEW.md`, use
+`review-report`.
 
 ## Available Skills
 
+### Core Skills
+
 | Skill | Purpose |
 | --- | --- |
-| [`deep-review`](deep-review/SKILL.md) | Reviews pull requests and merge requests for security, privacy, reliability, and maintainability. |
+| [`deep-review`](deep-review/SKILL.md) | Reviews code, branches, diffs, commits, and pull/merge requests for correctness, security, privacy, reliability, and maintainability. |
 | [`coding-agent-brief`](coding-agent-brief/SKILL.md) | Turns rough task descriptions and context into ready-to-use coding-agent briefs. |
-| [`review-report`](review-report/SKILL.md) | Reviews the current branch against its base and writes detailed findings to `CODE_REVIEW.md`. |
+| [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with plain-language findings, concrete examples, and paste-ready review comments. |
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
-| [`security-best-practices`](security-best-practices/SKILL.md) | Provides security best-practice reviews and guidance for supported languages and frameworks. |
+| [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
 
 ## Imported Skills
 
-These ten skills are installed with normal automatic discovery, as requested.
-They are experimental: live routing and task-effect evaluations remain
+These ten skills are included in the same installation and use normal automatic
+discovery. They are experimental: live routing and task-effect evaluations remain
 unmeasured. Each package includes its required references, license, and four
 routing fixtures. Pinned origins and adaptations are recorded in
 [Third-Party Notices](../THIRD_PARTY_NOTICES.md#skills-integrated-from-the-research-catalog).
@@ -33,12 +54,13 @@ routing fixtures. Pinned origins and adaptations are recorded in
 | [`performance-optimization`](performance-optimization/SKILL.md) | Measured application bottlenecks beyond React/Next.js and Postgres-specific work. |
 | [`frontend-design`](frontend-design/SKILL.md) | New frontend UI and intentional visual design from a product brief. |
 
-Invoke any skill explicitly as `$skill-name` in Codex or `/skill-name` in Claude
-Code, or let the agent select it from the request. `grilling` applies when an
-interview is requested; routine implementation does not require that interview.
+`grilling` applies when an interview is requested; routine implementation does
+not require that interview.
 Ponytail applies to its current task and does not install session hooks.
 
-General code reviews retain the `deep-review` / `review-report` boundary below.
+## Choosing Between Related Skills
+
+General code reviews use the `deep-review` / `review-report` boundary below.
 Design work belongs to `frontend-design`; content stress-testing to `break-ui`;
 React performance to `vercel-react-best-practices`; component API design to
 `vercel-composition-patterns`. Existing plugin or unmanaged skills remain
@@ -65,8 +87,8 @@ boundary.
 
 Each skill directory must contain a `SKILL.md` with YAML frontmatter containing
 `name` and `description`. The `name` must exactly match the directory name and
-use lowercase letters, digits, and hyphens. The description should state what
-the skill does and when an agent should load it.
+use lowercase letters and digits, optionally separated by single hyphens. The
+description should state what the skill does and when an agent should load it.
 
 Minimum example:
 
@@ -86,7 +108,7 @@ directory. Behavioral evaluation cases use the Agent Skills
 `evals/evals.json` format with realistic prompts, expected outputs, and
 objective assertions where possible.
 
-Run `make eval` to execute the fixtures, or use
+Run `make eval` to execute the fixtures using paid Anthropic API calls, or use
 `make eval EVAL_ARGS='--skill deep-review'` to select one fixture set while
 keeping all skills available for routing. See the repository's
 [evaluation instructions](../README.md#behavioral-skill-evaluations) for runtime,
@@ -98,4 +120,5 @@ fixtures and tests the runner offline; it does not execute LLM evaluations.
 Create the directory and `SKILL.md`, then run `./install.sh` from the repository
 root to validate all skill names and create the new per-skill links for Codex
 and Claude Code. Existing unrelated skills in either agent's skill directory
-remain untouched.
+remain untouched. Run `make check` to validate the change. Edits to an
+already linked skill are available immediately through its link.
