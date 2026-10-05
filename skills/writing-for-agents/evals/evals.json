@@ -1,0 +1,45 @@
+{
+  "skill_name": "writing-for-agents",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use writing-for-agents to improve the routing of my AGENTS.md. First load the skill; I will provide the document next.",
+      "expected_output": "Load writing-for-agents before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is writing-for-agents.",
+        "writing-for-agents successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Restructure my AGENTS.md so task-specific references are only loaded when relevant and completion criteria are checkable. First load the appropriate skill; I will provide the document next.",
+      "expected_output": "Load writing-for-agents before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is writing-for-agents.",
+        "writing-for-agents successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Tighten this existing coding prompt so it is ready to paste. First load the appropriate skill; I will provide the draft next.",
+      "expected_output": "Load prompt-refiner before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is prompt-refiner.",
+        "writing-for-agents is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "writing-for-agents is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

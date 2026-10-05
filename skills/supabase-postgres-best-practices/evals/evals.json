@@ -1,0 +1,45 @@
+{
+  "skill_name": "supabase-postgres-best-practices",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use supabase-postgres-best-practices to inspect a Postgres query plan. First load the skill; I will provide EXPLAIN output next.",
+      "expected_output": "Load supabase-postgres-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is supabase-postgres-best-practices.",
+        "supabase-postgres-best-practices successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Diagnose this slow Postgres query and choose indexes from its EXPLAIN plan. First load the appropriate skill; I will provide the SQL and plan next.",
+      "expected_output": "Load supabase-postgres-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is supabase-postgres-best-practices.",
+        "supabase-postgres-best-practices successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Do a secure-by-default best-practices review of this Flask application, without database work. First load the appropriate skill; I will provide the repository next.",
+      "expected_output": "Load security-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is security-best-practices.",
+        "supabase-postgres-best-practices is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "supabase-postgres-best-practices is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

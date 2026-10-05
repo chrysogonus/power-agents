@@ -1079,7 +1079,7 @@ test_make_targets() {
   actual="$(make --no-print-directory -C "$ROOT")"
   assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
 
-  for target in install sync test check ci; do
+  for target in install sync test check ci eval; do
     actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
     case "$target" in
       install) [[ "$actual" == "./install.sh" ]] ;;
@@ -1087,6 +1087,7 @@ test_make_targets() {
       test) [[ "$actual" == "./tests/run.sh" ]] ;;
       check) [[ "$actual" == "./scripts/check.sh" ]] ;;
       ci) [[ "$actual" == "./scripts/ci.sh" ]] ;;
+      eval) [[ "$actual" == "python3 ./scripts/run-evals.py " ]] ;;
     esac || fail "Unexpected make $target command: $actual"
   done
 }
@@ -1111,6 +1112,8 @@ test_project_instruction_entrypoints
 pass "Claude and Codex share authoritative project instructions"
 python3 "$ROOT/tests/test_validate_skills.py"
 pass "shared skill metadata and evaluation validator"
+python3 "$ROOT/tests/test_run_evals.py"
+pass "isolated evaluation runner with a fake runtime"
 test_installer_rejects_invalid_skill_metadata
 pass "installer rejects invalid skill metadata before installation"
 python3 "$ROOT/tests/test_reconcile_codex_config.py"

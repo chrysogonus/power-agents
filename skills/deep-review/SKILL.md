@@ -1,6 +1,6 @@
 ---
-name: code-review
-description: Review pull requests and merge requests with a security, privacy, reliability, and maintainability mindset. Use this when a coding agent has access to a repository, diff, changed files, commits, tests, or PR/MR metadata and is asked to review code before merge.
+name: deep-review
+description: Reviews code, branches, diffs, commits, pull requests, and merge requests for security, privacy, correctness, reliability, and maintainability. Use for review requests, including checking changes before merge. Do not use when the user wants findings written to a file, a plain-language review for a reader without codebase context, or paste-ready review comments; use review-report instead.
 ---
 
 # Code Review
@@ -141,7 +141,13 @@ Adjust the depth based on risk:
 
 ## Output Format
 
-Return the review in Markdown using exactly this structure.
+Return the review in Markdown using the sections required by the depth chosen above:
+
+- **Concise:** Use sections 1 (Review Summary) and 4 (Key Findings). Include testing performed and any missing evidence in the summary; keep findings brief.
+- **Structured:** Use sections 1, 2 (Files Reviewed), 3 (Behavioral Changes), 4, 6 (Testing Review), and 7 (Refactoring and Maintainability Suggestions). Add section 5 (Security and Privacy Review) when security-relevant surfaces were reviewed. Section 8 (Change Summary) is optional.
+- **Audit-style:** Use all eight sections with the detailed evidence, impact, likelihood, and remediation described below.
+
+Keep the selected sections in the order below. The section requirements apply only to sections included at the chosen depth.
 
 ## 1. Review Summary
 

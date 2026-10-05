@@ -1,0 +1,45 @@
+{
+  "skill_name": "grilling",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use grilling to stress-test my product idea. First load the skill; I will provide the idea next.",
+      "expected_output": "Load grilling before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is grilling.",
+        "grilling successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Challenge my proposed architecture by interviewing me about the decisions and tradeoffs. First load the appropriate skill; I will provide the proposal next.",
+      "expected_output": "Load grilling before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is grilling.",
+        "grilling successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Turn my rough coding-task notes into a brief for a coding agent; do not implement it. First load the appropriate skill; I will provide the notes next.",
+      "expected_output": "Load coding-agent-brief before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is coding-agent-brief.",
+        "grilling is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "grilling is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

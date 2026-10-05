@@ -1,0 +1,45 @@
+{
+  "skill_name": "vercel-composition-patterns",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use vercel-composition-patterns to refactor our component API. First load the skill; I will provide the component next.",
+      "expected_output": "Load vercel-composition-patterns before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-composition-patterns.",
+        "vercel-composition-patterns successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Our reusable React component has too many boolean props. Help redesign its API with composition. First load the appropriate skill; I will provide the component next.",
+      "expected_output": "Load vercel-composition-patterns before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-composition-patterns.",
+        "vercel-composition-patterns successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Our Next.js page has a request waterfall and too much client JavaScript. First load the appropriate performance skill; I will provide the trace and code next.",
+      "expected_output": "Load vercel-react-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-react-best-practices.",
+        "vercel-composition-patterns is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "vercel-composition-patterns is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

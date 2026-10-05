@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync test check ci
+.PHONY: help install sync test check ci eval
 
 help:
 	@printf '%s\n' \
@@ -11,7 +11,8 @@ help:
 		'  sync     Verify, fast-forward, and reinstall configuration' \
 		'  test     Run the isolated behavioral tests' \
 		'  check    Run checks against the current working tree' \
-		'  ci       Run the same complete pipeline as GitHub Actions'
+		'  ci       Run the same complete pipeline as GitHub Actions' \
+		'  eval     Run paid skill evaluations with Claude Code (EVAL_ARGS=...)'
 
 install:
 	./install.sh
@@ -27,3 +28,6 @@ check:
 
 ci:
 	./scripts/ci.sh
+
+eval:
+	python3 ./scripts/run-evals.py $(EVAL_ARGS)

@@ -1,6 +1,6 @@
 ---
-name: github-code-review
-description: Reviews the current branch as if it were a pull request, comparing it against the base branch, and writes the findings to a CODE_REVIEW.md file at the repo root — explained in plain language for a reader with little context on the codebase, with concrete examples, before/after code, and a step-by-step guide of exactly which lines to comment on and what to write. Use this whenever the user asks to review a branch, review a PR, "check this before I merge", "what's wrong with this branch", "review my changes against main", or wants review findings written to a file rather than delivered as chat commentary. Also use when the user wants a review they can hand to a non-expert or to another coding agent to act on.
+name: review-report
+description: Writes code review findings to CODE_REVIEW.md at the repository root, with plain-language explanations, concrete examples, suggested code, and paste-ready review comments. Use when the user wants findings written to a file, a plain-language review for a reader without codebase context, or paste-ready review comments. Do not use for other review requests, including a generic PR review or check before merge; use deep-review instead.
 ---
 
 # PR Review in Plain English
@@ -54,7 +54,7 @@ and hold the PR to those conventions rather than to generic preferences.
 
 ### 3. Analyse
 
-If the `code-review` skill is available in the environment, invoke it and use its analysis as the
+If the `deep-review` skill is available in the environment, invoke it and use its analysis as the
 backbone of the findings. If it isn't available, work through this checklist directly:
 
 - **Correctness** — does it do what the commits claim? Off-by-one, inverted conditions, wrong

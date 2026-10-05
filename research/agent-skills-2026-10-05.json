@@ -1,0 +1,657 @@
+{
+  "observed_on": "2026-10-05",
+  "status": "research-only; no candidate installed or effect evaluated locally",
+  "discovery_sources": [
+    "https://www.skills.sh/",
+    "https://www.skills.sh/trending",
+    "https://www.skills.sh/hot"
+  ],
+  "metric_notes": "GitHub stars are repository totals. Marketplace counts are rounded displayed install figures, not verified unique users or performance measurements.",
+  "repositories": [
+    {
+      "repository": "DietrichGebert/ponytail",
+      "url": "https://github.com/DietrichGebert/ponytail",
+      "metadata_source": "https://api.github.com/repos/DietrichGebert/ponytail",
+      "revision_source": "https://api.github.com/repos/DietrichGebert/ponytail/commits/main",
+      "commit": "cd765194f5e625d2f96e80e63df1c1af0b03705b",
+      "default_branch": "main",
+      "github_stars": 155836,
+      "forks": 8369,
+      "last_pushed_at": "2026-10-05T16:23:29Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": ".openclaw/skills/ponytail/SKILL.md",
+          "source_url": "https://github.com/DietrichGebert/ponytail/blob/cd765194f5e625d2f96e80e63df1c1af0b03705b/.openclaw/skills/ponytail/SKILL.md",
+          "sha256": "dd240060d5734a58fe2783916a63f9401fed75c5f87742dd663a66f9ed4c8c65"
+        },
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/DietrichGebert/ponytail/blob/cd765194f5e625d2f96e80e63df1c1af0b03705b/LICENSE",
+          "sha256": "fb1bc6909ac3ef82d5c22106e32ef682b0cff66788fa915fb9b53b15c9d2f3ab"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/DietrichGebert/ponytail/blob/cd765194f5e625d2f96e80e63df1c1af0b03705b/README.md",
+          "sha256": "57bcafc658a76c321287f7cda3c10db0145073e9a28df145506e6d6e8f632aac"
+        },
+        {
+          "path": "benchmarks/results/2026-06-18-agentic.md",
+          "source_url": "https://github.com/DietrichGebert/ponytail/blob/cd765194f5e625d2f96e80e63df1c1af0b03705b/benchmarks/results/2026-06-18-agentic.md",
+          "sha256": "fe274964a4f2b9801e67ba956eef3a029c472aa5693b7e0643c83bd406f9ee6f"
+        },
+        {
+          "path": "skills/ponytail/SKILL.md",
+          "source_url": "https://github.com/DietrichGebert/ponytail/blob/cd765194f5e625d2f96e80e63df1c1af0b03705b/skills/ponytail/SKILL.md",
+          "sha256": "1316a2f3f95741d2300b116fe0c2d81ce4a9568656ed0a62643f54aaf09957f2"
+        }
+      ]
+    },
+    {
+      "repository": "juliusbrussee/caveman",
+      "url": "https://github.com/JuliusBrussee/caveman",
+      "metadata_source": "https://api.github.com/repos/juliusbrussee/caveman",
+      "revision_source": "https://api.github.com/repos/juliusbrussee/caveman/commits/main",
+      "commit": "6571943370f7c9d4de1946481177ee7b306cd8e8",
+      "default_branch": "main",
+      "github_stars": 109973,
+      "forks": 6361,
+      "last_pushed_at": "2026-10-05T07:41:09Z",
+      "archived": false,
+      "github_license_detection": "Apache-2.0",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/juliusbrussee/caveman/blob/6571943370f7c9d4de1946481177ee7b306cd8e8/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/juliusbrussee/caveman/blob/6571943370f7c9d4de1946481177ee7b306cd8e8/README.md",
+          "sha256": "7741e3e58df76afce349e4de6a9c6cb3ae87057c6f816b6e2be2c69f95b83865"
+        },
+        {
+          "path": "plugins/caveman/skills/caveman/SKILL.md",
+          "source_url": "https://github.com/juliusbrussee/caveman/blob/6571943370f7c9d4de1946481177ee7b306cd8e8/plugins/caveman/skills/caveman/SKILL.md",
+          "sha256": "34255a0215a7701eb83d508d03bc9560dc7bffbeb95a145ad2921ad2598a03bf"
+        }
+      ]
+    },
+    {
+      "repository": "mattpocock/skills",
+      "url": "https://github.com/mattpocock/skills",
+      "metadata_source": "https://api.github.com/repos/mattpocock/skills",
+      "revision_source": "https://api.github.com/repos/mattpocock/skills/commits/main",
+      "commit": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
+      "default_branch": "main",
+      "github_stars": 276923,
+      "forks": 23200,
+      "last_pushed_at": "2026-10-05T12:04:32Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/README.md",
+          "sha256": "a0ec5e84e3412c62340b17ce641aa6be96988f9e89e967bbce7c1c0597dae333"
+        },
+        {
+          "path": "skills/engineering/pr/SKILL.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/engineering/pr/SKILL.md",
+          "sha256": "ab63f1cf78647389edcd386c9427c5dfca27ed2836930c24773ffee834c19bcd"
+        },
+        {
+          "path": "skills/productivity/grill-me/SKILL.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/grill-me/SKILL.md",
+          "sha256": "caaf8b8de1684f96e26b28f3c29189db5c89cce4b73e1c93d86164f66ef88637"
+        },
+        {
+          "path": "skills/productivity/grilling/SKILL.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/grilling/SKILL.md",
+          "sha256": "10ff989e7498b23b5acb49d5048f11dcd906757d2f79c5cdf8a00001381296f2"
+        },
+        {
+          "path": "skills/productivity/writing-for-agents/SKILL-MECHANICS.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/writing-for-agents/SKILL-MECHANICS.md",
+          "sha256": "c768e6307c7c10728c401c213f2c4ba71c542127eeb7ad2956aabd15a0fa0059"
+        },
+        {
+          "path": "skills/productivity/writing-for-agents/SKILL.md",
+          "source_url": "https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/writing-for-agents/SKILL.md",
+          "sha256": "551adca942227b44192edba88acd4e8db911f0121ce58ad16944ccf6a896a74a"
+        }
+      ]
+    },
+    {
+      "repository": "vercel-labs/agent-skills",
+      "url": "https://github.com/vercel-labs/agent-skills",
+      "metadata_source": "https://api.github.com/repos/vercel-labs/agent-skills",
+      "revision_source": "https://api.github.com/repos/vercel-labs/agent-skills/commits/main",
+      "commit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "default_branch": "main",
+      "github_stars": 31961,
+      "forks": 2804,
+      "last_pushed_at": "2026-08-28T13:36:31Z",
+      "archived": false,
+      "github_license_detection": null,
+      "inspected_files": [
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/README.md",
+          "sha256": "7c02f64b08fc6c4eef03c01d64f3e2ed478193ccfcbd14edba379abe23304651"
+        },
+        {
+          "path": "skills/composition-patterns/SKILL.md",
+          "source_url": "https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/skills/composition-patterns/SKILL.md",
+          "sha256": "e38e0eaa609316b10423a9a138ed95e35099accd3f735585295c8a8f165c28a3"
+        },
+        {
+          "path": "skills/react-best-practices/SKILL.md",
+          "source_url": "https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/skills/react-best-practices/SKILL.md",
+          "sha256": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355"
+        },
+        {
+          "path": "skills/web-design-guidelines/SKILL.md",
+          "source_url": "https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/skills/web-design-guidelines/SKILL.md",
+          "sha256": "f4647ca866a3accf763777f83e7682954f0187cd6bea7eea0399796652414e8f"
+        }
+      ]
+    },
+    {
+      "repository": "vercel-labs/agent-browser",
+      "url": "https://github.com/vercel-labs/agent-browser",
+      "metadata_source": "https://api.github.com/repos/vercel-labs/agent-browser",
+      "revision_source": "https://api.github.com/repos/vercel-labs/agent-browser/commits/main",
+      "commit": "526157cfd4ec64f45939f9ba0f10d5936aa7ac33",
+      "default_branch": "main",
+      "github_stars": 43542,
+      "forks": 2941,
+      "last_pushed_at": "2026-10-05T16:13:39Z",
+      "archived": false,
+      "github_license_detection": "Apache-2.0",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/vercel-labs/agent-browser/blob/526157cfd4ec64f45939f9ba0f10d5936aa7ac33/LICENSE",
+          "sha256": "014bb31e83d5c2e76aea1cc6e82217346ab41362f32cb355ad0f5c10aa0aeaff"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/vercel-labs/agent-browser/blob/526157cfd4ec64f45939f9ba0f10d5936aa7ac33/README.md",
+          "sha256": "8254bcc72e867ef76b4c6a352ae5d111a991e55fc8488eaee0da6f668f264be2"
+        },
+        {
+          "path": "skill-data/vercel-sandbox/SKILL.md",
+          "source_url": "https://github.com/vercel-labs/agent-browser/blob/526157cfd4ec64f45939f9ba0f10d5936aa7ac33/skill-data/vercel-sandbox/SKILL.md",
+          "sha256": "0ea19ce5023fa991aef7dbe6146f500b59eb94727a66428600acd0b66c9df1ee"
+        }
+      ]
+    },
+    {
+      "repository": "anthropics/skills",
+      "url": "https://github.com/anthropics/skills",
+      "metadata_source": "https://api.github.com/repos/anthropics/skills",
+      "revision_source": "https://api.github.com/repos/anthropics/skills/commits/main",
+      "commit": "683bc88e56f3e09ba94f7055977f3d3aa499f202",
+      "default_branch": "main",
+      "github_stars": 179763,
+      "forks": 21249,
+      "last_pushed_at": "2026-10-05T13:46:45Z",
+      "archived": false,
+      "github_license_detection": null,
+      "inspected_files": [
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/anthropics/skills/blob/683bc88e56f3e09ba94f7055977f3d3aa499f202/README.md",
+          "sha256": "2fb9c4cc026366ea6e21c60cb23c908a4d27c62071819cc06beffaac102d0694"
+        },
+        {
+          "path": "skills/frontend-design/LICENSE.txt",
+          "source_url": "https://github.com/anthropics/skills/blob/683bc88e56f3e09ba94f7055977f3d3aa499f202/skills/frontend-design/LICENSE.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "skills/frontend-design/SKILL.md",
+          "source_url": "https://github.com/anthropics/skills/blob/683bc88e56f3e09ba94f7055977f3d3aa499f202/skills/frontend-design/SKILL.md",
+          "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+        },
+        {
+          "path": "template/SKILL.md",
+          "source_url": "https://github.com/anthropics/skills/blob/683bc88e56f3e09ba94f7055977f3d3aa499f202/template/SKILL.md",
+          "sha256": "eb685d91de039ed864fbd790cddf31684b017fd4a34ee1a55760d8d7cdbadefa"
+        }
+      ]
+    },
+    {
+      "repository": "leonxlnx/taste-skill",
+      "url": "https://github.com/Leonxlnx/taste-skill",
+      "metadata_source": "https://api.github.com/repos/leonxlnx/taste-skill",
+      "revision_source": "https://api.github.com/repos/leonxlnx/taste-skill/commits/main",
+      "commit": "ce26fc25c0e5e8cab638f883de62d9a86ee5e45b",
+      "default_branch": "main",
+      "github_stars": 92790,
+      "forks": 6296,
+      "last_pushed_at": "2026-09-26T09:01:50Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/leonxlnx/taste-skill/blob/ce26fc25c0e5e8cab638f883de62d9a86ee5e45b/LICENSE",
+          "sha256": "4575a543ab88dad12ccea7d97e563d0bce5b448b06072e65d3264497dad326df"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/leonxlnx/taste-skill/blob/ce26fc25c0e5e8cab638f883de62d9a86ee5e45b/README.md",
+          "sha256": "f73e51ff95ab550ff95d58f04695b1703b7e1ba73d1532322dc4a6f6e97d0907"
+        },
+        {
+          "path": "skills/brutalist-skill/SKILL.md",
+          "source_url": "https://github.com/leonxlnx/taste-skill/blob/ce26fc25c0e5e8cab638f883de62d9a86ee5e45b/skills/brutalist-skill/SKILL.md",
+          "sha256": "fffbaac8597f07679e9d87145533567658aedba3b5eca6f16a7075a333048caa"
+        },
+        {
+          "path": "skills/taste-skill/SKILL.md",
+          "source_url": "https://github.com/leonxlnx/taste-skill/blob/ce26fc25c0e5e8cab638f883de62d9a86ee5e45b/skills/taste-skill/SKILL.md",
+          "sha256": "aa194351b246b8b4799099d4ed7b033d29eab6e6e3d58d8d2172978be7b3ec89"
+        }
+      ]
+    },
+    {
+      "repository": "pbakaus/impeccable",
+      "url": "https://github.com/pbakaus/impeccable",
+      "metadata_source": "https://api.github.com/repos/pbakaus/impeccable",
+      "revision_source": "https://api.github.com/repos/pbakaus/impeccable/commits/main",
+      "commit": "87a6ab0c145adb85cbd428a99fa1377305e0818d",
+      "default_branch": "main",
+      "github_stars": 76948,
+      "forks": 4584,
+      "last_pushed_at": "2026-10-05T18:22:18Z",
+      "archived": false,
+      "github_license_detection": "Apache-2.0",
+      "inspected_files": [
+        {
+          "path": ".agent/skills/impeccable/SKILL.md",
+          "source_url": "https://github.com/pbakaus/impeccable/blob/87a6ab0c145adb85cbd428a99fa1377305e0818d/.agent/skills/impeccable/SKILL.md",
+          "sha256": "04a36abd431f18e133897f7d84ba5736f735d5aed573cb27b218f42e0abfe333"
+        },
+        {
+          "path": ".agents/skills/impeccable/SKILL.md",
+          "source_url": "https://github.com/pbakaus/impeccable/blob/87a6ab0c145adb85cbd428a99fa1377305e0818d/.agents/skills/impeccable/SKILL.md",
+          "sha256": "e1a965737ca8255934bad358d5cfb8788ce013867910efd97d1daac68375e941"
+        },
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/pbakaus/impeccable/blob/87a6ab0c145adb85cbd428a99fa1377305e0818d/LICENSE",
+          "sha256": "02bb8c3b4e70190e3986c0404ad2fd8d639b4f534252d82379cc1b502b6d1812"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/pbakaus/impeccable/blob/87a6ab0c145adb85cbd428a99fa1377305e0818d/README.md",
+          "sha256": "4dfa2740321ca339244080e37f44721ea5d9cd3e15513d13cb1ac57beff7e29f"
+        }
+      ]
+    },
+    {
+      "repository": "emilkowalski/skills",
+      "url": "https://github.com/emilkowalski/skills",
+      "metadata_source": "https://api.github.com/repos/emilkowalski/skills",
+      "revision_source": "https://api.github.com/repos/emilkowalski/skills/commits/main",
+      "commit": "e8a175de22ae1e49370fc144c1f3bb9aeedf988d",
+      "default_branch": "main",
+      "github_stars": 43610,
+      "forks": 2461,
+      "last_pushed_at": "2026-10-02T10:43:36Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/emilkowalski/skills/blob/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/LICENSE",
+          "sha256": "4ff5bdb7887ec1435c9cab0e8d1a7caee704d894d65c2a008ccc68b1cc2f260b"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/emilkowalski/skills/blob/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/README.md",
+          "sha256": "8a121574093d079aa1ba7a40aa24c929a36bbfe4359e2970f9ec61f25aab1857"
+        },
+        {
+          "path": "skills/break-ui/SKILL.md",
+          "source_url": "https://github.com/emilkowalski/skills/blob/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/skills/break-ui/SKILL.md",
+          "sha256": "e7eec1d70ac56a04255e9c0dbe98084ea3d544cc04aaad34f32c95d6fa9dff5e"
+        },
+        {
+          "path": "skills/emil-design-eng/SKILL.md",
+          "source_url": "https://github.com/emilkowalski/skills/blob/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/skills/emil-design-eng/SKILL.md",
+          "sha256": "ffbe68e6007fb42cb8149f089b400a1ca007d59ba23e8948e2be4476f3175939"
+        },
+        {
+          "path": "skills/find-animation-opportunities/SKILL.md",
+          "source_url": "https://github.com/emilkowalski/skills/blob/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/skills/find-animation-opportunities/SKILL.md",
+          "sha256": "d52a377819b84a71930f0c822cfe2849f40301605a2d5c7eccbfa3b257700df2"
+        }
+      ]
+    },
+    {
+      "repository": "supabase/agent-skills",
+      "url": "https://github.com/supabase/agent-skills",
+      "metadata_source": "https://api.github.com/repos/supabase/agent-skills",
+      "revision_source": "https://api.github.com/repos/supabase/agent-skills/commits/main",
+      "commit": "c9be0e931b7930f7d02126d04774d904c381e7d7",
+      "default_branch": "main",
+      "github_stars": 2700,
+      "forks": 216,
+      "last_pushed_at": "2026-10-02T12:34:51Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/supabase/agent-skills/blob/c9be0e931b7930f7d02126d04774d904c381e7d7/LICENSE",
+          "sha256": "b65e575eb4f04a13c187d64e958321298e2ab84d67aa8428819f362056ba292c"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/supabase/agent-skills/blob/c9be0e931b7930f7d02126d04774d904c381e7d7/README.md",
+          "sha256": "8922feb4326c0603ff6e56246bf1bf436aa1dd9f50f22212ad1605749e105830"
+        },
+        {
+          "path": "skills/supabase-postgres-best-practices/SKILL.md",
+          "source_url": "https://github.com/supabase/agent-skills/blob/c9be0e931b7930f7d02126d04774d904c381e7d7/skills/supabase-postgres-best-practices/SKILL.md",
+          "sha256": "ad65e776f45e761bafc609d3f506c77c1032225aa65e0c4c02f241b8071e5855"
+        },
+        {
+          "path": "skills/supabase-postgres-best-practices/references/query-missing-indexes.md",
+          "source_url": "https://github.com/supabase/agent-skills/blob/c9be0e931b7930f7d02126d04774d904c381e7d7/skills/supabase-postgres-best-practices/references/query-missing-indexes.md",
+          "sha256": "91ad8b0ff4365704b4830a7f077c6f140f7140fd5d3ce5cd0b92b160cf9e25f1"
+        },
+        {
+          "path": "skills/supabase/SKILL.md",
+          "source_url": "https://github.com/supabase/agent-skills/blob/c9be0e931b7930f7d02126d04774d904c381e7d7/skills/supabase/SKILL.md",
+          "sha256": "697e0e949f97621c6fc1784169eb3ccbf673747d6bb8299a52962d3d84d93dc6"
+        }
+      ]
+    },
+    {
+      "repository": "obra/superpowers",
+      "url": "https://github.com/obra/superpowers",
+      "metadata_source": "https://api.github.com/repos/obra/superpowers",
+      "revision_source": "https://api.github.com/repos/obra/superpowers/commits/main",
+      "commit": "8ca22dba9a94f28898bbce59f2537ff4d87c747d",
+      "default_branch": "main",
+      "github_stars": 295589,
+      "forks": 26394,
+      "last_pushed_at": "2026-09-27T02:37:47Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/obra/superpowers/blob/8ca22dba9a94f28898bbce59f2537ff4d87c747d/LICENSE",
+          "sha256": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/obra/superpowers/blob/8ca22dba9a94f28898bbce59f2537ff4d87c747d/README.md",
+          "sha256": "04fd40756d26d5f2132ddfbc5c3c35335b02bb456197308975f9d12eaa522382"
+        },
+        {
+          "path": "skills/dispatching-parallel-agents/SKILL.md",
+          "source_url": "https://github.com/obra/superpowers/blob/8ca22dba9a94f28898bbce59f2537ff4d87c747d/skills/dispatching-parallel-agents/SKILL.md",
+          "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c"
+        }
+      ]
+    },
+    {
+      "repository": "trailofbits/skills",
+      "url": "https://github.com/trailofbits/skills",
+      "metadata_source": "https://api.github.com/repos/trailofbits/skills",
+      "revision_source": "https://api.github.com/repos/trailofbits/skills/commits/main",
+      "commit": "82fe8226252622fa807643bdca1710901198553a",
+      "default_branch": "main",
+      "github_stars": 7373,
+      "forks": 631,
+      "last_pushed_at": "2026-10-02T10:05:35Z",
+      "archived": false,
+      "github_license_detection": "CC-BY-SA-4.0",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/trailofbits/skills/blob/82fe8226252622fa807643bdca1710901198553a/LICENSE",
+          "sha256": "7abe19ec9bb73b36141b999b861d24ad855e808bafe0f81e84cce28556f6c297"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/trailofbits/skills/blob/82fe8226252622fa807643bdca1710901198553a/README.md",
+          "sha256": "5238447ee6608f638ae01fc114b05cde2d2a57f56832fe9d699b5951621c9d1e"
+        },
+        {
+          "path": "plugins/firebase-apk-scanner/skills/firebase-apk-scanner/SKILL.md",
+          "source_url": "https://github.com/trailofbits/skills/blob/82fe8226252622fa807643bdca1710901198553a/plugins/firebase-apk-scanner/skills/firebase-apk-scanner/SKILL.md",
+          "sha256": "fd7376ea038ea5a44a819e6fb75aa8e6e2ad38a2ec0d237cc6f71aa8ebbf95a4"
+        },
+        {
+          "path": "plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+          "source_url": "https://github.com/trailofbits/skills/blob/82fe8226252622fa807643bdca1710901198553a/plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+          "sha256": "9448cacb65c6237a7c22dc59602667177ecae405524079ae9ff92240590b995a"
+        }
+      ]
+    },
+    {
+      "repository": "multica-ai/andrej-karpathy-skills",
+      "url": "https://github.com/multica-ai/andrej-karpathy-skills",
+      "metadata_source": "https://api.github.com/repos/multica-ai/andrej-karpathy-skills",
+      "revision_source": "https://api.github.com/repos/multica-ai/andrej-karpathy-skills/commits/main",
+      "commit": "2c606141936f1eeef17fa3043a72095b4765b9c2",
+      "default_branch": "main",
+      "github_stars": 217031,
+      "forks": 21853,
+      "last_pushed_at": "2026-04-20T10:05:04Z",
+      "archived": false,
+      "github_license_detection": null,
+      "inspected_files": [
+        {
+          "path": "CLAUDE.md",
+          "source_url": "https://github.com/multica-ai/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/CLAUDE.md",
+          "sha256": "694a2d721e41c385f3db492838c23299826df5ba9809e3b0721aac70021e196a"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/multica-ai/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/README.md",
+          "sha256": "daf314efb31894b86d68b67786c820bd8470bb2126e578ba9cd0e3e2667883f8"
+        },
+        {
+          "path": "skills/karpathy-guidelines/SKILL.md",
+          "source_url": "https://github.com/multica-ai/andrej-karpathy-skills/blob/2c606141936f1eeef17fa3043a72095b4765b9c2/skills/karpathy-guidelines/SKILL.md",
+          "sha256": "6e22cc54cb02a5e98ae42d06d9d7292db0c1b43894831b32879beb0166b2aea7"
+        }
+      ]
+    },
+    {
+      "repository": "gsd-build/get-shit-done",
+      "url": "https://github.com/gsd-build/get-shit-done",
+      "metadata_source": "https://api.github.com/repos/gsd-build/get-shit-done",
+      "revision_source": "https://api.github.com/repos/gsd-build/get-shit-done/commits/main",
+      "commit": "bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815",
+      "default_branch": "main",
+      "github_stars": 64374,
+      "forks": 5436,
+      "last_pushed_at": "2026-05-31T17:46:54Z",
+      "archived": true,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/gsd-build/get-shit-done/blob/bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815/LICENSE",
+          "sha256": "af0d31f2550b534c14251e14020f3378cf17bd21af7660e7d7b1a2ead4fcdfb4"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/gsd-build/get-shit-done/blob/bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815/README.md",
+          "sha256": "6530ef6aad23383980a7c405d32c40e73c798ee4263a883f804aef31548569b6"
+        }
+      ]
+    },
+    {
+      "repository": "bmad-code-org/BMAD-METHOD",
+      "url": "https://github.com/bmad-code-org/BMAD-METHOD",
+      "metadata_source": "https://api.github.com/repos/bmad-code-org/BMAD-METHOD",
+      "revision_source": "https://api.github.com/repos/bmad-code-org/BMAD-METHOD/commits/main",
+      "commit": "8f2c13dd0e0073cad84168a679e5c553b2fb30b6",
+      "default_branch": "main",
+      "github_stars": 53807,
+      "forks": 6057,
+      "last_pushed_at": "2026-10-05T17:02:38Z",
+      "archived": false,
+      "github_license_detection": "NOASSERTION",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/8f2c13dd0e0073cad84168a679e5c553b2fb30b6/LICENSE",
+          "sha256": "0aa79baf6328b4a1e694ce10a12ffc36d7666554da128dff0e8fcda0fc536a66"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/8f2c13dd0e0073cad84168a679e5c553b2fb30b6/README.md",
+          "sha256": "7e939cbd4aa9b6dc4d77419e1ea2981e6e76209d4918402357a24c8a91e0fd7c"
+        },
+        {
+          "path": "skills/bmad-prfaq/SKILL.md",
+          "source_url": "https://github.com/bmad-code-org/BMAD-METHOD/blob/8f2c13dd0e0073cad84168a679e5c553b2fb30b6/skills/bmad-prfaq/SKILL.md",
+          "sha256": "69cb7911c8eb00b8d5ade58a9852057b79cbd29abdf7f13f4844e476e3b301b0"
+        }
+      ]
+    },
+    {
+      "repository": "addyosmani/agent-skills",
+      "url": "https://github.com/addyosmani/agent-skills",
+      "metadata_source": "https://api.github.com/repos/addyosmani/agent-skills",
+      "revision_source": "https://api.github.com/repos/addyosmani/agent-skills/commits/main",
+      "commit": "1401c8b8030e023baeebb31781a6653fe8e93026",
+      "default_branch": "main",
+      "github_stars": 101480,
+      "forks": 10638,
+      "last_pushed_at": "2026-10-03T18:21:11Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/addyosmani/agent-skills/blob/1401c8b8030e023baeebb31781a6653fe8e93026/LICENSE",
+          "sha256": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/addyosmani/agent-skills/blob/1401c8b8030e023baeebb31781a6653fe8e93026/README.md",
+          "sha256": "4bae14d9c56e00b5ac22a46df829beb33bf7c51163cac12c0fa433bd26efbd6e"
+        },
+        {
+          "path": "skills/code-simplification/SKILL.md",
+          "source_url": "https://github.com/addyosmani/agent-skills/blob/1401c8b8030e023baeebb31781a6653fe8e93026/skills/code-simplification/SKILL.md",
+          "sha256": "f0c5ed754057eb0c1e027e2587f59de816651feb5e837242296c43ea21cf621d"
+        },
+        {
+          "path": "skills/performance-optimization/SKILL.md",
+          "source_url": "https://github.com/addyosmani/agent-skills/blob/1401c8b8030e023baeebb31781a6653fe8e93026/skills/performance-optimization/SKILL.md",
+          "sha256": "665a83a7218d6aebd02ca329a7b2422cf28f7c55cb56f870c05e12047770245c"
+        }
+      ]
+    },
+    {
+      "repository": "open-gsd/gsd-core",
+      "url": "https://github.com/open-gsd/gsd-core",
+      "metadata_source": "https://api.github.com/repos/open-gsd/gsd-core",
+      "revision_source": "https://api.github.com/repos/open-gsd/gsd-core/commits/next",
+      "commit": "13d37238ba08377929e4850fd6ae4b8db49a22ca",
+      "default_branch": "next",
+      "github_stars": 10199,
+      "forks": 732,
+      "last_pushed_at": "2026-10-05T08:26:40Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/open-gsd/gsd-core/blob/13d37238ba08377929e4850fd6ae4b8db49a22ca/LICENSE",
+          "sha256": "3a160aec61eeb28e75e8017346ee190db07986a09c4bd72555cc706f1d99e27e"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/open-gsd/gsd-core/blob/13d37238ba08377929e4850fd6ae4b8db49a22ca/README.md",
+          "sha256": "66fe062ee3705af835b09ffa8da112fd14bc8a6025f0d4fb22b4291d353268a9"
+        }
+      ]
+    },
+    {
+      "repository": "heygen-com/hyperframes",
+      "url": "https://github.com/heygen-com/hyperframes",
+      "metadata_source": "https://api.github.com/repos/heygen-com/hyperframes",
+      "revision_source": "https://api.github.com/repos/heygen-com/hyperframes/commits/main",
+      "commit": "6c353d89c85c0f8a1a3548196e203ee1bd7eec10",
+      "default_branch": "main",
+      "github_stars": 57200,
+      "forks": 5123,
+      "last_pushed_at": "2026-10-05T18:27:01Z",
+      "archived": false,
+      "github_license_detection": "Apache-2.0",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/heygen-com/hyperframes/blob/6c353d89c85c0f8a1a3548196e203ee1bd7eec10/LICENSE",
+          "sha256": "4259155fb06f127687ee7b0a8a3682d45132db0f2da26cbc0b7a2d1e796436b8"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/heygen-com/hyperframes/blob/6c353d89c85c0f8a1a3548196e203ee1bd7eec10/README.md",
+          "sha256": "9034fa85fc17a64b5b71a194b0a1a5b8894f53c98b032b1e26e63fd9df8fda24"
+        },
+        {
+          "path": "skills/hyperframes/SKILL.md",
+          "source_url": "https://github.com/heygen-com/hyperframes/blob/6c353d89c85c0f8a1a3548196e203ee1bd7eec10/skills/hyperframes/SKILL.md",
+          "sha256": "fa40d77b02b59685f6a4c68cb0a29d4bfcc057733939e9fb8213e23610c5f608"
+        }
+      ]
+    },
+    {
+      "repository": "github/spec-kit",
+      "url": "https://github.com/github/spec-kit",
+      "metadata_source": "https://api.github.com/repos/github/spec-kit",
+      "revision_source": "https://api.github.com/repos/github/spec-kit/commits/main",
+      "commit": "2dda047809dd17fa56200408ce0228a2cfe08be7",
+      "default_branch": "main",
+      "github_stars": 140229,
+      "forks": 12553,
+      "last_pushed_at": "2026-10-05T18:15:03Z",
+      "archived": false,
+      "github_license_detection": "MIT",
+      "inspected_files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/github/spec-kit/blob/2dda047809dd17fa56200408ce0228a2cfe08be7/LICENSE",
+          "sha256": "2510b446bc1f0cf9702453075d20cd88631e20e5642658edb7325d9c1eb534f7"
+        },
+        {
+          "path": "README.md",
+          "source_url": "https://github.com/github/spec-kit/blob/2dda047809dd17fa56200408ce0228a2cfe08be7/README.md",
+          "sha256": "49d99febbcdea0bac928ed3e7bdc3b70a1f90e8a13d5bfd19760b6f4fc561f4d"
+        }
+      ]
+    }
+  ],
+  "unverified_watch_items": [
+    {
+      "name": "ui-taste",
+      "listing_url": "https://www.skills.sh/site/uizze.sh/ui-taste",
+      "upstream_url": "https://uizze.sh/",
+      "all_time_installs_display": "404.0K",
+      "installs_24h_display": "22.4K",
+      "limitation": "Listing inspected; upstream inaccessible. Revision, full package, and license unverified."
+    }
+  ]
+}

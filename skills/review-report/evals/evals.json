@@ -1,0 +1,59 @@
+{
+  "skill_name": "review-report",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review this PR for correctness and security before I merge. I will send the diff next; for now, load the appropriate review skill.",
+      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is deep-review, rather than review-report.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Check this branch before I merge it into main. I will provide the repository next; first load the appropriate review skill.",
+      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is deep-review, rather than review-report.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review my changes against main for bugs and missing tests. I will provide the repository next; first load the appropriate review skill.",
+      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is deep-review, rather than review-report.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this branch and write the findings to CODE_REVIEW.md. I will provide the repository next; first load the appropriate review skill.",
+      "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is review-report, rather than deep-review.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this PR in plain language for a teammate who has never seen this codebase. I will send the diff next; for now, load the appropriate review skill.",
+      "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is review-report, rather than deep-review.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Review these changes and give me comments I can paste directly into the PR, with exact files and lines. I will send the diff next; for now, load the appropriate review skill.",
+      "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "assertions": [
+        "The first review skill loaded is review-report, rather than deep-review.",
+        "The response does not invent review findings before the repository or diff is supplied."
+      ]
+    }
+  ]
+}

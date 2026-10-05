@@ -218,11 +218,85 @@ warning-or-higher findings to avoid subjective style noise.
 
 ## Adding or Updating a Skill
 
+The [agent skills research catalog](research/agent-skills-2026-10-05.md) collects
+promising upstream skills and instruction systems, with sources, popularity
+snapshots, integration notes, and evaluation ideas. Ten selected skills are now
+packaged and installed with normal automatic discovery, as requested; their
+live routing and task-effect evaluations remain unmeasured. See the
+[imported skill inventory](skills/README.md#imported-skills) for their scope,
+invocation, and pinned provenance. Other candidates remain in the catalog.
+
 See the [skills documentation](skills/README.md) for the current inventory and
 skill format. Each skill must live at `skills/<skill-name>/SKILL.md`, and its
 frontmatter `name` must exactly match the directory name. Rerun `./install.sh`
 after adding a skill so both agents receive its per-skill link. Edits to an
 already linked skill are available immediately.
+
+Use `deep-review` for general code reviews. Use `review-report` when findings
+should be written to a file, explained for a reader without codebase context,
+or provided as paste-ready review comments. Both skills include routing
+fixtures in `evals/evals.json`; the checks validate their schema, but do not
+execute agent sessions or measure routing pass rates. Run the opt-in evaluations
+below to measure their behavior.
+
+## Behavioral Skill Evaluations
+
+`make eval` runs every case in `skills/*/evals/evals.json` using Claude Code and
+grades every assertion in a separate Claude session. This uses paid Anthropic
+API calls and is deliberately excluded from `make check` and `make ci`; those
+commands test the runner against a fake runtime with no network or credentials.
+The runner uses Python 3 and the repository's existing PyYAML dependency.
+
+Set `ANTHROPIC_API_KEY` in your environment without putting it in a command or
+file in this repository. For example, in Bash:
+
+```bash
+read -rsp 'Anthropic API key: ' ANTHROPIC_API_KEY
+printf '\n'
+export ANTHROPIC_API_KEY
+make eval
+unset ANTHROPIC_API_KEY
+```
+
+To limit the fixture set or change the defaults:
+
+```bash
+make eval EVAL_ARGS='--skill deep-review --repeats 5 --threshold 0.8'
+```
+
+All repository skills remain installed during a filtered run, so routing can
+select a different skill. Each trial starts with a temporary home, config root,
+and working directory. It loads no live user configuration or credentials;
+only `ANTHROPIC_API_KEY` is forwarded. Cases get the Skill tool only; this first
+runner supports the repository's prompt-only fixture sets. File fixtures
+produce an explicit error. The judge has its own empty config and
+no tools; it treats prompts, expected outputs, assertions, and transcripts as
+untrusted data.
+
+The default is five trials per case and an 80% minimum pass rate. A trial passes
+only when a repository skill successfully loads and every assertion passes.
+Skill loading is observed through matching Skill calls and successful tool
+results, rather than the agent's statements. Judge evidence must quote the
+observed response or load record. Failed assertions or missing skill loads count
+as failed trials. Runtime, protocol, or judge errors invalidate the run even if
+the remaining trials reach the threshold. Missing runtime or environment key
+reports `SKIP`; it never reports `PASS`.
+
+Results go to the gitignored `eval-results/<run-id>/results.json` and `summary.md`,
+including per-case pass rates, each assertion's grade and evidence, redacted
+runtime transcripts, actual model names, runtime version, and source-file hashes.
+Exit codes are 0 for passing cases, 1 for a case below threshold, and 2 for
+`SKIP`, operational errors, or invalid arguments. Result directories are private
+and an existing result directory is never overwritten.
+
+CLI flags were checked against Claude Code 2.1.226's help and installed protocol.
+The runner also checks required flags before a credentialed run. It uses normal
+headless mode to preserve automatic skill discovery, restricts setting sources
+to its isolated user config, disables hooks, and supplies an empty MCP config.
+Sessions have a 180-second timeout and a $1 API budget cap each. Use `--model`,
+`--judge-model`, `--timeout`, `--runtime`, or `--output-dir` through `EVAL_ARGS`
+when needed; `python3 scripts/run-evals.py --help` lists all options. Codex is not
+supported as an evaluation runtime yet.
 
 ## Updating the Authored Command Policy
 

@@ -1,0 +1,45 @@
+{
+  "skill_name": "ponytail",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use Ponytail to implement a date field using the simplest suitable native feature. First load the skill; I will provide the form next.",
+      "expected_output": "Load ponytail before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is ponytail.",
+        "ponytail successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Implement this new date field with a native input if it meets the requirements; avoid a new picker dependency. First load the appropriate skill; I will provide the form next.",
+      "expected_output": "Load ponytail before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is ponytail.",
+        "ponytail successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Simplify this working function for readability without changing its behavior. First load the appropriate skill; I will provide the function next.",
+      "expected_output": "Load code-simplification before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is code-simplification.",
+        "ponytail is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "ponytail is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

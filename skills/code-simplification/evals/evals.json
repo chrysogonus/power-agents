@@ -1,0 +1,45 @@
+{
+  "skill_name": "code-simplification",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use code-simplification on this working function, preserving all behavior. First load the skill; I will provide the function next.",
+      "expected_output": "Load code-simplification before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is code-simplification.",
+        "code-simplification successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Refactor working code for clarity while preserving exceptions, ordering, and side effects. First load the appropriate skill; I will provide the code next.",
+      "expected_output": "Load code-simplification before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is code-simplification.",
+        "code-simplification successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Implement a new date field using the simplest suitable native input and no new dependency. First load the appropriate skill; I will provide the form next.",
+      "expected_output": "Load ponytail before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is ponytail.",
+        "code-simplification is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "code-simplification is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

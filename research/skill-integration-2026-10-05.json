@@ -1,0 +1,108 @@
+{
+  "integrated_on": "2026-10-05",
+  "invocation": "normal automatic discovery, explicitly requested by the user",
+  "evaluation_status": "unmeasured; live evaluations skipped by the user",
+  "skills": [
+    {
+      "name": "ponytail",
+      "repository": "DietrichGebert/ponytail",
+      "revision": "cd765194f5e625d2f96e80e63df1c1af0b03705b",
+      "upstream_path": "skills/ponytail",
+      "local_adaptations": "Narrowed automatic routing; scoped persistence to the current task; replaced the output cap and one-test/no-framework rules with project-compatible reporting and verification.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "writing-for-agents",
+      "repository": "mattpocock/skills",
+      "revision": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
+      "upstream_path": "skills/productivity/writing-for-agents",
+      "local_adaptations": "Narrowed document-authoring routing against prompt-refiner and coding-agent-brief; updated SKILL-MECHANICS.md for Codex invocation policy and normal discovery by default.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "grilling",
+      "repository": "mattpocock/skills",
+      "revision": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
+      "upstream_path": "skills/productivity/grilling",
+      "local_adaptations": "Limited routing to requested interviews; allowed direct factual lookups when subagents are unavailable or unauthorized; made implementation a separate requested step.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "repository": "vercel-labs/agent-skills",
+      "revision": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "upstream_path": "skills/react-best-practices",
+      "local_adaptations": "Separated performance from component API work and general review; repaired three compiled AGENTS.md links to rules/async-defer-await.md, rules/async-cheap-condition-before-await.md, and rules/server-hoist-static-io.md.",
+      "whitespace_normalized": [
+        "AGENTS.md",
+        "rules/_sections.md",
+        "rules/async-defer-await.md",
+        "rules/async-suspense-boundaries.md",
+        "rules/client-event-listeners.md",
+        "rules/client-passive-event-listeners.md",
+        "rules/js-batch-dom-css.md",
+        "rules/js-cache-function-results.md",
+        "rules/js-early-exit.md",
+        "rules/js-min-max-loop.md",
+        "rules/rendering-animate-svg-wrapper.md",
+        "rules/rendering-hydration-no-flicker.md",
+        "rules/rendering-usetransition-loading.md",
+        "rules/rerender-functional-setstate.md",
+        "rules/rerender-lazy-state-init.md",
+        "rules/server-after-nonblocking.md",
+        "rules/server-auth-actions.md"
+      ]
+    },
+    {
+      "name": "vercel-composition-patterns",
+      "repository": "vercel-labs/agent-skills",
+      "revision": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "upstream_path": "skills/composition-patterns",
+      "local_adaptations": "Separated component API design from React performance and general review; preserved the React 19-only boundary.",
+      "whitespace_normalized": [
+        "AGENTS.md",
+        "rules/_sections.md"
+      ]
+    },
+    {
+      "name": "supabase-postgres-best-practices",
+      "repository": "supabase/agent-skills",
+      "revision": "c9be0e931b7930f7d02126d04774d904c381e7d7",
+      "upstream_path": "skills/supabase-postgres-best-practices",
+      "local_adaptations": "Narrowed routing to Postgres and separated general security guidance and reviews.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "break-ui",
+      "repository": "emilkowalski/skills",
+      "revision": "e8a175de22ae1e49370fc144c1f3bb9aeedf988d",
+      "upstream_path": "skills/break-ui",
+      "local_adaptations": "Separated worst-case content testing from visual design and general review; removed the canned initial response and references to unimported prototype/emil-design-eng/review-animations skills.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "code-simplification",
+      "repository": "addyosmani/agent-skills",
+      "revision": "1401c8b8030e023baeebb31781a6653fe8e93026",
+      "upstream_path": "skills/code-simplification",
+      "local_adaptations": "Separated working-code refactoring from new functionality and reviews; removed mandatory PR splitting and automatic commits.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "performance-optimization",
+      "repository": "addyosmani/agent-skills",
+      "revision": "1401c8b8030e023baeebb31781a6653fe8e93026",
+      "upstream_path": "skills/performance-optimization",
+      "local_adaptations": "Routed React/Next.js and Postgres-specific work to their owners; removed automatic commits; copied the repo-level performance checklist into local references/ and repaired its link. Repaired both optimization-patterns.md pointers to the relocated performance checklist.",
+      "whitespace_normalized": []
+    },
+    {
+      "name": "frontend-design",
+      "repository": "anthropics/skills",
+      "revision": "683bc88e56f3e09ba94f7055977f3d3aa499f202",
+      "upstream_path": "skills/frontend-design",
+      "local_adaptations": "Separated visual design from UI edge-case testing, React performance, and general review.",
+      "whitespace_normalized": []
+    }
+  ]
+}

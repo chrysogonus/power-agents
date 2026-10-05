@@ -1,0 +1,45 @@
+{
+  "skill_name": "break-ui",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use break-ui to stress-test our member list with realistic worst-case content. First load the skill; I will provide the component next.",
+      "expected_output": "Load break-ui before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is break-ui.",
+        "break-ui successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Try to break this member-list UI with long emails, missing avatars, zero items, and non-Latin names. First load the appropriate skill; I will provide the component next.",
+      "expected_output": "Load break-ui before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is break-ui.",
+        "break-ui successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Build a new landing page with a distinctive visual identity. First load the appropriate design skill; I will provide the product brief next.",
+      "expected_output": "Load frontend-design before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is frontend-design.",
+        "break-ui is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "break-ui is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}

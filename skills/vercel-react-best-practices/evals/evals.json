@@ -1,0 +1,45 @@
+{
+  "skill_name": "vercel-react-best-practices",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use vercel-react-best-practices to diagnose a Next.js request waterfall. First load the skill; I will provide the trace and code next.",
+      "expected_output": "Load vercel-react-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-react-best-practices.",
+        "vercel-react-best-practices successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Our React page has a measured rendering slowdown and an oversized bundle. First load the appropriate performance skill; I will provide the profile and code next.",
+      "expected_output": "Load vercel-react-best-practices before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-react-best-practices.",
+        "vercel-react-best-practices successfully loads.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Refactor this React component API to remove boolean-prop proliferation; there is no performance issue. First load the appropriate skill; I will provide the component next.",
+      "expected_output": "Load vercel-composition-patterns before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is vercel-composition-patterns.",
+        "vercel-react-best-practices is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Review this PR for correctness and security before merge. First load the appropriate skill; I will provide the diff next.",
+      "expected_output": "Load deep-review before task work and wait for the promised artifacts without inventing results.",
+      "assertions": [
+        "The first task skill loaded is deep-review.",
+        "vercel-react-best-practices is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ]
+    }
+  ]
+}
