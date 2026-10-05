@@ -18,19 +18,22 @@ Do not assume or hide confusion. Surface assumptions and tradeoffs.
 
 Before implementing:
 
-- State assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them instead of choosing silently.
+- Resolve uncertainty from repository instructions, existing code, and available
+  tools first.
+- Ask when remaining ambiguity materially affects correctness, scope, or safety.
+  Otherwise, follow existing conventions and state material assumptions.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop, identify what is confusing, and ask.
 
 ## 2. Simplicity First
 
 Write the minimum code that solves the problem. Add nothing speculative.
 
 - Do not add features beyond what was requested.
-- Do not create abstractions for single-use code.
+- Introduce abstractions only when they make the current implementation clearer
+  or remove meaningful duplication.
 - Do not add flexibility or configurability that was not requested.
-- Do not add error handling for impossible scenarios.
+- Avoid defensive code for scenarios excluded by established contracts or
+  invariants.
 - If 200 lines could reasonably be 50, simplify the implementation.
 
 Ask whether a senior engineer would consider the solution overcomplicated. If
@@ -79,8 +82,13 @@ require clarification.
 ## Verification
 
 - Run relevant tests after changing behavior.
+- When an automated regression test cannot reasonably cover the change, explain
+  the limitation and perform the most relevant available verification.
 - Run available linting and formatting checks when appropriate.
 - Never claim a command, test, or check passed unless it was actually executed.
+- Report checks performed and their results. If verification is blocked, explain
+  why and what remains unverified.
+- Identify failures as pre-existing only when supported by evidence.
 
 ## Git
 
