@@ -106,12 +106,10 @@ render_status_line() {
 }
 
 test_project_instruction_entrypoints() {
-  [[ -L "$ROOT/CLAUDE.md" ]] ||
-    fail "CLAUDE.md must be a symlink to the authoritative project instructions"
-  [[ "$(readlink "$ROOT/CLAUDE.md")" == "AGENTS.md" ]] ||
-    fail "CLAUDE.md must link directly to AGENTS.md"
-  [[ "$ROOT/CLAUDE.md" -ef "$ROOT/AGENTS.md" ]] ||
-    fail "Claude and Codex project instruction entrypoints differ"
+  [[ -f "$ROOT/AGENTS.md" && -s "$ROOT/AGENTS.md" ]] ||
+    fail "AGENTS.md must contain the authoritative project instructions"
+  [[ ! -e "$ROOT/CLAUDE.md" && ! -L "$ROOT/CLAUDE.md" ]] ||
+    fail "Project instructions must use AGENTS.md without a CLAUDE.md fallback"
 }
 
 test_installer_rejects_invalid_skill_metadata() {
@@ -1109,7 +1107,7 @@ test_ci_workflow() {
 }
 
 test_project_instruction_entrypoints
-pass "Claude and Codex share authoritative project instructions"
+pass "AGENTS.md is the sole project instruction entrypoint"
 python3 "$ROOT/tests/test_validate_skills.py"
 pass "shared skill metadata and evaluation validator"
 python3 "$ROOT/tests/test_run_evals.py"

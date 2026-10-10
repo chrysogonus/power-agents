@@ -95,8 +95,8 @@ installer to run again. Restart sessions when needed to reload instructions.
 | Codex status-line fields and colors | [`settings/codex/tui.toml`](settings/codex/tui.toml) |
 | Claude Code status-line display | [`settings/claude/statusline-command.sh`](settings/claude/statusline-command.sh) |
 
-The root `AGENTS.md` and its `CLAUDE.md` symlink contain instructions for working
-on this repository. The instructions installed globally come from
+The root `AGENTS.md` contains instructions for working on this repository.
+The instructions installed globally, including skill-selection defaults, come from
 `instructions/general-global.md`.
 
 ## Commands
@@ -164,7 +164,6 @@ cannot run after `SIGKILL`, a process crash, or machine failure.
 ```text
 ~/power-agents/
 ├── AGENTS.md
-├── CLAUDE.md -> AGENTS.md
 ├── instructions/
 │   └── general-global.md
 ├── policies/
@@ -189,8 +188,22 @@ cannot run after `SIGKILL`, a process crash, or machine failure.
 ```
 
 This repository holds the canonical source for shared instructions and skills.
-The root `CLAUDE.md` symlink exposes the same repository-specific instructions
-as `AGENTS.md`, so Codex and Claude Code use one authoritative project rule set.
+Codex and Claude Code use the root `AGENTS.md` for repository-specific
+instructions. Direct loading in Claude Code requires version 2.1.277 or newer
+with its built-in `AGENTS.md` support enabled. Older versions no longer have a
+root `CLAUDE.md` compatibility link in this repository.
+
+By default, a project or ancestor `CLAUDE.md`, `.claude/CLAUDE.md`, or
+`CLAUDE.local.md` takes precedence over `AGENTS.md` in Claude Code. If you keep
+one of those files, set **Project instructions** in `/config` to
+`claude-md-and-agents-md` to load both. Check `/context` in a fresh session to
+confirm the project instructions loaded. See
+[Claude Code's AGENTS.md documentation](https://code.claude.com/docs/en/memory#agentsmd).
+
+The installer still links the shared global instructions to
+`<Claude root>/CLAUDE.md`; Claude's user-wide instruction entrypoint remains
+separate from project `AGENTS.md` discovery.
+
 Most agent-specific configuration paths use symlinks to this repository. Codex
 TUI settings are merged into its existing configuration so machine-local state
 is preserved.

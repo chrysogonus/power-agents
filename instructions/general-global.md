@@ -12,6 +12,45 @@ Tradeoff: They bias toward caution over speed. Use judgment for trivial tasks.
 - Follow repository-specific instructions when they conflict with these global instructions.
 - Read relevant repository instructions and follow existing conventions before making changes.
 
+## Skill Selection
+
+Use the smallest set of skills that covers the current task or phase.
+User instructions and project conventions take precedence over these defaults.
+Honor explicitly requested skills within their stated scope.
+
+### Primary skills
+
+- Visual design and redesign: use frontend-design as the primary design
+  skill. Use alternative aesthetic skills when explicitly requested.
+- Refactoring working code: use code-simplification. Preserve behavior
+  unless a behavior change is explicitly requested.
+- New functionality and bug fixes: use ponytail at full intensity,
+  unless the user requests another level.
+- UI content stress-testing: use break-ui.
+- General code review: use deep-review. Use review-report for findings
+  requested in a file, explanations for readers without codebase context,
+  or paste-ready review comments.
+
+### Supporting skills
+
+Load a supporting skill when it addresses a distinct concern:
+
+- React component APIs and composition: vercel-composition-patterns.
+- React/Next.js implementation and performance:
+  vercel-react-best-practices.
+- Postgres queries, schemas, migrations, and RLS:
+  supabase-postgres-best-practices.
+- Measured performance bottlenecks outside those areas:
+  performance-optimization.
+- Explicit security guidance or reviews: security-best-practices.
+
+For other tasks, select skills using their documented descriptions.
+Keep one primary owner for each concern. Additional skills should provide
+complementary guidance rather than competing workflows.
+
+For work combining redesign and refactoring, distinguish intended UX
+changes from behavior-preserving cleanup and verify both.
+
 ## 1. Think Before Coding
 
 Do not assume or hide confusion. Surface assumptions and tradeoffs.
