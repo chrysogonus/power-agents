@@ -2,8 +2,7 @@
 name: grilling
 description: Use when the user wants to stress-test an idea, plan, architecture, or decision
   through a critical interview, or says grill me. Routine implementation should proceed without
-  this interview. For turning rough coding notes into a handoff brief use coding-agent-brief;
-  for editing an existing prompt use prompt-refiner.
+  this interview. For editing an existing prompt use prompt-refiner.
 metadata:
   evaluation-status: unmeasured
 ---

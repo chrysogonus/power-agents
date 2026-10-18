@@ -13,9 +13,6 @@
       "routing": {
         "required": [
           "prompt-refiner"
-        ],
-        "forbidden": [
-          "coding-agent-brief"
         ]
       }
     },
@@ -31,24 +28,18 @@
       "routing": {
         "required": [
           "prompt-refiner"
-        ],
-        "forbidden": [
-          "coding-agent-brief"
         ]
       }
     },
     {
       "id": 3,
       "prompt": "Here are rough notes for a future code change: migrate our Flask auth routes to FastAPI, preserve cookie names, and give me something to paste into Claude Code. I have not drafted a prompt yet.",
-      "expected_output": "The request is identified as a raw coding-task handoff and routed to coding-agent-brief instead of being handled as general prompt refinement.",
+      "expected_output": "The request is identified as a raw coding-task handoff rather than refinement of an existing prompt, and prompt-refiner is not loaded.",
       "assertions": [
         "The response does not blur raw coding-task notes with an existing prompt draft.",
-        "The response directs the request to coding-agent-brief."
+        "prompt-refiner is not loaded."
       ],
       "routing": {
-        "required": [
-          "coding-agent-brief"
-        ],
         "forbidden": [
           "prompt-refiner"
         ]

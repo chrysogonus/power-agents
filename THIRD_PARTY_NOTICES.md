@@ -113,7 +113,7 @@ no manual-only flags are added. Local routing fixtures are new and have not
 been run against live models. Specific adaptations:
 
 - `ponytail`: Narrowed automatic routing; scoped persistence to the current task; replaced the output cap and one-test/no-framework rules with project-compatible reporting and verification.
-- `writing-for-agents`: Narrowed document-authoring routing against prompt-refiner and coding-agent-brief; updated SKILL-MECHANICS.md for Codex invocation policy and normal discovery by default.
+- `writing-for-agents`: Narrowed document-authoring routing against prompt-refiner; updated SKILL-MECHANICS.md for Codex invocation policy and normal discovery by default.
 - `grilling`: Limited routing to requested interviews; allowed direct factual lookups when subagents are unavailable or unauthorized; made implementation a separate requested step.
 - `vercel-react-best-practices`: Separated performance from component API work and general review; repaired three compiled AGENTS.md links to rules/async-defer-await.md, rules/async-cheap-condition-before-await.md, and rules/server-hoist-static-io.md.
 - `vercel-composition-patterns`: Separated component API design from React performance and general review; preserved the React 19-only boundary.

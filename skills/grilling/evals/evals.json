@@ -34,16 +34,12 @@
     {
       "id": 3,
       "prompt": "Turn my rough coding-task notes into a brief for a coding agent; do not implement it. I will provide the notes next.",
-      "expected_output": "Load coding-agent-brief before task work and wait for the promised artifacts without inventing results.",
+      "expected_output": "Do not start a grilling interview; wait for the promised notes without inventing results.",
       "assertions": [
-        "The first task skill loaded is coding-agent-brief.",
         "grilling is not loaded.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
       ],
       "routing": {
-        "required": [
-          "coding-agent-brief"
-        ],
         "forbidden": [
           "grilling"
         ]

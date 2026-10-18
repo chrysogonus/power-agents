@@ -2,8 +2,7 @@
 name: writing-for-agents
 description: Use when creating or restructuring AGENTS.md, CLAUDE.md, SKILL.md, or agent-facing
   references for clear triggers, progressive disclosure, and completion criteria. For an existing
-  standalone prompt draft use prompt-refiner; for rough coding-task notes intended for handoff
-  use coding-agent-brief.
+  standalone prompt draft use prompt-refiner.
 metadata:
   evaluation-status: unmeasured
 ---

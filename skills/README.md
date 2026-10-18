@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **15 skills**: five core skills and ten
+kind of task. This repository contains **14 skills**: four core skills and ten
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -28,7 +28,6 @@ review, use `deep-review`. To write findings to `CODE_REVIEW.md`, use
 | Skill | Purpose |
 | --- | --- |
 | [`deep-review`](deep-review/SKILL.md) | Reviews code, branches, diffs, commits, and pull/merge requests for correctness, security, privacy, reliability, and maintainability. |
-| [`coding-agent-brief`](coding-agent-brief/SKILL.md) | Turns rough task descriptions and context into ready-to-use coding-agent briefs. |
 | [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with plain-language findings, concrete examples, and paste-ready review comments. |
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
 | [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
@@ -78,10 +77,9 @@ handles every other code review request. `review-report` may invoke
 `deep-review` for its analysis after routing. Both skills include evaluation
 cases on both sides of this boundary.
 
-`coding-agent-brief` handles raw coding-task notes intended for handoff to a
-coding agent. `prompt-refiner` handles an existing prompt draft or a new
-non-coding prompt. Their evaluation cases include both sides of this routing
-boundary.
+`prompt-refiner` handles an existing prompt draft or a new non-coding prompt;
+raw coding-task notes intended for a coding-agent handoff are outside its
+scope, and its evaluation cases cover that boundary.
 
 ## Skill Format
 
