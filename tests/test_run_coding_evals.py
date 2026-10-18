@@ -32,7 +32,7 @@ class CodingRunnerTests(unittest.TestCase):
         runtime.chmod(0o700)
         output = self.root / f'results-{self.invocations}'
         env = dict(os.environ)
-        for key in ('OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_API_KEY'):
+        for key in ('OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'):
             env.pop(key, None)
         if credential:
             env['ANTHROPIC_API_KEY' if agent == 'claude' else 'CODEX_API_KEY'] = 'test-only-selected-credential'
@@ -77,6 +77,16 @@ class CodingRunnerTests(unittest.TestCase):
                     events = [json.loads(line) for line in trial['runtime']['stdout'].splitlines()]
                     self.assertEqual(events[0]['native_instruction_sha256'], trial['instruction_sha256'])
                     self.assertEqual(trial['runtime']['cost_usd'], 0.01 if agent == 'claude' else None)
+                    if agent == 'claude':
+                        log = output / 'trial-1-claude-debug.log'
+                        self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+                        self.assertEqual(len(trial['runtime']['claude_md_debug_lines']), 0 if variant == 'none' else 1)
+                        loading = trial['runtime']['instruction_loading']
+                        self.assertEqual(len(loading['memory_files']), 0 if variant == 'none' else 1)
+                        self.assertIn('ponytail', loading['user_skills'])
+                        self.assertNotIn('simplify', loading['user_skills'])
+                    else:
+                        self.assertNotIn('claude_md_debug_lines', trial['runtime'])
                     self.assertEqual(report['counts']['started'], 1)
                     self.assertEqual(output.stat().st_mode & 0o777, 0o700)
                     self.assertFalse(Path(trial['workspace']).exists())
@@ -118,6 +128,44 @@ class CodingRunnerTests(unittest.TestCase):
         result, report, _, _ = self.run_cli(extra=('--runtime', '/missing/coding-runtime'))
         self.assertEqual(report['trials'][0]['status'], 'SKIP')
 
+    def test_dedicated_codex_home_login_is_staged_and_cleaned(self):
+        home = self.root / 'codex-home'
+        home.mkdir()
+        (home / 'auth.json').write_text('{"fake": true}')
+        for variant in ('baseline', 'none'):
+            with self.subTest(variant=variant):
+                result, report, _, _ = self.run_cli(agent='codex', credential=False,
+                                                    extra=('--codex-home', str(home), '--instructions', variant))
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                trial = report['trials'][0]
+                self.assertEqual(trial['status'], 'PASS')
+                events = [json.loads(line) for line in trial['runtime']['stdout'].splitlines()]
+                self.assertEqual(events[0]['native_instruction_sha256'], trial['instruction_sha256'])
+                self.assertEqual(report['isolation']['credential'], 'CODEX_HOME login')
+                self.assertEqual(sorted(path.name for path in home.iterdir()), ['auth.json'])
+        # Codex recreates its bundled skills and plugin caches; those alone must not block a trial.
+        (home / 'skills/.system').mkdir(parents=True)
+        (home / 'plugins/cache').mkdir(parents=True)
+        result, report, _, _ = self.run_cli(agent='codex', credential=False, extra=('--codex-home', str(home)))
+        self.assertEqual(report['trials'][0]['status'], 'PASS', result.stderr)
+        (home / 'skills/custom').mkdir()
+        result, report, _, _ = self.run_cli(agent='codex', credential=False, extra=('--codex-home', str(home)))
+        self.assertIn('skills', report['trials'][0]['error'])
+        (home / 'skills/custom').rmdir()
+        (home / 'AGENTS.md').write_text('user instructions')
+        result, report, _, counter = self.run_cli(agent='codex', credential=False, extra=('--codex-home', str(home)))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('AGENTS.md', report['trials'][0]['error'])
+        self.assertEqual((home / 'AGENTS.md').read_text(), 'user instructions')
+        self.assertFalse(counter.exists())
+        (home / 'AGENTS.md').unlink()
+        (home / 'auth.json').unlink()
+        result, report, _, _ = self.run_cli(agent='codex', credential=False, extra=('--codex-home', str(home)))
+        self.assertEqual(report['trials'][0]['status'], 'SKIP')
+        result, _, _, _ = self.run_cli(agent='claude', extra=('--codex-home', str(home)))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('--codex-home', result.stderr)
+
     def test_refactor_requires_change_and_manual_review(self):
         result, report, _, _ = self.run_cli(extra=('--task', 'parser-refactor'))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -139,6 +187,34 @@ class CodingRunnerTests(unittest.TestCase):
             self.assertNotIn('test-only-selected-credential', result.stdout + result.stderr)
             self.assertIn('[REDACTED]', (output / 'results.json').read_text())
 
+    def test_claude_sandbox_command_failure_is_error(self):
+        result, report, _, _ = self.run_cli(mode='sandbox-failure')
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(report['trials'][0]['status'], 'ERROR')
+        self.assertIn('sandbox', report['trials'][0]['error'])
+
+    def test_claude_context_mismatch_stops_before_subject_run(self):
+        result, report, _, counter = self.run_cli(mode='context-mismatch')
+        self.assertEqual(result.returncode, 2)
+        trial = report['trials'][0]
+        self.assertEqual(trial['status'], 'ERROR')
+        self.assertIn('/context', trial['error'])
+        self.assertEqual(trial['runtime']['instruction_loading']['memory_files'], ['/elsewhere/CLAUDE.md'])
+        self.assertFalse(counter.exists())
+
+    def test_claude_subscription_token_is_forwarded_and_redacted(self):
+        cmd, env, output, _ = self.prepare(credential=False, mode='redact')
+        env['CLAUDE_CODE_OAUTH_TOKEN'] = 'test-only-oauth-credential'
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        report = json.loads((output / 'results.json').read_text())
+        self.assertEqual(report['trials'][0]['status'], 'PASS')
+        self.assertEqual(report['isolation']['credential'], 'CLAUDE_CODE_OAUTH_TOKEN')
+        for path in output.rglob('*'):
+            if path.is_file():
+                self.assertNotIn('test-only-oauth-credential', path.read_text())
+        self.assertIn('[REDACTED]', (output / 'results.json').read_text())
+
     def test_verifier_has_no_credentials_and_times_out(self):
         import runpy
         functions = runpy.run_path(str(RUNNER))
@@ -146,7 +222,8 @@ class CodingRunnerTests(unittest.TestCase):
         fixture.mkdir()
         check = fixture / 'check.py'
         check.write_text("import os\nassert not any(os.environ.get(k) for k in "
-                         "('CODEX_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'UNMANAGED_SECRET'))\n")
+                         "('CODEX_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', "
+                         "'UNMANAGED_SECRET'))\n")
         work = self.root / 'work'
         work.mkdir()
         task = {'fixture_root': str(fixture), 'verification': ['python3', 'check.py'],

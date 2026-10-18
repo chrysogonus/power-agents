@@ -46,10 +46,25 @@ changed. The CLI does not set reasoning-effort options or estimate API prices.
 
 Execution requires explicit `--execute` after authorization for the model,
 trial count, and spend controls. Do not put credentials in prompts or arguments.
-The runner forwards only `ANTHROPIC_API_KEY` to Claude or `CODEX_API_KEY` to
-Codex from an explicitly supplied environment. It never reads saved login files,
-OAuth tokens, or local API-key helpers. `OPENAI_API_KEY` is not used for Codex
+The runner forwards only `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (from
+`claude setup-token`, billed to the subscription) to Claude, or `CODEX_API_KEY` to
+Codex, from an explicitly supplied environment. An API key outranks the token, as
+in Claude itself. With a subscription token, `--max-budget-usd` applies to
+Claude's estimated cost, not to billing. It never reads saved login files or
+local API-key helpers. `OPENAI_API_KEY` is not used for Codex
 execution; credential provisioning belongs outside this tool.
+
+Codex can instead use a separate ChatGPT login in a dedicated directory, created
+once with `CODEX_HOME=/absolute/eval/home codex login --device-auth` and passed
+as `--codex-home /absolute/eval/home`. Never point it at the everyday `~/.codex`.
+Preflight checks `codex login status` and refuses a directory containing
+instructions, configuration, skills, rules, plugins, or memories, except the
+bundled `skills/.system` and plugin caches Codex recreates itself. Each trial
+stages `config.toml` and the instruction variant there and removes both
+afterwards. Codex itself reads and refreshes the login; the runner does not.
+Codex-owned logs, caches, and login refreshes persist between trials. A ChatGPT
+login syncs account plugins and apps, so the staged configuration disables the
+`plugins`, `remote_plugin`, and `apps` features in every Codex trial.
 
 Each trial gets a temporary Git repository, home, configuration roots, and copy
 of the same skill inventory. Baseline/candidate instruction bytes are placed in
@@ -57,10 +72,22 @@ Claude's native user `CLAUDE.md` or Codex's native user `AGENTS.md`; none omits
 that file. The task prompt stays unchanged. The runner does not install into
 or modify the real home directory or this repository's active instruction file.
 
-Claude runs with `dontAsk`, explicit coding tools, restricted file-tool scope,
-its shell sandbox enabled with unsandboxed fallback disabled, disabled user
-hooks, and empty MCP configuration. The copied skills are an additional allowed
-working directory for their references. Codex uses workspace-write, never asks
+Claude runs with `dontAsk`, explicit coding tools, its shell sandbox enabled
+with unsandboxed fallback disabled, disabled user hooks, and empty MCP
+configuration. `sandbox.failIfUnavailable` makes Claude exit at startup when the
+sandbox cannot run (on Linux/WSL2 it needs `bubblewrap` and `socat`); without it,
+Claude 2.1.299 silently runs commands unsandboxed. The adapter does not use
+`--restricted`: on 2.1.299 it also suppresses the user `CLAUDE.md` and user
+skills, so every instruction variant would behave like `none`. Instead,
+`permissions.blockReadsOutsideWorkingDirectories` fences file reads, and the only
+allow rules are `Bash`, `Skill`, and `Edit(//<workspace>/**)`, so `dontAsk`
+denies edits elsewhere. Before each subject run, a credential-free local
+`/context` call must report exactly the staged `CLAUDE.md` (none for `none`) and
+the staged user skills; otherwise the trial is an ERROR and no model call is
+made. Its report is recorded as `instruction_loading`. The copied skills stay
+readable under the read block without `--add-dir`; adding them would make them
+writable to sandboxed commands and, on Linux, makes every sandboxed command fail
+because the directory sits under the protected `.claude/skills` path. Codex uses workspace-write, never asks
 for approvals, disables shell network access and ambient shell environment
 inheritance, explicitly sets a temporary HOME/TMPDIR and standard executable
 PATH for shell commands, and runs ephemerally. Temporary files stay within the
@@ -107,7 +134,10 @@ its work. Generated `__pycache__` and Git internals are excluded from the diff.
 
 Missing usage, cost, model, skill loads, or native instruction-loading evidence
 is null with an explanation. A staged native instruction file proves placement,
-not model adherence. Codex JSONL does not provide a confirmed Skill-tool loading
+not model adherence. Claude trials also save a redacted, owner-only
+`trial-N-claude-debug.log` and list its `CLAUDE.md` lines as
+`claude_md_debug_lines` for manual review of native loading; other secrets in
+that log are not pattern-matched. Codex JSONL does not provide a confirmed Skill-tool loading
 record in this adapter; it is unknown, not an empty successful load list. No LLM
 judge is called. Exit codes: 0 for PASS/REVIEW, 1 for objective failures, and 2
 for errors, skips, invalid input, or a matrix stopped before all trials ran.

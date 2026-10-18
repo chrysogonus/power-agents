@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import hashlib
 import json
@@ -18,13 +19,19 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CREDENTIALS = ('ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'OPENAI_API_KEY')
+CREDENTIALS = ('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'CODEX_API_KEY', 'OPENAI_API_KEY')
+# Forwarded in Claude's own precedence order: an API key outranks the subscription token.
+RUNTIME_CREDENTIALS = {'claude': ('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'), 'codex': ('CODEX_API_KEY',)}
 REQUIRED = {
     'claude': ('--print', '--output-format', '--verbose', '--model', '--tools', '--allowedTools',
                '--permission-mode', '--setting-sources', '--settings', '--strict-mcp-config',
-               '--mcp-config', '--no-session-persistence', '--max-budget-usd', '--restricted', '--add-dir'),
+               '--mcp-config', '--no-session-persistence', '--max-budget-usd', '--debug-file'),
     'codex': ('--json', '--model', '--sandbox', '--ephemeral', '--config', '--strict-config'),
 }
+# Anything here in a dedicated CODEX_HOME would change the controlled trial configuration.
+CODEX_HOME_RESERVED = ('AGENTS.md', 'AGENTS.override.md', 'config.toml', 'skills', 'rules', 'plugins', 'memories')
+# Codex recreates its bundled skills and plugin caches on every run; staged config disables plugins.
+CODEX_MANAGED = {'skills': {'.system'}, 'plugins': {'cache', '.remote-plugin-install-staging'}}
 
 
 def redact(text: str) -> str:
@@ -98,8 +105,7 @@ def environment(home: Path, agent: str | None = None) -> dict[str, str]:
            'XDG_DATA_HOME': str(home / '.local/share'), 'GIT_CONFIG_NOSYSTEM': '1',
            'GIT_CONFIG_GLOBAL': '/dev/null', 'PYTHONDONTWRITEBYTECODE': '1',
            'DISABLE_AUTOUPDATER': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1'}
-    if agent:
-        name = 'ANTHROPIC_API_KEY' if agent == 'claude' else 'CODEX_API_KEY'
+    for name in RUNTIME_CREDENTIALS.get(agent, ()):
         if os.environ.get(name):
             env[name] = os.environ[name]
     return env
@@ -163,22 +169,27 @@ def hashes(root: Path) -> dict[str, str]:
     return {name: hashlib.sha256(data).hexdigest() for name, data in files(root).items()}
 
 
-def stage_trial(task: dict, trial_root: Path, agent: str, instruction_file: Path | None, skills_root: Path) -> Path:
+def stage_trial(task: dict, trial_root: Path, agent: str, instruction_file: Path | None, skills_root: Path,
+                codex_home: Path | None = None) -> Path:
     home, workspace = trial_root / 'home', trial_root / 'work'
     home.mkdir()
     shutil.copytree(Path(task['fixture_root']) / task['snapshot'], workspace)
     (workspace / '.tmp').mkdir()
-    config = home / ('.claude' if agent == 'claude' else '.codex')
-    config.mkdir()
+    config = codex_home or home / ('.claude' if agent == 'claude' else '.codex')
+    config.mkdir(exist_ok=bool(codex_home))
     skill_target = config / 'skills' if agent == 'claude' else home / '.agents/skills'
     shutil.copytree(skills_root, skill_target)
     if instruction_file:
         shutil.copyfile(instruction_file, config / ('CLAUDE.md' if agent == 'claude' else 'AGENTS.md'))
     if agent == 'claude':
         (config / 'settings.json').write_text(json.dumps({'disableAllHooks': True,
-            'sandbox': {'enabled': True, 'autoAllowBashIfSandboxed': True, 'allowUnsandboxedCommands': False}}))
+            'permissions': {'blockReadsOutsideWorkingDirectories': True},
+            'sandbox': {'enabled': True, 'failIfUnavailable': True, 'autoAllowBashIfSandboxed': True,
+                        'allowUnsandboxedCommands': False}}))
     else:
         (config / 'config.toml').write_text('approval_policy = "never"\nsandbox_mode = "workspace-write"\n'
+            '[features]\nplugins = false\nremote_plugin = false\napps = false\n'
+            '[memories]\ngenerate_memories = false\nuse_memories = false\n'
             '[sandbox_workspace_write]\nnetwork_access = false\nexclude_tmpdir_env_var = true\nexclude_slash_tmp = true\n'
             '[shell_environment_policy]\ninherit = "none"\n'
             '[shell_environment_policy.set]\n'
@@ -191,6 +202,16 @@ def stage_trial(task: dict, trial_root: Path, agent: str, instruction_file: Path
         if result['error'] or result['returncode']:
             raise ValueError('Could not initialize isolated fixture repository.')
     return workspace
+
+
+@contextlib.contextmanager
+def staged_codex_home(codex_home: Path | None):
+    try:
+        yield
+    finally:
+        if codex_home:
+            for name in ('AGENTS.md', 'config.toml'):
+                (codex_home / name).unlink(missing_ok=True)
 
 
 def parse_runtime(agent: str, stdout: str) -> dict:
@@ -226,6 +247,8 @@ def parse_runtime(agent: str, stdout: str) -> dict:
                     calls[identifier] = skill
                 if block.get('type') == 'tool_use':
                     observed_tools = True
+                if block.get('type') == 'tool_result' and block.get('is_error') and 'bwrap: ' in str(block.get('content')):
+                    raise ValueError('Claude sandbox could not start a command (bwrap).')
                 if block.get('type') == 'tool_result' and block.get('tool_use_id') in calls:
                     if event.get('type') != 'user' or block.get('is_error'):
                         raise ValueError('Skill invocation failed or was spoofed.')
@@ -257,26 +280,66 @@ def parse_runtime(agent: str, stdout: str) -> dict:
     return result
 
 
+def context_table(text: str, heading: str) -> list[list[str]]:
+    """Return the body rows of one Markdown table from Claude's /context report."""
+    rows, parts = [], text.split(f'### {heading}', 1)
+    for line in parts[1].splitlines() if len(parts) == 2 else []:
+        if line.startswith('###'):
+            break
+        cells = [cell.strip() for cell in line.strip().strip('|').split('|')]
+        if line.startswith('|') and len(cells) >= 2 and not set(cells[0]) <= set('-'):
+            rows.append(cells)
+    return rows[1:]
+
+
 def run_subject(agent: str, executable: str, model: str, task: dict, workspace: Path, trial_root: Path,
-                budget: float = 1) -> dict:
+                budget: float = 1, codex_home: Path | None = None) -> dict:
+    loading = None
     if agent == 'claude':
-        tools = 'Read,Edit,Write,Bash,Glob,Grep,Skill'
-        argv = [executable, '--print', '--output-format', 'stream-json', '--verbose', '--model', model,
-                '--tools', tools, '--allowedTools', tools, '--permission-mode', 'dontAsk',
-                '--restricted', '--add-dir', str(trial_root / 'home/.claude/skills'),
-                '--setting-sources', 'user', '--settings', str(trial_root / 'home/.claude/settings.json'),
-                '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--no-session-persistence',
-                '--max-budget-usd', str(budget)]
+        # --restricted would also drop the user CLAUDE.md and skills; reads are fenced by settings
+        # and dontAsk denies any edit outside the workspace. Skills stay readable under the read
+        # block; --add-dir would make them sandbox-writable and breaks bwrap's protected-path mounts.
+        config = trial_root / 'home/.claude'
+        common = ['--model', model, '--tools', 'Read,Edit,Write,Bash,Glob,Grep,Skill',
+                  '--allowedTools', f'Bash,Skill,Edit(/{workspace}/**)', '--permission-mode', 'dontAsk',
+                  '--setting-sources', 'user',
+                  '--settings', str(config / 'settings.json'), '--strict-mcp-config',
+                  '--mcp-config', '{"mcpServers":{}}', '--no-session-persistence']
+        argv = [executable, '--print', '--output-format', 'stream-json', '--verbose', *common,
+                '--max-budget-usd', str(budget), '--debug-file', str(trial_root / 'claude-debug.log')]
+        # /context is local; without credentials it cannot start a paid model call.
+        context = invoke([executable, '--print', '--output-format', 'text', *common], workspace,
+                         environment(trial_root / 'home'), '/context', 60)
+        loading = {'source': 'Claude /context without credentials, before the subject run.',
+                   'memory_files': [row[1] for row in context_table(context['stdout'], 'Memory Files')],
+                   'user_skills': sorted(row[0] for row in context_table(context['stdout'], 'Skills') if row[1] == 'User')}
+        staged = [str(config / 'CLAUDE.md')] if (config / 'CLAUDE.md').exists() else []
+        skills = sorted(path.name for path in (config / 'skills').iterdir() if (path / 'SKILL.md').is_file())
+        if context['error'] or context['returncode'] or loading['memory_files'] != staged or loading['user_skills'] != skills:
+            return {**context, 'argv': argv, 'instruction_loading': loading,
+                    'error': 'Claude /context did not confirm exactly the staged instructions and skills.'}
     else:
         argv = [executable, 'exec', '--json', '--model', model, '--sandbox', 'workspace-write',
                 '--ephemeral', '--strict-config', '--config', 'approval_policy="never"', '-']
-    result = invoke(argv, workspace, environment(trial_root / 'home', agent), task['prompt'], task['timeout_seconds'])
+    env = environment(trial_root / 'home', agent)
+    if codex_home:
+        env['CODEX_HOME'] = str(codex_home)
+    result = invoke(argv, workspace, env, task['prompt'], task['timeout_seconds'])
     result['argv'] = argv
+    if loading:
+        result['instruction_loading'] = loading
+    debug_log = trial_root / 'claude-debug.log'
+    if agent == 'claude' and debug_log.is_file():
+        result['debug_log'] = redact(debug_log.read_text(encoding='utf-8', errors='replace'))
     if result['error'] or result['returncode']:
         result['error'] = result['error'] or f"Runtime exited with status {result['returncode']}."
         return result
     try:
-        return {**result, **parse_runtime(agent, result['stdout'])}
+        result.update(parse_runtime(agent, result['stdout']))
+        if loading:
+            result['instruction_loading'] = loading
+            result['missing_measurements'].pop('instruction_loading', None)
+        return result
     except (ValueError, TypeError) as error:
         result['error'] = str(error)
         return result
@@ -352,10 +415,14 @@ def main() -> int:
     parser.add_argument('--supervised', action='store_true', help='Acknowledge manual supervision for one Codex trial without a dollar cap.')
     parser.add_argument('--execute', action='store_true', help='Opt in to paid execution after budget authorization.')
     parser.add_argument('--output-dir', type=Path)
+    parser.add_argument('--codex-home', type=Path,
+                        help='Absolute dedicated CODEX_HOME holding a separate Codex login; trial files are staged and removed.')
     args = parser.parse_args()
     try:
         if args.repeats < 1 or len(set(args.instructions)) != len(args.instructions):
             raise ValueError('Repeats must be positive and variants unique.')
+        if args.codex_home and (args.agent != 'codex' or not args.codex_home.is_absolute() or not args.codex_home.is_dir()):
+            raise ValueError('--codex-home requires --agent codex and an existing absolute directory.')
         for value in (args.timeout, args.max_budget_usd):
             if value is not None and (not math.isfinite(value) or value <= 0):
                 raise ValueError('Time and budget limits must be positive and finite.')
@@ -373,12 +440,18 @@ def main() -> int:
                     trials.append({'index': len(trials) + 1, 'task': task['id'], 'repeat': repeat + 1,
                         'variant': variant, 'instruction_sha256': hashlib.sha256(source.read_bytes()).hexdigest() if source else None,
                         'status': 'NOT_RUN', 'started': False})
+        names = RUNTIME_CREDENTIALS[args.agent]
+        credential = 'CODEX_HOME login' if args.codex_home else next(
+            (name for name in names if os.environ.get(name)), ' or '.join(names))
         report = {'schema_version': 1, 'agent': args.agent, 'requested_model': args.model,
                   'runtime': args.runtime or args.agent, 'runtime_version': None, 'trials': trials,
                   'manifest_sha256': hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
                   'fixture_sha256': hashes(args.manifest.parent), 'skill_sha256': hashes(ROOT / 'skills'),
-                  'isolation': {'host_configuration_copied': False, 'credential': 'ANTHROPIC_API_KEY' if args.agent == 'claude' else 'CODEX_API_KEY',
+                  'isolation': {'host_configuration_copied': False, 'credential': credential,
                                 'native_instruction_loading_confirmed': False, 'external_machine_policy': 'unknown'},
+                  'codex_home': {'path': str(args.codex_home),
+                                 'shared_state': 'Codex-owned login refreshes, logs, and caches persist across trials.'}
+                                if args.codex_home else None,
                   'cost_control': {'per_session_usd': args.max_budget_usd if args.agent == 'claude' else None,
                                    'hard_total_cap': False, 'supervised': args.supervised}}
         if not args.execute:
@@ -388,10 +461,9 @@ def main() -> int:
             raise ValueError('Codex execution requires --supervised and a single trial; no dollar cap is available.')
         output = args.output_dir or ROOT / 'coding-eval-results' / str(time.time_ns())
         output.mkdir(parents=True, mode=0o700, exist_ok=False)
-        credential = 'ANTHROPIC_API_KEY' if args.agent == 'claude' else 'CODEX_API_KEY'
         runtime = shutil.which(args.runtime or args.agent)
         preflight = None
-        if not runtime or not os.environ.get(credential):
+        if not runtime or not (any(os.environ.get(name) for name in names) or args.codex_home):
             preflight = ('SKIP', 'Runtime or explicit environment credential is unavailable.')
         else:
             with tempfile.TemporaryDirectory(prefix='coding-preflight-') as temporary:
@@ -405,6 +477,16 @@ def main() -> int:
                 if (help_result['error'] or help_result['returncode'] or version['error'] or version['returncode'] or missing):
                     preflight = ('ERROR', 'Runtime preflight failed or lacks required flags.')
                 report['runtime_version'] = version['stdout'].strip()
+                if args.codex_home and not preflight:
+                    conflicts = [name for name in CODEX_HOME_RESERVED if (args.codex_home / name).exists()
+                                 and not (name in CODEX_MANAGED and (args.codex_home / name).is_dir()
+                                          and {path.name for path in (args.codex_home / name).iterdir()}
+                                          <= CODEX_MANAGED[name])]
+                    login = invoke([runtime, 'login', 'status'], root, {**env, 'CODEX_HOME': str(args.codex_home)}, '', 10)
+                    if conflicts:
+                        preflight = ('ERROR', 'Dedicated CODEX_HOME already contains: ' + ', '.join(conflicts))
+                    elif login['error'] or login['returncode']:
+                        preflight = ('SKIP', 'Dedicated CODEX_HOME is not logged in.')
         write_results(output, report)
         for trial in trials:
             if preflight:
@@ -412,13 +494,23 @@ def main() -> int:
                 continue
             task = next(task for task in tasks if task['id'] == trial['task'])
             try:
-                with tempfile.TemporaryDirectory(prefix='power-agents-coding-') as temporary:
+                with (tempfile.TemporaryDirectory(prefix='power-agents-coding-') as temporary,
+                      staged_codex_home(args.codex_home)):
                     root = Path(temporary)
-                    work = stage_trial(task, root, args.agent, sources[trial['variant']], ROOT / 'skills')
+                    work = stage_trial(task, root, args.agent, sources[trial['variant']], ROOT / 'skills', args.codex_home)
                     trial['workspace'] = str(work)
                     trial['started'] = True
                     try:
-                        trial['runtime'] = run_subject(args.agent, runtime, args.model, task, work, root, args.max_budget_usd)
+                        trial['runtime'] = run_subject(args.agent, runtime, args.model, task, work, root,
+                                                       args.max_budget_usd, args.codex_home)
+                        debug_log = trial['runtime'].pop('debug_log', None)
+                        if debug_log is not None:
+                            # Native loading evidence for manual review; kept private beside the results.
+                            path = output / f"trial-{trial['index']}-claude-debug.log"
+                            path.touch(mode=0o600)
+                            path.write_text(debug_log)
+                            trial['runtime']['claude_md_debug_lines'] = [
+                                line for line in debug_log.splitlines() if 'CLAUDE.md' in line][:20]
                         if trial['runtime']['error']:
                             raise ValueError(trial['runtime']['error'])
                     finally:

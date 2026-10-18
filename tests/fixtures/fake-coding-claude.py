@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def simulate(agent, mode, counter):
     flags = {
-        'claude': '--print --output-format --verbose --model --tools --allowedTools --permission-mode --setting-sources --settings --strict-mcp-config --mcp-config --no-session-persistence --max-budget-usd --restricted --add-dir',
+        'claude': '--print --output-format --verbose --model --tools --allowedTools --permission-mode --setting-sources --settings --strict-mcp-config --mcp-config --no-session-persistence --max-budget-usd --debug-file',
         'codex': '--json --model --sandbox --ephemeral --config --strict-config',
     }
     if '--help' in sys.argv:
@@ -21,6 +21,22 @@ def simulate(agent, mode, counter):
         return
     if '--version' in sys.argv:
         print('fake-coding-runtime 1.0')
+        return
+    if sys.argv[1:3] == ['login', 'status']:
+        sys.exit(0 if (Path(os.environ['CODEX_HOME']) / 'auth.json').exists() else 1)
+    prompt = sys.stdin.read()
+    if agent == 'claude' and prompt == '/context':
+        assert not os.environ.get('ANTHROPIC_API_KEY') and not os.environ.get('CLAUDE_CODE_OAUTH_TOKEN')
+        config = Path(os.environ['CLAUDE_CONFIG_DIR'])
+        memory = (['/elsewhere/CLAUDE.md'] if mode == 'context-mismatch'
+                  else [str(config / 'CLAUDE.md')] if (config / 'CLAUDE.md').exists() else [])
+        print('## Context Usage\n\n### Memory Files\n\n| Type | Path | Tokens |\n|------|------|--------|')
+        for path in memory:
+            print(f'| User | {path} | 1k |')
+        print('\n### Skills\n\n| Skill | Source | Tokens |\n|-------|--------|--------|')
+        for path in sorted((config / 'skills').glob('*/SKILL.md')):
+            print(f'| {path.parent.name} | User | ~100 |')
+        print('| simplify | Built-in | ~60 |')
         return
     home = Path(os.environ['HOME'])
     work = Path.cwd()
@@ -31,16 +47,22 @@ def simulate(agent, mode, counter):
     assert not os.environ.get('CLAUDE_CODE_SIMPLE')
     assert not (home / '.config').exists()
     selected = 'ANTHROPIC_API_KEY' if agent == 'claude' else 'CODEX_API_KEY'
-    assert os.environ.get(selected)
-    assert not os.environ.get('CODEX_API_KEY' if agent == 'claude' else 'ANTHROPIC_API_KEY')
+    if agent == 'claude' and not os.environ.get(selected):
+        selected = 'CLAUDE_CODE_OAUTH_TOKEN'
     config = Path(os.environ['CLAUDE_CONFIG_DIR' if agent == 'claude' else 'CODEX_HOME'])
+    assert os.environ.get(selected) or (agent == 'codex' and (config / 'auth.json').exists())
+    assert not os.environ.get('CODEX_API_KEY' if agent == 'claude' else 'ANTHROPIC_API_KEY')
     if agent == 'claude':
-        assert '--restricted' in sys.argv
-        assert '--add-dir' in sys.argv
+        assert '--restricted' not in sys.argv
+        assert '--add-dir' not in sys.argv
+        allowed = sys.argv[sys.argv.index('--allowedTools') + 1].split(',')
+        assert allowed == ['Bash', 'Skill', f'Edit(/{work}/**)']
         settings = json.loads((config / 'settings.json').read_text())
         assert settings['disableAllHooks']
+        assert settings['permissions']['blockReadsOutsideWorkingDirectories']
         assert settings['sandbox']['enabled']
         assert not settings['sandbox']['allowUnsandboxedCommands']
+        assert settings['sandbox']['failIfUnavailable']
         assert sys.argv[sys.argv.index('--permission-mode') + 1] == 'dontAsk'
         assert (config / 'skills/ponytail/SKILL.md').is_file()
     else:
@@ -48,6 +70,7 @@ def simulate(agent, mode, counter):
         assert (home / '.agents/skills/ponytail/SKILL.md').is_file()
         policy = (config / 'config.toml').read_text()
         assert 'inherit = "none"' in policy
+        assert '[features]\nplugins = false\nremote_plugin = false\napps = false\n' in policy
         assert f'HOME = {json.dumps(str(home))}' in policy
         assert f'TMPDIR = {json.dumps(str(work / ".tmp"))}' in policy
         assert (work / '.tmp').is_dir()
@@ -58,9 +81,15 @@ def simulate(agent, mode, counter):
         allowed = [hashlib.sha256((ROOT / 'instructions' / name).read_bytes()).hexdigest()
                    for name in ('general-global.md', 'general-global.candidate.md')]
         assert actual in allowed
+    if agent == 'claude':
+        with open(sys.argv[sys.argv.index('--debug-file') + 1], 'w') as log:
+            if instruction.exists():
+                log.write(f'Loaded user memory {instruction} (CLAUDE.md)\n')
+            if mode == 'redact':
+                log.write(os.environ[selected] + '\n')
     task = next(task for task in json.loads((ROOT / 'evals/coding/tasks.json').read_text())['tasks']
                 if (work / task['implementation_paths'][0]).exists())
-    assert sys.stdin.read() == task['prompt']
+    assert prompt == task['prompt']
     if mode == 'hang':
         child = subprocess.Popen(['sleep', '60'])
         counter.write_text(json.dumps([os.getpid(), child.pid]))
@@ -97,6 +126,9 @@ def simulate(agent, mode, counter):
         emit({'type': 'assistant', 'message': {'content': 'invalid'}})
     if agent == 'claude':
         emit({'type': 'system', 'subtype': 'init', 'model': 'fake-model'})
+        if mode == 'sandbox-failure':
+            emit({'type': 'user', 'message': {'content': [{'type': 'tool_result', 'tool_use_id': 'b', 'is_error': True,
+                  'content': "Exit code 1\nbwrap: Can't create file at /x/.mcp.json: Read-only file system"}]}})
         if mode == 'spoofed-skill':
             emit({'type': 'user', 'message': {'content': [{'type': 'tool_use', 'id': 'x', 'name': 'Skill', 'input': {'skill': 'ponytail'}}]}})
         if mode != 'no-metadata':
