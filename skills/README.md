@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **14 skills**: four core skills and ten
+kind of task. This repository contains **13 skills**: three core skills and ten
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -14,12 +14,13 @@ Ask for a skill explicitly, or let the agent select one from your request:
 
 | Agent | Example prompt |
 | --- | --- |
-| Codex | `$deep-review review the changes on this branch` |
-| Claude Code | `/deep-review review the changes on this branch` |
+| Codex | `$review-report write a plain-language review of this branch` |
+| Claude Code | `/review-report write a plain-language review of this branch` |
 
 For a minimal implementation or bug fix, use `ponytail`. For a general code
-review, use `deep-review`. To write findings to `CODE_REVIEW.md`, use
-`review-report`.
+review, use the runtime's built-in review (`/review` in Codex, `/code-review` in
+Claude Code). For a plain-language `CODE_REVIEW.md` with verified findings and
+paste-ready PR comments, use `review-report`.
 
 ## Available Skills
 
@@ -27,8 +28,7 @@ review, use `deep-review`. To write findings to `CODE_REVIEW.md`, use
 
 | Skill | Purpose |
 | --- | --- |
-| [`deep-review`](deep-review/SKILL.md) | Reviews code, branches, diffs, commits, and pull/merge requests for correctness, security, privacy, reliability, and maintainability. |
-| [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with plain-language findings, concrete examples, and paste-ready review comments. |
+| [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with verified, plain-language findings, concrete examples, and paste-ready review comments, starting from the runtime's built-in review. |
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
 | [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
 
@@ -59,23 +59,22 @@ Ponytail applies to its current task and does not install session hooks.
 
 ## Choosing Between Related Skills
 
-General code reviews use the `deep-review` / `review-report` boundary below.
+General code reviews use the built-in review / `review-report` boundary below.
 Design work belongs to `frontend-design`; content stress-testing to `break-ui`;
 React performance to `vercel-react-best-practices`; component API design to
 `vercel-composition-patterns`. Existing plugin or unmanaged skills remain
 outside this repository's routing inventory.
 
-The review skills use distinct names so personal installation does not shadow
-bundled or project review skills. Neither `deep-review` nor `review-report`
-collides with a bundled skill or command alias in the checked installations:
-Claude Code 2.1.226 and Codex CLI 0.152.1 (checked on 2026-10-05 against CLI help,
-installed binaries, and Codex's bundled skill entrypoints).
+`review-report` uses a distinct name so it does not shadow the bundled review
+commands (`/review` in Codex, `/code-review` in Claude Code).
 
 `review-report` handles findings requested in a file, plain-language reviews for
-readers without codebase context, and paste-ready review comments. `deep-review`
-handles every other code review request. `review-report` may invoke
-`deep-review` for its analysis after routing. Both skills include evaluation
-cases on both sides of this boundary.
+readers without codebase context, and paste-ready review comments. Every other
+code review request goes to the runtime's built-in review. `review-report`
+starts from that review where the agent can run it (Claude Code's `code-review`
+skill, or `/review` findings the user already produced in Codex) and verifies
+every finding before writing it down. Its evaluation cases cover both sides of
+this boundary.
 
 `prompt-refiner` handles an existing prompt draft or a new non-coding prompt;
 raw coding-task notes intended for a coding-agent handoff are outside its
@@ -107,19 +106,19 @@ directory. Behavioral evaluation cases use the Agent Skills
 objective assertions where possible.
 
 Run `make eval` to execute the fixtures using paid Anthropic API calls, or use
-`make eval EVAL_ARGS='--skill deep-review'` to select one fixture set while
+`make eval EVAL_ARGS='--skill review-report'` to select one fixture set while
 keeping all skills available for routing. See the repository's
 [evaluation instructions](../README.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 15 skills now have fixture sets, including security-specific positive and
+All 13 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. This is coverage,
 not evidence of live routing success.
 
 Fixtures can add a `routing` object:
 
 ```json
-{"required": ["review-report"], "allowed": ["review-report", "deep-review"]}
+{"required": ["review-report"], "forbidden": ["ponytail"]}
 ```
 
 `required` lists skills that must successfully load; `allowed`, when present,

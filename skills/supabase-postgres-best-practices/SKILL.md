@@ -3,7 +3,7 @@ name: supabase-postgres-best-practices
 description: Use when writing Postgres SQL, schema changes, migrations, indexes, RLS policies,
   or diagnosing Postgres query plans, locking, or connection problems, including Postgres outside
   Supabase. Not for other databases. General security guidance belongs to security-best-practices;
-  general code reviews to deep-review or review-report.
+  general code reviews to the built-in review or review-report.
 license: MIT
 metadata:
   author: supabase

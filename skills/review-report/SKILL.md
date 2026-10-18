@@ -1,6 +1,6 @@
 ---
 name: review-report
-description: Writes code review findings to CODE_REVIEW.md at the repository root, with plain-language explanations, concrete examples, suggested code, and paste-ready review comments. Use when the user wants findings written to a file, a plain-language review for a reader without codebase context, or paste-ready review comments. Do not use for other review requests, including a generic PR review or check before merge; use deep-review instead.
+description: Writes code review findings to CODE_REVIEW.md at the repository root, with plain-language explanations, concrete examples, suggested code, and paste-ready review comments. Use when the user wants findings written to a file, a plain-language review for a reader without codebase context, or paste-ready review comments. Do not use for other review requests, such as a generic PR review or check before merge; those belong to the runtime's built-in review (/review in Codex, /code-review in Claude Code).
 ---
 
 # PR Review in Plain English
@@ -54,8 +54,15 @@ and hold the PR to those conventions rather than to generic preferences.
 
 ### 3. Analyse
 
-If the `deep-review` skill is available in the environment, invoke it and use its analysis as the
-backbone of the findings. If it isn't available, work through this checklist directly:
+Start from the runtime's built-in review:
+
+- **Claude Code:** invoke the built-in `code-review` skill for the branch against the base. Do not
+  pass `--fix` or `--comment`; this skill never edits code or posts comments.
+- **Codex:** only the user can start `/review`. If they ran it in this session, start from its
+  findings. Do not launch a nested `codex review` session unless the user asks.
+
+Then work through this checklist for anything the built-in review did not cover, or for the whole
+analysis when no built-in review is available:
 
 - **Correctness** — does it do what the commits claim? Off-by-one, inverted conditions, wrong
   variable, unhandled `null`/`None`, wrong default.
@@ -73,7 +80,28 @@ backbone of the findings. If it isn't available, work through this checklist dir
 Report only what is actually there. Two real findings beat eight padded ones — padding makes it
 impossible for this reader to tell what matters.
 
-### 4. Write `CODE_REVIEW.md`
+### 4. Verify every finding
+
+Treat every candidate finding, including those from the built-in review, as unconfirmed until it
+is checked against the branch as it is now:
+
+- **Location:** re-read the cited lines and their surroundings on the reviewed branch; the path and
+  line numbers must be exact.
+- **Introduced here:** the problem lines, or the behaviour that triggers the problem, are part of
+  `git diff <base>...HEAD`. A pre-existing problem goes at most under "Nice to have", labelled as
+  pre-existing.
+- **Concrete trigger:** trace the input, call path, or sequence of events that makes it fail, and
+  name the callers or files involved. A suspicion that something elsewhere might break is not a
+  finding.
+- **Demonstration:** where it is cheap and safe, run the relevant existing test or a throwaway
+  reproduction script outside the repository. Never edit or add files in the repository.
+- **Fix:** check that the suggested code removes the failure and fits the surrounding code.
+
+Drop findings that do not survive. Keep a likely but unconfirmed finding only under "Should fix" or
+"Nice to have", and say exactly what remains unconfirmed. Record how each finding was checked in
+its **Verified:** line.
+
+### 5. Write `CODE_REVIEW.md`
 
 Write to the repository root. Use exactly this structure:
 
@@ -110,6 +138,7 @@ Every finding, regardless of severity, uses this shape:
 #### <Short plain-language title>
 **Where:** `path/to/file.ext`, lines 42–58
 **Severity:** Blocker — <one sentence on why it's in this bucket>
+**Verified:** <how it was confirmed — test run, reproduction, or traced call path — or what remains unconfirmed>
 
 **What's happening:** <the mechanics, in ordinary words. Define jargon on first use.>
 
@@ -192,7 +221,8 @@ Use the project's real test/lint/build commands, taken from its `package.json`, 
 ## Rules that keep this useful
 
 - **Review only.** Do not edit source files, do not commit, do not push, do not post comments to
-  GitHub/GitLab. The only file written is `CODE_REVIEW.md`. Verify with `git status` at the end —
+  GitHub/GitLab. The only file written is `CODE_REVIEW.md`; running existing tests or throwaway
+  scripts outside the repository to verify findings is fine. Check `git status` at the end —
   nothing but that file should have changed.
 - **Real line numbers.** Every location must come from the actual branch state. Never approximate
   or invent a path or line.
@@ -209,6 +239,7 @@ Use the project's real test/lint/build commands, taken from its `package.json`, 
 - `CODE_REVIEW.md` exists at the repo root with all the sections above.
 - Every finding has: plain-language explanation, concrete example, severity, file and line
   numbers, and before/after code.
+- Every finding passed the verification step and says how; anything unconfirmed is labelled.
 - The step-by-step section names a specific file and specific lines and gives paste-ready comment
   text for every comment it asks for.
 - `git status` shows no modified source files.

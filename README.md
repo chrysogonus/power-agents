@@ -339,10 +339,11 @@ frontmatter `name` must exactly match the directory name. Rerun `./install.sh`
 after adding a skill so both agents receive its per-skill link. Edits to an
 already linked skill are available immediately.
 
-Use `deep-review` for general code reviews. Use `review-report` when findings
-should be written to a file, explained for a reader without codebase context,
-or provided as paste-ready review comments. Both skills include routing
-fixtures in `evals/evals.json`; the checks validate their schema, but do not
+Use the runtime's built-in review (`/review` in Codex, `/code-review` in Claude
+Code) for general code reviews. Use `review-report` when findings should be
+written to a file, explained for a reader without codebase context, or provided
+as paste-ready review comments. Its routing fixtures in `evals/evals.json` cover
+both sides of that boundary; the checks validate their schema, but do not
 execute agent sessions or measure routing pass rates. Run the opt-in evaluations
 below to measure their behavior.
 
@@ -373,7 +374,7 @@ unset ANTHROPIC_API_KEY
 To limit the fixture set or change the defaults:
 
 ```bash
-make eval EVAL_ARGS='--skill deep-review --repeats 5 --threshold 0.8'
+make eval EVAL_ARGS='--skill review-report --repeats 5 --threshold 0.8'
 ```
 
 Select instructions explicitly when comparing variants (each command makes paid

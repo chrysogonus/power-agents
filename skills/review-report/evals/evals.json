@@ -4,51 +4,42 @@
     {
       "id": 1,
       "prompt": "Check the proposed database migration for correctness and data-loss risks. I will send the migration next.",
-      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "expected_output": "Do not load review-report: this is a general review that belongs to the runtime's built-in review. Wait for the promised artifacts without inventing results.",
       "assertions": [
-        "The first review skill loaded is deep-review, rather than review-report.",
+        "review-report is not loaded.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
-        "required": [
-          "deep-review"
-        ],
-        "allowed": [
-          "deep-review"
+        "forbidden": [
+          "review-report"
         ]
       }
     },
     {
       "id": 2,
       "prompt": "Review my branch against main for regressions before merge. I will provide the repository next.",
-      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "expected_output": "Do not load review-report: this is a general review that belongs to the runtime's built-in review. Wait for the promised artifacts without inventing results.",
       "assertions": [
-        "The first review skill loaded is deep-review, rather than review-report.",
+        "review-report is not loaded.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
-        "required": [
-          "deep-review"
-        ],
-        "allowed": [
-          "deep-review"
+        "forbidden": [
+          "review-report"
         ]
       }
     },
     {
       "id": 3,
       "prompt": "Look for correctness bugs and missing coverage in this patch. I will send it next.",
-      "expected_output": "The request routes to deep-review and loads that skill before any review work. The response waits for the promised repository or diff.",
+      "expected_output": "Do not load review-report: this is a general review that belongs to the runtime's built-in review. Wait for the promised artifacts without inventing results.",
       "assertions": [
-        "The first review skill loaded is deep-review, rather than review-report.",
+        "review-report is not loaded.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
-        "required": [
-          "deep-review"
-        ],
-        "allowed": [
-          "deep-review"
+        "forbidden": [
+          "review-report"
         ]
       }
     },
@@ -57,16 +48,11 @@
       "prompt": "Review the upload changes and save the findings in CODE_REVIEW.md. I will provide the repository next.",
       "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
       "assertions": [
-        "The first review skill loaded is review-report, rather than deep-review.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
         "required": [
           "review-report"
-        ],
-        "allowed": [
-          "review-report",
-          "deep-review"
         ]
       }
     },
@@ -75,16 +61,11 @@
       "prompt": "Explain your review of this patch for a teammate unfamiliar with the project. I will send the patch next.",
       "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
       "assertions": [
-        "The first review skill loaded is review-report, rather than deep-review.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
         "required": [
           "review-report"
-        ],
-        "allowed": [
-          "review-report",
-          "deep-review"
         ]
       }
     },
@@ -93,16 +74,11 @@
       "prompt": "Give me review comments with exact file locations that I can paste into the pull request. I will send the diff next.",
       "expected_output": "The request routes to review-report and loads that skill before any review work. The response waits for the promised repository or diff.",
       "assertions": [
-        "The first review skill loaded is review-report, rather than deep-review.",
         "The response does not invent review findings before the repository or diff is supplied."
       ],
       "routing": {
         "required": [
           "review-report"
-        ],
-        "allowed": [
-          "review-report",
-          "deep-review"
         ]
       }
     }

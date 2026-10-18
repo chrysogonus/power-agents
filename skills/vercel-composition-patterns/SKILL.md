@@ -3,7 +3,7 @@ name: vercel-composition-patterns
 description: Use when designing or refactoring reusable React component APIs, compound components,
   context providers, or components with too many boolean props. For React or Next.js rendering,
   data-fetching, or bundle performance use vercel-react-best-practices. General reviews belong
-  to deep-review or review-report.
+  to the built-in review or review-report.
 license: MIT
 metadata:
   author: vercel

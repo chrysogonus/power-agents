@@ -32,11 +32,9 @@
       "prompt": "Review this patch for correctness and missing tests before merge. I will send the patch next.",
       "expected_output": "Select the general review capability without starting a specialized security audit.",
       "routing": {
-        "required": [
-          "deep-review"
-        ],
         "forbidden": [
-          "security-best-practices"
+          "security-best-practices",
+          "review-report"
         ]
       },
       "assertions": [

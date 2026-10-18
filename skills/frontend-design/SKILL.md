@@ -3,7 +3,7 @@ name: frontend-design
 description: Use when building new frontend UI or redesigning its visual identity, typography,
   palette, or layout from a product brief. Preserve explicit design requirements and existing
   identity during refinement. For worst-case content and UI edge-case testing use break-ui;
-  for React performance use vercel-react-best-practices. General code reviews belong to deep-review
+  for React performance use vercel-react-best-practices. General code reviews belong to the built-in review
   or review-report.
 license: Complete terms in LICENSE.txt
 metadata:

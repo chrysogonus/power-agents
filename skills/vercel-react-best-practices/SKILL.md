@@ -3,7 +3,7 @@ name: vercel-react-best-practices
 description: Use when writing React or Next.js components, implementing their data fetching,
   or addressing a measured request waterfall, rendering slowdown, or bundle-size problem. For
   component API design and boolean-prop proliferation use vercel-composition-patterns; for Postgres
-  SQL use supabase-postgres-best-practices. General code reviews belong to deep-review or review-report.
+  SQL use supabase-postgres-best-practices. General code reviews belong to the built-in review or review-report.
 license: MIT
 metadata:
   author: vercel

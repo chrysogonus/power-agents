@@ -2,7 +2,7 @@
 name: code-simplification
 description: Use when refactoring working code for readability and maintainability while preserving
   behavior, exceptions, ordering, and side effects. For implementing new behavior or fixing
-  a bug with a minimal solution use ponytail. General code reviews belong to deep-review or
+  a bug with a minimal solution use ponytail. General code reviews belong to the built-in review or
   review-report.
 metadata:
   evaluation-status: unmeasured

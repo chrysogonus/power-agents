@@ -3,7 +3,7 @@ name: ponytail
 description: Use when implementing new functionality or a bug fix and choosing the smallest
   suitable existing, standard-library, or native-platform solution; also when the user asks
   for Ponytail or a minimal implementation. For readability refactors of working code use code-simplification.
-  General reviews belong to deep-review or review-report.
+  General reviews belong to the built-in review or review-report.
 argument-hint: '[lite|full|ultra]'
 license: MIT
 metadata:
