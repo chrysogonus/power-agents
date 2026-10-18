@@ -1,0 +1,25 @@
+--- a/parser.py
++++ b/parser.py
+@@ -1,12 +1,11 @@
++def _parse(value, name):
++    if not isinstance(value, str):
++        raise TypeError(f'{name} must be text')
++    value = value.strip()
++    if not value:
++        raise ValueError(f'{name} is empty')
++    return value
++
++
+ def parse_pair(left, right):
+-    if not isinstance(left, str):
+-        raise TypeError('left must be text')
+-    left = left.strip()
+-    if not left:
+-        raise ValueError('left is empty')
+-    if not isinstance(right, str):
+-        raise TypeError('right must be text')
+-    right = right.strip()
+-    if not right:
+-        raise ValueError('right is empty')
+-    return left, right
++    return _parse(left, 'left'), _parse(right, 'right')

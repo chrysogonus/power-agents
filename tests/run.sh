@@ -1077,7 +1077,7 @@ test_make_targets() {
   actual="$(make --no-print-directory -C "$ROOT")"
   assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
 
-  for target in install sync test check ci eval; do
+  for target in install sync test check ci eval coding-eval; do
     actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
     case "$target" in
       install) [[ "$actual" == "./install.sh" ]] ;;
@@ -1086,6 +1086,7 @@ test_make_targets() {
       check) [[ "$actual" == "./scripts/check.sh" ]] ;;
       ci) [[ "$actual" == "./scripts/ci.sh" ]] ;;
       eval) [[ "$actual" == "python3 ./scripts/run-evals.py " ]] ;;
+      coding-eval) [[ "$actual" == "python3 ./scripts/run-coding-evals.py " ]] ;;
     esac || fail "Unexpected make $target command: $actual"
   done
 }
@@ -1110,6 +1111,9 @@ test_project_instruction_entrypoints
 pass "AGENTS.md is the sole project instruction entrypoint"
 python3 "$ROOT/tests/test_validate_skills.py"
 pass "shared skill metadata and evaluation validator"
+python3 "$ROOT/tests/test_coding_fixtures.py"
+python3 "$ROOT/tests/test_run_coding_evals.py"
+pass "coding fixture integrity and isolated runtime adapters"
 python3 "$ROOT/tests/test_run_evals.py"
 pass "isolated evaluation runner with a fake runtime"
 test_installer_rejects_invalid_skill_metadata

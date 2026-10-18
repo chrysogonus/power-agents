@@ -111,6 +111,7 @@ Run these from your checkout. `make` alone lists the available commands.
 | `make check` | Validate the current working tree, including behavioral tests. |
 | `make ci` | Run checks against the working tree and an archive of `HEAD`. |
 | `make eval` | Run opt-in skill evaluations using paid Anthropic API calls. See [setup and costs](#behavioral-skill-evaluations). |
+| `make coding-eval` | Describe coding-outcome trials; supply an agent and model. Paid execution additionally requires `--execute`. See [coding evaluations](docs/coding-evaluations.md). |
 
 The Make targets delegate to repository scripts, which are also available for
 direct use (for example, `./install.sh` and `./scripts/check.sh`).
@@ -439,6 +440,24 @@ when needed; `python3 scripts/run-evals.py --help` lists all options. Codex is n
 supported as an evaluation runtime yet.
 
 </details>
+
+## Coding Outcome Evaluations
+
+A separate [coding runner](docs/coding-evaluations.md) evaluates retry idempotence,
+settings preservation, and a parser refactor using independent acceptance and
+regression checks. It supports isolated Claude Code and Codex adapters and
+baseline/candidate/no-instruction comparisons. By default it only describes the
+planned trials:
+
+```bash
+make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline candidate none --repeats 2'
+```
+
+Replace the model placeholder before execution. Offline fake-runtime tests run
+in ordinary checks; live calls require separate model/budget authorization and
+`--execute`. Codex execution is limited to one supervised trial at a time because
+this adapter has no dollar cap. No paid calibration has run and no new global
+default has been selected. See the [12-trial protocol](docs/coding-evaluations.md#authorized-12-trial-calibration).
 
 ## Updating the Authored Command Policy
 

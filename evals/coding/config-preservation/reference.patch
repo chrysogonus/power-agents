@@ -1,0 +1,9 @@
+--- a/settings.py
++++ b/settings.py
+@@ -5,3 +5,5 @@
+     data = json.loads(path.read_text())
+-    data['managed'] = {'enabled': True}
++    managed = data.setdefault('managed', {})
++    managed['enabled'] = True
++    managed['retry_limit'] = 3
+     path.write_text(json.dumps(data, indent=2) + '\n')

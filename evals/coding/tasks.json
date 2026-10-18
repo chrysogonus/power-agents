@@ -1,0 +1,76 @@
+{
+  "tasks": [
+    {
+      "id": "retry-idempotence",
+      "snapshot": "retry-idempotence/workspace",
+      "prompt": "Fix Runner.run in retry.py so repeat calls with the same operation ID return the previous successful result without repeating the side effect. Cache falsey results, including None. Different IDs remain independent. Exceptions propagate and failed operations can be retried. This is synchronous and in memory; no concurrency or persistence is required. Preserve the API and README.md.",
+      "verification": [
+        "python3",
+        "retry-idempotence/checks/acceptance.py"
+      ],
+      "regression_verification": [
+        "python3",
+        "retry-idempotence/checks/regression.py"
+      ],
+      "reference_patch": "retry-idempotence/reference.patch",
+      "implementation_paths": [
+        "retry.py"
+      ],
+      "protected_paths": [
+        "README.md"
+      ],
+      "timeout_seconds": 180,
+      "verification_timeout_seconds": 10,
+      "baseline_acceptance": false,
+      "manual_review": false
+    },
+    {
+      "id": "config-preservation",
+      "snapshot": "config-preservation/workspace",
+      "prompt": "Extend settings.py reconcile(path) to set managed.retry_limit to 3 while keeping managed.enabled true. Only these two nested keys are owned: preserve unknown keys, including unknown keys inside managed. Valid input is a JSON object whose managed field, if present, is an object. Repeated runs must be idempotent. Malformed JSON must raise JSONDecodeError and leave the file unchanged. Preserve the API and README.md.",
+      "verification": [
+        "python3",
+        "config-preservation/checks/acceptance.py"
+      ],
+      "regression_verification": [
+        "python3",
+        "config-preservation/checks/regression.py"
+      ],
+      "reference_patch": "config-preservation/reference.patch",
+      "implementation_paths": [
+        "settings.py"
+      ],
+      "protected_paths": [
+        "README.md"
+      ],
+      "timeout_seconds": 180,
+      "verification_timeout_seconds": 10,
+      "baseline_acceptance": false,
+      "manual_review": false
+    },
+    {
+      "id": "parser-refactor",
+      "snapshot": "parser-refactor/workspace",
+      "prompt": "Refactor parser.py parse_pair(left, right) to remove duplicate validation and trimming while preserving behavior. Preserve return values, exception types and messages, and left-before-right evaluation order, including str subclasses. Do not change the API or README.md or add dependencies. The function already works; this is a readability cleanup.",
+      "verification": [
+        "python3",
+        "parser-refactor/checks/acceptance.py"
+      ],
+      "regression_verification": [
+        "python3",
+        "parser-refactor/checks/regression.py"
+      ],
+      "reference_patch": "parser-refactor/reference.patch",
+      "implementation_paths": [
+        "parser.py"
+      ],
+      "protected_paths": [
+        "README.md"
+      ],
+      "timeout_seconds": 180,
+      "verification_timeout_seconds": 10,
+      "baseline_acceptance": true,
+      "manual_review": true
+    }
+  ]
+}

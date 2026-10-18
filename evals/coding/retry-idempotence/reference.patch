@@ -1,0 +1,7 @@
+--- a/retry.py
++++ b/retry.py
+@@ -5,2 +5,4 @@
+     def run(self, operation_id, operation):
++        if operation_id in self.results:
++            return self.results[operation_id]
+         result = operation()

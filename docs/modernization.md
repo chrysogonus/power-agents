@@ -29,6 +29,10 @@ installation, review-skill consolidation, changes to active skill descriptions,
 and Grilling specification generation. Those need separate implementation and
 validation; none is necessary to correct the current routing measurements.
 
+Follow-up: the [coding-outcome runner](coding-evaluations.md) now implements the
+offline harness and both adapters. Live results remain unmeasured. The deferred
+list above records the original first-phase scope.
+
 ## Candidate changes
 
 | Baseline material | Candidate treatment |
