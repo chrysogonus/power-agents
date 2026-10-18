@@ -5,9 +5,11 @@ components retain their own licenses and attribution.
 
 ## Karpathy-Inspired Claude Code Guidelines
 
-Portions of `instructions/general-global.md` are adapted from
+Earlier versions of `instructions/general-global.md` were adapted from
 [`multica-ai/andrej-karpathy-skills`](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md),
-authored by `forrestchang` and distributed under the MIT License.
+authored by `forrestchang` and distributed under the MIT License. The current
+file keeps only two rephrased ideas: stating assumptions instead of guessing,
+and mentioning unrelated dead code instead of removing it.
 
 Copyright (c) 2026 forrestchang
 
