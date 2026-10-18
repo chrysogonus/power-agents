@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -129,6 +130,72 @@ class RunEvalsTests(unittest.TestCase):
         self.assertEqual(trial["loaded_skills"], [])
         self.assertEqual(trial["status"], "FAIL")
         self.assertTrue(all(item["passed"] for item in trial["assertions"]))
+
+    def set_routing(self, routing):
+        fixture = self.skills / "example-skill" / "evals" / "evals.json"
+        document = json.loads(fixture.read_text())
+        document["evals"][0]["routing"] = routing
+        fixture.write_text(json.dumps(document))
+
+    def test_explicit_routing_is_checked_independently_of_judge(self):
+        cases = (
+            ({"allowed": []}, "no-load", "PASS", "correct_no_skill"),
+            ({"allowed": []}, "success", "FAIL", "incorrect_activation"),
+            ({"required": ["other-skill"]}, "success", "FAIL", "missing_required"),
+            ({"required": ["example-skill"]}, "no-load", "FAIL", "missing_required"),
+            ({"required": ["example-skill"], "allowed": ["example-skill"]},
+             "success", "PASS", "correct_activation"),
+            ({"forbidden": ["example-skill"]}, "success", "FAIL", "incorrect_activation"),
+        )
+        for routing, mode, status, outcome in cases:
+            with self.subTest(routing=routing, mode=mode):
+                self.set_routing(routing)
+                result, output = self.run_eval(mode, extra=("--skill", "example-skill"))
+                self.assertEqual(result.returncode, 0 if status == "PASS" else 1, result.stderr)
+                trial = self.document(output)["cases"][0]["trials"][0]
+                self.assertEqual(trial["routing"]["outcome"], outcome)
+                self.assertEqual(trial["status"], status)
+                self.assertTrue(all(item["passed"] for item in trial["assertions"]))
+
+    def test_instruction_variants_are_native_files_and_judge_is_clean(self):
+        custom = self.directory / "custom.md"
+        custom.write_text("Custom global instructions.\n")
+        for variant in ("baseline", "candidate", "none", "custom"):
+            with self.subTest(variant=variant):
+                option = (("--instruction-file", str(custom)) if variant == "custom"
+                          else ("--instructions", variant))
+                result, output = self.run_eval("inspect-instructions",
+                    extra=("--skill", "example-skill", *option))
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                report = self.document(output)
+                source = {"baseline": ROOT / "instructions/general-global.md",
+                          "candidate": ROOT / "instructions/general-global.candidate.md",
+                          "custom": custom}.get(variant)
+                self.assertEqual(report["instructions"]["variant"], variant)
+                self.assertEqual(report["instructions"]["sha256"],
+                    hashlib.sha256(source.read_bytes()).hexdigest() if source else None)
+                trial = report["cases"][0]["trials"][0]
+                self.assertEqual(trial["subject"]["stdout"].count("native-instructions"),
+                                 0 if variant == "none" else 1)
+                if source:
+                    self.assertIn(report["instructions"]["sha256"], trial["subject"]["stdout"])
+                self.assertEqual(trial["plugins"], [])
+                self.assertNotIn("native-instructions", trial["judge"]["stdout"])
+
+    def test_invalid_instruction_options_and_routing_fail_before_runtime(self):
+        result, _ = self.run_eval(extra=("--instruction-file", str(self.directory / "missing")))
+        self.assertEqual(result.returncode, 2)
+        for routing in ({}, None, [], {"required": [["example-skill"]]},
+                        {"allowed": ["example-skill", "example-skill"]},
+                        {"required": "example-skill"}, {"unknown": []},
+                        {"required": ["missing"]}, {"allowed": [1]},
+                        {"required": ["example-skill"], "allowed": []},
+                        {"required": ["example-skill"], "forbidden": ["example-skill"]}):
+            with self.subTest(routing=routing):
+                self.set_routing(routing)
+                result, _ = self.run_eval()
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("routing", result.stderr)
 
     def test_timeout_is_error(self):
         result, output = self.run_eval("timeout", extra=("--timeout", "0.1"))

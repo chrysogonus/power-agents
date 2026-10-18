@@ -1,0 +1,82 @@
+{
+  "skill_name": "security-best-practices",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Please give me security best practices for a Python FastAPI API handling session cookies. I will send the implementation next.",
+      "expected_output": "Select security-best-practices for explicitly requested guidance in a supported language, without inventing details of the unseen implementation.",
+      "routing": {
+        "required": [
+          "security-best-practices"
+        ]
+      },
+      "assertions": [
+        "The response does not claim to have inspected the implementation."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want secure-by-default guidance for a TypeScript browser application handling user-supplied HTML. I will provide the code next.",
+      "expected_output": "Select security-best-practices for the explicit TypeScript security request.",
+      "routing": {
+        "required": [
+          "security-best-practices"
+        ]
+      },
+      "assertions": [
+        "The response does not invent vulnerabilities in code that has not been supplied."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review this patch for correctness and missing tests before merge. I will send the patch next.",
+      "expected_output": "Select the general review capability without starting a specialized security audit.",
+      "routing": {
+        "required": [
+          "deep-review"
+        ],
+        "forbidden": [
+          "security-best-practices"
+        ]
+      },
+      "assertions": [
+        "The response does not invent findings before seeing the patch."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What does len([]) return in Python?",
+      "expected_output": "Answer that it returns zero without loading a skill.",
+      "routing": {
+        "allowed": []
+      },
+      "assertions": [
+        "The response correctly states that len([]) returns 0."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "What is the difference between a Python list and a tuple? A short explanation is enough.",
+      "expected_output": "Explain mutability without initiating an implementation, interview, or audit.",
+      "routing": {
+        "allowed": []
+      },
+      "assertions": [
+        "The response explains that lists are mutable and tuples are immutable."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "$security-best-practices give me security guidance for a Go HTTP service. I will provide the source next.",
+      "expected_output": "Honor the explicit security skill invocation for Go without claiming to review unseen source.",
+      "routing": {
+        "required": [
+          "security-best-practices"
+        ]
+      },
+      "assertions": [
+        "The response does not claim to have reviewed source code."
+      ]
+    }
+  ]
+}

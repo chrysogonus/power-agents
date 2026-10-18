@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline Claude protocol fixture, configured only by the test's wrapper."""
 
+import hashlib
 import json
 import os
 import sys
@@ -42,6 +43,7 @@ def main(mode: str, counter: Path) -> None:
     assert settings["disableAllHooks"] is True
     if judge:
         assert not (config / "skills").exists()
+        assert not (config / "CLAUDE.md").exists()
         installed = []
     else:
         installed = sorted(p.name for p in (config / "skills").iterdir())
@@ -65,7 +67,7 @@ def main(mode: str, counter: Path) -> None:
         sys.exit(1)
 
     emit({"type": "system", "subtype": "init", "model": "fake-model",
-          "slash_commands": [] if mode == "undiscovered" else installed})
+          "slash_commands": [] if mode == "undiscovered" else installed, "plugins": []})
     if judge:
         data = json.loads(prompt)
         grades = []
@@ -98,6 +100,10 @@ def main(mode: str, counter: Path) -> None:
         return
     if mode == "invalid-block":
         emit({"type": "assistant", "message": {"content": "invalid"}})
+    if mode == "inspect-instructions" and (config / "CLAUDE.md").exists():
+        assert (config / "CLAUDE.md").read_text().strip()
+        emit({"type": "system", "subtype": "native-instructions",
+              "sha256": hashlib.sha256((config / "CLAUDE.md").read_bytes()).hexdigest()})
     response = "FAIL" if mode == "one-failure" and count % 5 == 4 else "PASS fixture response"
     if mode == "redact":
         response += " " + os.environ["ANTHROPIC_API_KEY"]

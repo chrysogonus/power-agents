@@ -37,8 +37,8 @@ review, use `deep-review`. To write findings to `CODE_REVIEW.md`, use
 
 These ten skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
-unmeasured. Each package includes its required references, license, and four
-routing fixtures. Pinned origins and adaptations are recorded in
+unmeasured. Each package includes its required references, license, and routing
+fixtures. Pinned origins and adaptations are recorded in
 [Third-Party Notices](../THIRD_PARTY_NOTICES.md#skills-integrated-from-the-research-catalog).
 
 | Skill | Purpose and boundary |
@@ -114,6 +114,29 @@ keeping all skills available for routing. See the repository's
 [evaluation instructions](../README.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
+All 15 skills now have fixture sets, including security-specific positive and
+negative cases and simple questions that should load no skill. This is coverage,
+not evidence of live routing success.
+
+Fixtures can add a `routing` object:
+
+```json
+{"required": ["review-report"], "allowed": ["review-report", "deep-review"]}
+```
+
+`required` lists skills that must successfully load; `allowed`, when present,
+limits all loads; `forbidden` lists skills that must not load. Lists contain
+unique existing skill names. Required skills must be allowed and cannot be
+forbidden. Use `{"allowed": []}` for a no-skill task. When `routing` is absent,
+the old requirement to load any repository skill remains for compatibility.
+The judge still grades response assertions; routing checks do not depend on its
+opinion. Reports include missing required skills and unexpected activations.
+Keep prompts natural, and test explicit invocation separately. Review routing
+fixtures use distinct prompts; other legacy fixture sets are retained.
+
+Compare global instruction variants with `--instructions baseline|candidate|none`
+or `--instruction-file PATH`. See the [comparison protocol](../docs/modernization.md)
+for isolation, interpretation, and external instruction conflicts.
 
 ## Adding a Skill
 

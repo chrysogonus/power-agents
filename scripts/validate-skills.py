@@ -107,6 +107,27 @@ def validate_evals(skill_dir: Path, skill_name: str) -> list[str]:
                 f"{location} assertions must be a non-empty array of strings"
             )
 
+        if "routing" in evaluation:
+            routing = evaluation["routing"]
+            if (not isinstance(routing, dict) or not routing
+                    or set(routing) - {"required", "allowed", "forbidden"}):
+                errors.append(f"{location} routing must specify required, allowed, or forbidden lists")
+            else:
+                valid = True
+                for field, names in routing.items():
+                    if (not isinstance(names, list)
+                            or any(not isinstance(name, str) or not SKILL_NAME_PATTERN.fullmatch(name)
+                                   or not (skill_dir.parent / name / "SKILL.md").is_file()
+                                   for name in names)
+                            or len(names) != len(set(names))):
+                        errors.append(f"{location} routing {field} must list unique existing skills")
+                        valid = False
+                if valid:
+                    required = set(routing.get("required", []))
+                    if (required & set(routing.get("forbidden", []))
+                            or ("allowed" in routing and not required <= set(routing["allowed"]))):
+                        errors.append(f"{location} routing requirements contradict allowed or forbidden skills")
+
         files = evaluation.get("files")
         if files is None:
             continue

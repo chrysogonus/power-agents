@@ -375,12 +375,31 @@ To limit the fixture set or change the defaults:
 make eval EVAL_ARGS='--skill deep-review --repeats 5 --threshold 0.8'
 ```
 
+Select instructions explicitly when comparing variants (each command makes paid
+API calls; run only with an authorized budget):
+
+```bash
+make eval EVAL_ARGS='--instructions baseline --skill security-best-practices'
+make eval EVAL_ARGS='--instructions candidate --skill security-best-practices'
+make eval EVAL_ARGS='--instructions none --skill security-best-practices'
+# Or use --instruction-file /absolute/path/to/experimental.md
+```
+
+The default is now **baseline**; use `--instructions none` to reproduce the old
+runner's absence of global instructions. The candidate is experimental and is
+not installed by `make install`. These are routing/response evaluations with
+only the Skill tool: they do not establish coding quality or prove runtime
+instruction loading through fake-runtime tests. See the
+[first-phase change report and comparison protocol](docs/modernization.md).
+
 <details>
 <summary>Evaluation isolation, grading, and runtime details</summary>
 
 All repository skills remain installed during a filtered run, so routing can
 select a different skill. Each trial starts with a temporary home, config root,
-and working directory. It loads no live user configuration or credentials;
+and working directory. By default, the baseline `instructions/general-global.md`
+is copied to the isolated Claude user-wide `CLAUDE.md`; instruction text is never
+inserted into the task prompt. It loads no live user configuration or credentials;
 only `ANTHROPIC_API_KEY` is forwarded. Cases get the Skill tool only; this first
 runner supports the repository's prompt-only fixture sets. File fixtures
 produce an explicit error. The judge has its own empty config and
@@ -388,17 +407,24 @@ no tools; it treats prompts, expected outputs, assertions, and transcripts as
 untrusted data.
 
 The default is five trials per case and an 80% minimum pass rate. A trial passes
-only when a repository skill successfully loads and every assertion passes.
+when explicit routing expectations and every assertion pass. A fixture with
+`"routing": {"allowed": []}` can pass without loading a skill. Legacy fixtures
+without routing expectations still require a repository skill load.
 Skill loading is observed through matching Skill calls and successful tool
 results, rather than the agent's statements. Judge evidence must quote the
-observed response or load record. Failed assertions or missing skill loads count
-as failed trials. Runtime, protocol, or judge errors invalidate the run even if
-the remaining trials reach the threshold. Missing runtime or environment key
+observed response or load record. Required, allowed, and forbidden skills are
+checked deterministically, independently of the judge. Failed assertions or
+routing mismatches count as failed trials. Runtime, protocol, or judge errors
+invalidate the run even if the remaining trials reach the threshold. Missing runtime or environment key
 reports `SKIP`; it never reports `PASS`.
 
 Results go to the gitignored `eval-results/<run-id>/results.json` and `summary.md`,
 including per-case pass rates, each assertion's grade and evidence, redacted
-runtime transcripts, actual model names, runtime version, and source-file hashes.
+runtime transcripts, actual model names, runtime version, source-file hashes,
+instruction variant/path/hash, and configured isolation settings. Schema version
+2 adds deterministic routing results and runtime-reported plugin metadata
+(`null` when the runtime does not report it). The judge never receives the global
+instruction file.
 Exit codes are 0 for passing cases, 1 for a case below threshold, and 2 for
 `SKIP`, operational errors, or invalid arguments. Result directories are private
 and an existing result directory is never overwritten.

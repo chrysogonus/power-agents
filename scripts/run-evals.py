@@ -71,6 +71,22 @@ def load_cases(skills_root: Path, selected: str | None) -> list[dict[str, Any]]:
     return cases
 
 
+def check_routing(case: dict[str, Any], loaded: list[str], installed: list[str]) -> dict[str, Any]:
+    routing = case.get("routing")
+    if routing is None:
+        # Preserve the old contract for fixtures without explicit expectations.
+        return {"passed": bool(set(loaded) & set(installed)), "outcome": "legacy_any_skill"}
+    observed = set(loaded)
+    missing = sorted(set(routing.get("required", [])) - observed)
+    unexpected = observed & set(routing.get("forbidden", []))
+    if "allowed" in routing:
+        unexpected |= observed - set(routing["allowed"])
+    outcome = ("incorrect_activation" if unexpected else "missing_required" if missing
+               else "correct_activation" if observed else "correct_no_skill")
+    return {"passed": not missing and not unexpected, "outcome": outcome,
+            "missing_required": missing, "unexpected_skills": sorted(unexpected)}
+
+
 def parse_events(stdout: str) -> dict[str, Any]:
     events = []
     for line in stdout.splitlines():
@@ -95,8 +111,10 @@ def parse_events(stdout: str) -> dict[str, Any]:
     loaded = []
     model = None
     discovered = []
+    plugins = None
     for event in events:
         if event.get("type") == "system" and event.get("subtype") == "init":
+            plugins = event.get("plugins")
             model = event.get("model")
             discovered = event.get("slash_commands", [])
             if not isinstance(discovered, list) or any(not isinstance(name, str) for name in discovered):
@@ -128,7 +146,7 @@ def parse_events(stdout: str) -> dict[str, Any]:
                 loaded.append(calls.pop(block["tool_use_id"]))
     if calls:
         raise ValueError("Skill invocation has no confirming tool result.")
-    return {"loaded_skills": loaded, "model": model, "discovered_skills": discovered,
+    return {"loaded_skills": loaded, "model": model, "discovered_skills": discovered, "plugins": plugins,
             "response": result.get("result", ""),
             "structured_output": result.get("structured_output"),
             "cost_usd": result.get("total_cost_usd"), "events": events}
@@ -232,9 +250,11 @@ def run_trial(runtime: str, args: argparse.Namespace, case: dict[str, Any]) -> d
         installed = []
         for skill in sorted(args.skills_root.iterdir()):
             if skill.is_dir():
-                # Copy only skills, not the host's configuration or project instructions.
+                # Copy repository skills, never host configuration or project instructions.
                 shutil.copytree(skill, config / "skills" / skill.name)
                 installed.append(skill.name)
+        if args.instruction_text is not None:
+            (config / "CLAUDE.md").write_text(args.instruction_text, encoding="utf-8")
         settings = config / "settings.json"
         settings.write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
         env = session_environment(home)
@@ -251,9 +271,10 @@ def run_trial(runtime: str, args: argparse.Namespace, case: dict[str, Any]) -> d
             if subject["error"]:
                 raise ValueError(subject["error"])
             observed = parse_events(subject["stdout"])
-            trial.update({key: observed[key] for key in ("loaded_skills", "model", "cost_usd")})
+            trial.update({key: observed[key] for key in ("loaded_skills", "model", "cost_usd", "plugins")})
             if not set(installed).issubset(set(observed["discovered_skills"])):
                 raise ValueError("Runtime did not discover every installed repository skill.")
+            trial["routing"] = check_routing(case, trial["loaded_skills"], installed)
             response = observed["response"]
             if not isinstance(response, str) or not response.strip():
                 raise ValueError("Runtime omitted its response.")
@@ -281,7 +302,7 @@ def run_trial(runtime: str, args: argparse.Namespace, case: dict[str, Any]) -> d
             trial["assertions"] = validate_grades(
                 graded["structured_output"], case["assertions"], response, observed["loaded_skills"])
             trial["repository_skill_loaded"] = any(name in installed for name in trial["loaded_skills"])
-            trial["status"] = "PASS" if (trial["repository_skill_loaded"]
+            trial["status"] = "PASS" if (trial["routing"]["passed"]
                 and all(item["passed"] for item in trial["assertions"])) else "FAIL"
         except (OSError, ValueError, TypeError) as error:
             trial["error"] = redact(str(error))
@@ -293,7 +314,10 @@ def write_results(output: Path, report: dict[str, Any]) -> None:
     lines = [f"# Skill evaluations: {report['status']}", "",
              f"Runtime: {report['runtime']} ({report.get('runtime_version') or 'not checked'}).",
              f"Trials per case: {report['repeats']}; minimum pass rate: {report['threshold']:.0%}.", "",
-             "A trial passes only when a repository skill loaded and every assertion passed.",
+             f"Instructions: {report['instructions']['variant']} "
+             f"(SHA-256: {report['instructions']['sha256'] or 'none'}).",
+             "A trial passes when routing expectations and every response assertion pass.",
+             "Legacy fixtures without routing expectations still require a repository skill load.",
              "Errors and skips count as zero passes; SKIP is not a measured routing rate.", "",
              "| Skill | Case | Status | Passed / trials | Pass rate |",
              "| --- | --- | --- | --- | --- |"]
@@ -305,6 +329,8 @@ def write_results(output: Path, report: dict[str, Any]) -> None:
         lines += ["", f"## {case['skill']}, case {case['id']}", ""]
         for index, trial in enumerate(case["trials"], start=1):
             lines.append(f"- Trial {index}: {trial['status']}; loaded {json.dumps(trial['loaded_skills'])}")
+            if trial.get("routing"):
+                lines.append(f"  - Routing: {json.dumps(trial['routing'])}")
             if trial.get("error"):
                 lines.append(f"  - {trial['error']}")
             for item in trial["assertions"]:
@@ -326,6 +352,11 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=180, help="Seconds per session (default: 180).")
     parser.add_argument("--skills-root", type=Path, default=ROOT / "skills")
     parser.add_argument("--output-dir", type=Path, help="New result directory; defaults to eval-results/<run-id>.")
+    instruction_options = parser.add_mutually_exclusive_group()
+    instruction_options.add_argument("--instructions", choices=("baseline", "candidate", "none"),
+                                     default="baseline", help="Global instruction variant (default: baseline).")
+    instruction_options.add_argument("--instruction-file", type=Path,
+                                     help="Custom global instructions instead of a built-in variant.")
     args = parser.parse_args()
     if args.repeats < 2 or not math.isfinite(args.threshold) or not 0 < args.threshold <= 1:
         parser.error("repeats must be at least 2 and threshold must be in (0, 1].")
@@ -333,6 +364,16 @@ def main() -> int:
         parser.error("timeout must be positive and finite.")
     args.skills_root = args.skills_root.resolve()
     try:
+        variant = "custom" if args.instruction_file else args.instructions
+        sources = {"baseline": ROOT / "instructions/general-global.md",
+                   "candidate": ROOT / "instructions/general-global.candidate.md",
+                   "custom": args.instruction_file, "none": None}
+        source = sources[variant]
+        instruction_bytes = source.read_bytes() if source else None
+        args.instruction_text = instruction_bytes.decode("utf-8") if instruction_bytes is not None else None
+        instructions = {"variant": variant, "source": str(source.resolve()) if source else None,
+                        "sha256": hashlib.sha256(instruction_bytes).hexdigest()
+                        if instruction_bytes is not None else None}
         cases = load_cases(args.skills_root, args.skill)
     except (OSError, ValueError) as error:
         print("ERROR: " + redact(str(error)), file=sys.stderr)
@@ -368,9 +409,13 @@ def main() -> int:
                 preflight = ("ERROR", redact(str(error)))
     hashes = {str(path.relative_to(args.skills_root)): hashlib.sha256(path.read_bytes()).hexdigest()
               for path in sorted(args.skills_root.rglob("*")) if path.is_file()}
-    report: dict[str, Any] = {"schema_version": 1, "run_id": run_id, "runtime": args.runtime,
+    report: dict[str, Any] = {"schema_version": 2, "run_id": run_id, "runtime": args.runtime,
         "runtime_version": version, "repeats": args.repeats, "threshold": args.threshold,
         "requested_model": args.model, "requested_judge_model": args.judge_model,
+        "instructions": instructions,
+        "environment": {"setting_sources": ["user"], "hooks_enabled": False,
+                        "mcp_servers": [], "subject_tools": ["Skill"],
+                        "host_configuration_loaded": False},
         "skill_file_sha256": hashes, "cases": []}
     for case in cases:
         record = {**case, "trials": []}

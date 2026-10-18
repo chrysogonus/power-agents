@@ -9,7 +9,15 @@
         "The underlying customer email is not written.",
         "The refined prompt preserves the two-day delay and customer audience.",
         "Vague wording is replaced with observable requirements."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "prompt-refiner"
+        ],
+        "forbidden": [
+          "coding-agent-brief"
+        ]
+      }
     },
     {
       "id": 2,
@@ -19,7 +27,15 @@
         "The refined prompt requires valid JSON with no prose or markdown.",
         "The output schema includes account_id and renewal_date with null handling.",
         "Every example response obeys the JSON-only contract."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "prompt-refiner"
+        ],
+        "forbidden": [
+          "coding-agent-brief"
+        ]
+      }
     },
     {
       "id": 3,
@@ -28,7 +44,15 @@
       "assertions": [
         "The response does not blur raw coding-task notes with an existing prompt draft.",
         "The response directs the request to coding-agent-brief."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "coding-agent-brief"
+        ],
+        "forbidden": [
+          "prompt-refiner"
+        ]
+      }
     }
   ]
 }
