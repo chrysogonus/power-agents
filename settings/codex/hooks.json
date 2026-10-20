@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"@VERIFY_GATE@\" mark --agent codex",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"@VERIFY_GATE@\" stop --agent codex",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

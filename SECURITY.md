@@ -10,6 +10,8 @@ and policy that runs or is consumed on that machine:
 - `install.sh` and `sync.sh`
 - `scripts/` and `tests/`
 - `settings/claude/statusline-command.sh`
+- `hooks/verify-gate.py`, which both agents run as a hook on every prompt and
+  stop
 - `policies/codex/shared.rules`
 - `settings/` and `instructions/` content that agents load automatically
 
@@ -51,6 +53,15 @@ The installer refuses to replace a same-name skill, a real file, or an incorrect
 symlink. It canonicalizes configuration roots before rejecting `/` or duplicate
 locations, preserves unmanaged values when reconciling the configured Claude
 and Codex settings files, and rolls back an installation if activation fails.
+
+Codex records hook trust against the hook *definition* in `hooks.json`, not the
+contents of the script it runs. After the first `/hooks` approval, changes to
+`hooks/verify-gate.py` reach Codex through the installed symlink, for example
+via `make sync`, without another Codex review. Claude Code likewise runs the
+current script contents. Signed sync is therefore the control for this script:
+only verified commits from allowlisted signers can change the code both agents
+run as hooks. With cross-review enabled, the script also sends session
+transcripts and diffs to the other agent's vendor; redaction is best-effort.
 
 ## Out of Scope
 

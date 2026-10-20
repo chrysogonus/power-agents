@@ -6,15 +6,20 @@ GLOBAL_INSTRUCTIONS="$ROOT/instructions/general-global.md"
 SKILLS="$ROOT/skills"
 CLAUDE_SETTINGS="$ROOT/settings/claude/settings.json"
 CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
+CLAUDE_HOOKS="$ROOT/settings/claude/hooks.json"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
+CODEX_HOOKS="$ROOT/settings/codex/hooks.json"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
 CODEX_CONFIG_RECONCILER="$ROOT/scripts/reconcile-codex-config.py"
+HOOKS_RECONCILER="$ROOT/scripts/reconcile-hooks.py"
+VERIFY_GATE="$ROOT/hooks/verify-gate.py"
 SKILL_VALIDATOR="$ROOT/scripts/validate-skills.py"
 INSTALL_HOME="$HOME"
 AGENTS_ROOT=""
 CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
 CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_STATUS_LINE_COMMAND=""
+VERIFY_GATE_COMMAND=""
 TRANSACTION_DIR=""
 # shellcheck disable=SC2034 # Read by the ERR trap at runtime.
 TRANSACTION_ACTIVE=0
@@ -190,6 +195,7 @@ AGENTS_ROOT="$INSTALL_HOME/.agents"
 canonicalize_install_root \
   "Shared configuration root" "$AGENTS_ROOT" AGENTS_ROOT
 CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
+VERIFY_GATE_COMMAND="$AGENTS_ROOT/hooks/verify-gate.py"
 
 if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: tomlkit" >&2
@@ -243,6 +249,14 @@ if [[ ! -f "$SKILL_VALIDATOR" ]]; then
   exit 1
 fi
 
+for required_file in \
+  "$CLAUDE_HOOKS" "$CODEX_HOOKS" "$HOOKS_RECONCILER" "$VERIFY_GATE"; do
+  if [[ ! -f "$required_file" ]]; then
+    echo "ERROR: Missing $required_file" >&2
+    exit 1
+  fi
+done
+
 validate_skills() {
   if ! python3 "$SKILL_VALIDATOR" "$SKILLS"; then
     echo "ERROR: Skill validation failed: $SKILLS" >&2
@@ -257,6 +271,17 @@ validate_codex_tui_settings() {
     echo "       Expected one [tui] section with status_line and status_line_use_colors." >&2
     return 1
   fi
+}
+
+validate_hook_fragments() {
+  local fragment
+
+  for fragment in "$CLAUDE_HOOKS" "$CODEX_HOOKS"; do
+    if ! python3 "$HOOKS_RECONCILER" validate-managed "$fragment"; then
+      echo "ERROR: Invalid managed hooks fragment: $fragment" >&2
+      return 1
+    fi
+  done
 }
 
 validate_claude_settings() {
@@ -403,6 +428,11 @@ validate_claude_settings_target() {
     echo "       Fix the file before installing so local settings can be preserved." >&2
     return 1
   fi
+
+  if ! python3 "$HOOKS_RECONCILER" validate-config "$target"; then
+    echo "ERROR: Invalid or unsupported Claude hooks: $target" >&2
+    return 1
+  fi
 }
 
 prepare_claude_settings() {
@@ -410,6 +440,7 @@ prepare_claude_settings() {
   local source="$CLAUDE_SETTINGS"
   local target="$CLAUDE_ROOT/settings.json"
   local input="/dev/null"
+  local status_line_output="$output.status-line"
 
   if [[ -f "$target" ]]; then
     input="$target"
@@ -418,8 +449,15 @@ prepare_claude_settings() {
   if ! jq -s --arg command "$CLAUDE_STATUS_LINE_COMMAND" '
     reduce .[] as $settings ({}; . + $settings) |
     .statusLine.command = $command
-  ' "$input" "$source" >"$output"; then
+  ' "$input" "$source" >"$status_line_output"; then
     echo "ERROR: Could not prepare Claude settings for $target" >&2
+    return 1
+  fi
+
+  if ! python3 "$HOOKS_RECONCILER" reconcile \
+    "$CLAUDE_HOOKS" "$status_line_output" "$output" \
+    --script "$VERIFY_GATE_COMMAND"; then
+    echo "ERROR: Could not prepare Claude hooks for $target" >&2
     return 1
   fi
 
@@ -471,6 +509,46 @@ prepare_codex_tui_settings() {
   if ! python3 "$CODEX_CONFIG_RECONCILER" \
     reconcile "$source" "$input" "$output"; then
     echo "ERROR: Could not prepare Codex config for $target" >&2
+    return 1
+  fi
+}
+
+validate_codex_hooks_target() {
+  local target="$CODEX_ROOT/hooks.json"
+
+  if [[ -L "$target" ]]; then
+    echo "ERROR: Refusing to update symlinked Codex hooks: $target" >&2
+    echo "       Replace it with a regular file so local hooks can be preserved." >&2
+    return 1
+  fi
+
+  if [[ -e "$target" && ! -f "$target" ]]; then
+    echo "ERROR: Codex hooks are not a regular file: $target" >&2
+    return 1
+  fi
+
+  [[ -f "$target" ]] || return 0
+
+  if ! python3 "$HOOKS_RECONCILER" validate-config "$target"; then
+    echo "ERROR: Invalid or unsupported Codex hooks: $target" >&2
+    echo "       Fix the file before installing so local hooks can be preserved." >&2
+    return 1
+  fi
+}
+
+prepare_codex_hooks() {
+  local output="$1"
+  local target="$CODEX_ROOT/hooks.json"
+  local input="/dev/null"
+
+  if [[ -f "$target" ]]; then
+    input="$target"
+  fi
+
+  if ! python3 "$HOOKS_RECONCILER" reconcile \
+    "$CODEX_HOOKS" "$input" "$output" \
+    --script "$VERIFY_GATE_COMMAND"; then
+    echo "ERROR: Could not prepare Codex hooks for $target" >&2
     return 1
   fi
 }
@@ -559,6 +637,7 @@ validate_legacy_codex_skills() {
 validate_skills
 validate_claude_settings
 validate_codex_tui_settings
+validate_hook_fragments
 validate_distinct_install_roots
 
 failed=0
@@ -578,6 +657,10 @@ validate_link_target \
   "$CODEX_SHARED_RULES" \
   "$CODEX_ROOT/rules/shared.rules" || failed=1
 validate_codex_config_target || failed=1
+validate_codex_hooks_target || failed=1
+validate_link_target \
+  "$VERIFY_GATE" \
+  "$VERIFY_GATE_COMMAND" || failed=1
 validate_legacy_codex_skills || failed=1
 
 if ((failed)); then
@@ -592,16 +675,20 @@ TRANSACTION_ACTIVE=1
 
 claude_candidate="$TRANSACTION_DIR/claude-settings.json"
 codex_candidate="$TRANSACTION_DIR/codex-config.toml"
+codex_hooks_candidate="$TRANSACTION_DIR/codex-hooks.json"
 prepare_claude_settings "$claude_candidate"
 prepare_codex_tui_settings "$codex_candidate"
+prepare_codex_hooks "$codex_hooks_candidate"
 
 ensure_directory "$AGENTS_ROOT"
+ensure_directory "$AGENTS_ROOT/hooks"
 ensure_directory "$CODEX_ROOT"
 ensure_directory "$CODEX_ROOT/rules"
 ensure_directory "$CLAUDE_ROOT"
 
 claude_staged=""
 codex_staged=""
+codex_hooks_staged=""
 stage_managed_file \
   "$claude_candidate" \
   "$CLAUDE_ROOT/settings.json" \
@@ -610,6 +697,10 @@ stage_managed_file \
   "$codex_candidate" \
   "$CODEX_ROOT/config.toml" \
   codex_staged
+stage_managed_file \
+  "$codex_hooks_candidate" \
+  "$CODEX_ROOT/hooks.json" \
+  codex_hooks_staged
 
 echo
 echo "Installing global agent configuration..."
@@ -635,8 +726,13 @@ install_link \
   "$CLAUDE_STATUS_LINE" \
   "$CLAUDE_ROOT/statusline-command.sh"
 
+# Both agents' hook entries run the verify gate through this link.
+install_link \
+  "$VERIFY_GATE" \
+  "$VERIFY_GATE_COMMAND"
+
 # Claude keeps machine-local state in settings.json, so only the centrally
-# managed statusLine key is reconciled.
+# managed statusLine key and verify-gate hook entries are reconciled.
 activate_managed_file \
   "Claude managed settings" \
   "$claude_staged" \
@@ -653,10 +749,18 @@ activate_managed_file \
   "$codex_staged" \
   "$CODEX_ROOT/config.toml"
 
+# Codex hooks.json may hold local hooks, so only the verify-gate entries are
+# reconciled instead of linking the complete file.
+activate_managed_file \
+  "Codex verify-gate hooks" \
+  "$codex_hooks_staged" \
+  "$CODEX_ROOT/hooks.json"
+
 TRANSACTION_ACTIVE=0
 
 echo
 echo "Done."
+echo "Codex: trust the verify-gate hooks with /hooks in a new session."
 echo
 echo "Canonical instructions:"
 echo "  $GLOBAL_INSTRUCTIONS"

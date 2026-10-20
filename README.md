@@ -18,6 +18,7 @@ Edit the source here to keep your setup consistent across projects and machines.
 | 15 reusable skills | Covers code review, task briefs, prompt editing, implementation, frontend design, React, Postgres, and more. [Browse the skills →](skills/README.md) |
 | Agent status lines | Configures Claude Code's command-based status line and Codex's terminal status line. |
 | Codex command rules | Adds authored approval rules alongside Codex's interactive rules. |
+| Self-verification and cross-review | Sends the agent back once to verify qualifying answers against evidence; optional cross-review asks the other agent for a read-only second opinion. See [Verify gate](#verify-gate-and-cross-review). |
 
 The installer configures **both agents**, even if only one is installed. It does
 not install the agents or set up their accounts. Existing unrelated skills and
@@ -94,6 +95,8 @@ installer to run again. Restart sessions when needed to reload instructions.
 | Codex approval rules | [`policies/codex/shared.rules`](policies/codex/shared.rules) |
 | Codex status-line fields and colors | [`settings/codex/tui.toml`](settings/codex/tui.toml) |
 | Claude Code status-line display | [`settings/claude/statusline-command.sh`](settings/claude/statusline-command.sh) |
+| Verify gate and cross-review behavior | [`hooks/verify-gate.py`](hooks/verify-gate.py) |
+| Verify gate hook entries | [`settings/claude/hooks.json`](settings/claude/hooks.json) and [`settings/codex/hooks.json`](settings/codex/hooks.json) |
 
 The root `AGENTS.md` contains instructions for working on this repository.
 The instructions installed globally, including skill-selection defaults, come from
@@ -165,6 +168,8 @@ cannot run after `SIGKILL`, a process crash, or machine failure.
 ```text
 ~/power-agents/
 ├── AGENTS.md
+├── hooks/
+│   └── verify-gate.py
 ├── instructions/
 │   └── general-global.md
 ├── policies/
@@ -172,9 +177,11 @@ cannot run after `SIGKILL`, a process crash, or machine failure.
 │       └── shared.rules
 ├── settings/
 │   ├── claude/
+│   │   ├── hooks.json
 │   │   ├── settings.json
 │   │   └── statusline-command.sh
 │   └── codex/
+│       ├── hooks.json
 │       └── tui.toml
 ├── skills/
 │   ├── README.md
@@ -206,8 +213,8 @@ The installer still links the shared global instructions to
 separate from project `AGENTS.md` discovery.
 
 Most agent-specific configuration paths use symlinks to this repository. Codex
-TUI settings are merged into its existing configuration so machine-local state
-is preserved.
+TUI settings and both agents' verify-gate hook entries are merged into existing
+configuration so machine-local state is preserved.
 
 ## Installed Paths
 
@@ -223,9 +230,12 @@ directory remains `~/.agents/skills`, even when `CODEX_HOME` is set.
 | Codex instructions | `<Codex root>/AGENTS.md` | `instructions/general-global.md` | Symlink |
 | Claude Code instructions | `<Claude root>/CLAUDE.md` | `instructions/general-global.md` | Symlink |
 | Claude Code settings | `<Claude root>/settings.json` | `settings/claude/settings.json` | Managed keys |
+| Claude Code verify-gate hooks | `<Claude root>/settings.json` (`hooks`) | `settings/claude/hooks.json` | Managed entries |
 | Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Symlink |
 | Claude Code status line | `<Claude root>/statusline-command.sh` | `settings/claude/statusline-command.sh` | Symlink |
 | Codex TUI settings | `<Codex root>/config.toml` | `settings/codex/tui.toml` | Managed keys |
+| Codex verify-gate hooks | `<Codex root>/hooks.json` | `settings/codex/hooks.json` | Managed entries |
+| Verify gate script | `~/.agents/hooks/verify-gate.py` | `hooks/verify-gate.py` | Symlink |
 
 Application-managed state, caches, plugins, and bundled skills remain in each
 application's own directory and are not managed by this repository. In
@@ -254,11 +264,17 @@ remove the conflicting path, and rerun the installer.
 
 The regular machine-local settings files are exceptions to symlink management.
 The installer preserves unrelated values while updating only Claude Code's
-`statusLine` key in `<Claude root>/settings.json` and `tui.status_line` and
-`tui.status_line_use_colors` in `<Codex root>/config.toml`.
+`statusLine` key in `<Claude root>/settings.json`, `tui.status_line` and
+`tui.status_line_use_colors` in `<Codex root>/config.toml`, and the verify-gate
+hook entries in `<Claude root>/settings.json` and `<Codex root>/hooks.json`.
+Hook entries are reconciled one handler at a time: handlers whose command
+references `~/.agents/hooks/verify-gate.py` are replaced, and every other hook,
+matcher group, and event is kept. The installer refuses a symlinked or invalid
+`<Codex root>/hooks.json`, and refuses either file while it still contains a
+legacy standalone `verify_gate.py` hook.
 The Codex configuration is parsed and edited
 with a format-preserving TOML library. Before activation, the installer prepares
-and validates both complete settings files. Once activation begins, a surfaced
+and validates all complete settings files. Once activation begins, a surfaced
 failure rolls back files, links, and directories created or replaced during
 that run, restoring the pre-install configuration.
 
@@ -272,6 +288,40 @@ numeric precision.
 Rollback depends on the process being able to run its error or signal handler;
 it cannot recover automatically after `SIGKILL`, a process crash, or machine
 failure.
+
+## Verify Gate and Cross-Review
+
+Both agents run [`hooks/verify-gate.py`](hooks/verify-gate.py) on
+`UserPromptSubmit` and `Stop`. A turn qualifies when it changed files in the
+working tree, or when the final answer is at least 600 characters and does not
+end in a question.
+
+- **Self-verification** (on by default): the first `Stop` of a qualifying turn
+  sends the agent back once to check its answer against files, tests, or docs.
+- **Cross-review** (off by default): after verification, the session transcript
+  and `git diff` go to the *other* agent, which runs read-only. Its feedback is
+  returned as "Here is feedback from another coding agent. What do you think
+  about this?" A missing, failing, or timed-out reviewer is skipped with a
+  notice; it never blocks the turn.
+
+| Control | Effect |
+| --- | --- |
+| `python3 ~/.agents/hooks/verify-gate.py cross-review on\|off\|status` | Persistently toggles cross-review through `~/.config/power-agents/cross-review-on`. |
+| `CROSS_REVIEW=1` or `CROSS_REVIEW=0` | Forces cross-review on or off for sessions started with it. |
+| `VERIFY_GATE=0` | Disables the gate, including cross-review, for sessions started with it. |
+
+**Cost.** Each qualifying turn costs an extra model pass. With cross-review on,
+it also costs a full review by the other agent, which receives up to about
+150,000 characters of transcript plus the diff.
+
+**Privacy.** Cross-review sends your session transcript and diff to the *other
+vendor*: Claude Code sessions go to Codex (OpenAI), and Codex sessions go to
+Claude Code (Anthropic). Secret redaction is best-effort pattern matching only.
+Leave cross-review off for work that must not leave its original vendor.
+
+**Codex trust.** Codex skips new or changed hooks until you trust them. After
+installing, start a new Codex session and approve the verify-gate hooks with
+`/hooks`.
 
 ## Resolving an Installation Conflict
 
@@ -287,6 +337,8 @@ Inspect the path named in the error and keep a backup before changing it:
 | `Refusing to update symlinked Claude settings` or `Refusing to update symlinked Codex config` | Replace the settings symlink with a regular file containing your existing settings. |
 | Invalid Claude settings or invalid/unsupported Codex config | Fix the local JSON or TOML file; keep unrelated settings there. |
 | `Duplicate Codex skill exists` | Reconcile the named skill with its repository copy, then remove that duplicate from `<Codex root>/skills/`. Leave unrelated skills in place. |
+| `legacy standalone verify gate hook` | Run the standalone verify gate's `uninstall.sh`, which removes its `~/.agent-hooks/verify_gate.py` hooks. |
+| `Refusing to update symlinked Codex hooks` or invalid/unsupported hooks | Replace `<Codex root>/hooks.json` with a regular file, or fix its JSON and hook layout. |
 
 Rerun `make install` after resolving the reported conflict.
 
@@ -319,7 +371,10 @@ tests ask it to parse the managed TUI configuration and evaluate every authored
 command rule. If `claude` is installed, the tests run `claude doctor` against an
 isolated installed configuration and reject any invalid-settings report. Both
 checks also feed their runtime a known-invalid setting to prove that the
-validation path is active. A missing local runtime is reported as `SKIP`, never
+validation path is active. The Claude check also covers the installed hook
+entries. Codex has no non-interactive command that parses `hooks.json`, so the
+Codex hook entries are checked only by the repository's own tests. A missing
+local runtime is reported as `SKIP`, never
 `PASS`. GitHub Actions installs the current npm releases of both agents and
 requires both compatibility checks; use
 `POWER_AGENTS_REQUIRE_AGENT_RUNTIMES=1 make ci` for the same requirement locally.
@@ -501,8 +556,24 @@ wanted. Keep the `[tui]` table when it contains other local settings.
 In `<Claude root>/settings.json`, remove the `statusLine` key if it still points
 to this repository's status-line script, or restore your own status-line setting.
 Keep all other settings. The installer does not retain a backup of earlier
-managed values after a successful run. Once the links and managed settings are
-removed, the checkout can be removed separately.
+managed values after a successful run.
+
+Remove the verify-gate hook entries from both files, check the results, and only
+then replace the originals. Run this from the checkout, substituting your roots if
+`CLAUDE_CONFIG_DIR` or `CODEX_HOME` is set:
+
+```bash
+python3 scripts/reconcile-hooks.py remove \
+  ~/.claude/settings.json ~/.claude/settings.json.new
+python3 scripts/reconcile-hooks.py remove \
+  ~/.codex/hooks.json ~/.codex/hooks.json.new
+```
+
+Only handlers that reference `~/.agents/hooks/verify-gate.py` are removed, along
+with any matcher group, event, or `hooks` object that becomes empty as a result.
+Review each `.new` file, then move it over the original. Finally, verify
+`~/.agents/hooks/verify-gate.py` with `readlink` and `unlink` it. Once the links
+and managed settings are removed, the checkout can be removed separately.
 
 ## Security
 

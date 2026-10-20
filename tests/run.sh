@@ -100,6 +100,24 @@ expect_installer_failure() {
   assert_contains "$test_home/install.log" "ERROR: Refusing to replace existing path:"
 }
 
+managed_hooks() {
+  local agent="$1"
+  local script="$2"
+
+  jq -n --arg agent "$agent" --arg script "$script" '{
+    "UserPromptSubmit": [{"hooks": [{
+      "type": "command",
+      "command": ("python3 \"" + $script + "\" mark --agent " + $agent),
+      "timeout": 30
+    }]}],
+    "Stop": [{"hooks": [{
+      "type": "command",
+      "command": ("python3 \"" + $script + "\" stop --agent " + $agent),
+      "timeout": 600
+    }]}]
+  }'
+}
+
 render_status_line() {
   env -u SSH_CONNECTION -u SSH_TTY bash \
     "$ROOT/settings/claude/statusline-command.sh"
@@ -146,6 +164,7 @@ EOF
 
 test_clean_install_and_idempotence() {
   local claude_settings_before
+  local codex_hooks_before
   local config_before
   local local_broken_target="$TEST_ROOT/missing-local-skill"
   local stale_skill_name="removed-repository-skill"
@@ -193,15 +212,28 @@ test_clean_install_and_idempotence() {
     "$test_home/.claude/statusline-command.sh"
   [[ -x "$test_home/.claude/statusline-command.sh" ]] ||
     fail "Installed Claude status-line command is not executable"
-  jq -e --arg command "$test_home/.claude/statusline-command.sh" '
+  assert_same_link \
+    "$ROOT/hooks/verify-gate.py" \
+    "$test_home/.agents/hooks/verify-gate.py"
+  jq -e --arg command "$test_home/.claude/statusline-command.sh" \
+    --argjson hooks "$(managed_hooks claude \
+      "$test_home/.agents/hooks/verify-gate.py")" '
     . == {
       "statusLine": {
         "type": "command",
         "command": $command
-      }
+      },
+      "hooks": $hooks
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
     fail "Clean install produced unexpected Claude settings"
+  jq -e --argjson hooks "$(managed_hooks codex \
+    "$test_home/.agents/hooks/verify-gate.py")" '
+    . == {"hooks": $hooks}
+  ' "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Clean install produced unexpected Codex hooks"
+  assert_contains "$test_home/install.log" \
+    "Codex: trust the verify-gate hooks with /hooks in a new session."
   assert_same_link \
     "$ROOT/policies/codex/shared.rules" \
     "$test_home/.codex/rules/shared.rules"
@@ -210,17 +242,24 @@ test_clean_install_and_idempotence() {
 
   claude_settings_before="$(cksum "$test_home/.claude/settings.json")"
   config_before="$(cksum "$test_home/.codex/config.toml")"
+  codex_hooks_before="$(cksum "$test_home/.codex/hooks.json")"
   run_installer "$test_home"
   [[ "$(cksum "$test_home/.claude/settings.json")" == "$claude_settings_before" ]] ||
     fail "Repeated install changed Claude settings"
   [[ "$(cksum "$test_home/.codex/config.toml")" == "$config_before" ]] ||
     fail "Repeated install changed Codex config"
+  [[ "$(cksum "$test_home/.codex/hooks.json")" == "$codex_hooks_before" ]] ||
+    fail "Repeated install changed Codex hooks"
+  assert_contains "$test_home/install.log" \
+    "OK: $test_home/.codex/hooks.json (Codex verify-gate hooks)"
   assert_skill_links "$test_home/.agents/skills"
   assert_skill_links "$test_home/.claude/skills"
   [[ -z "$(find "$test_home/.codex" -name 'config.toml.tmp.*' -print -quit)" ]] ||
     fail "Installer left a temporary Codex config behind"
   [[ -z "$(find "$test_home/.claude" -name 'settings.json.tmp.*' -print -quit)" ]] ||
     fail "Installer left a temporary Claude settings file behind"
+  [[ -z "$(find "$test_home/.codex" -name 'hooks.json.tmp.*' -print -quit)" ]] ||
+    fail "Installer left a temporary Codex hooks file behind"
 }
 
 test_custom_agent_roots() {
@@ -246,6 +285,16 @@ test_custom_agent_roots() {
     }
   ' "$claude_root/settings.json" >/dev/null ||
     fail "Custom Claude root produced an incorrect status-line command"
+  assert_same_link \
+    "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
+  jq -e --argjson hooks "$(managed_hooks claude \
+    "$test_home/.agents/hooks/verify-gate.py")" \
+    '.hooks == $hooks' "$claude_root/settings.json" >/dev/null ||
+    fail "Custom Claude root produced incorrect verify-gate hooks"
+  jq -e --argjson hooks "$(managed_hooks codex \
+    "$test_home/.agents/hooks/verify-gate.py")" \
+    '. == {"hooks": $hooks}' "$codex_root/hooks.json" >/dev/null ||
+    fail "Custom Codex root produced incorrect verify-gate hooks"
   assert_same_link \
     "$ROOT/policies/codex/shared.rules" "$codex_root/rules/shared.rules"
   cmp -s "$ROOT/settings/codex/tui.toml" "$codex_root/config.toml" ||
@@ -368,12 +417,16 @@ EOF
     fail "Installer partially installed after rejecting a root alias"
 }
 
-test_transaction_rollback() {
+run_rollback_case() {
   local claude_settings_before
   local codex_config_before
+  local codex_hooks_before=""
+  local fail_at
+  local failed_target
+  local kind="$1"
   local real_mv
-  local shim="$TEST_ROOT/rollback-home/shim"
-  local test_home="$TEST_ROOT/rollback-home"
+  local shim="$TEST_ROOT/rollback-$kind-home/shim"
+  local test_home="$TEST_ROOT/rollback-$kind-home"
   local transaction_tmp="$test_home/tmp"
 
   mkdir -p "$test_home/.claude" "$test_home/.codex" "$shim" "$transaction_tmp"
@@ -385,6 +438,21 @@ EOF
   cat >"$test_home/.codex/config.toml" <<'EOF'
 model = "machine-local-model"
 EOF
+  # Activation order: Claude settings, Codex config, then Codex hooks.
+  case "$kind" in
+    config)
+      fail_at=2
+      failed_target="$test_home/.codex/config.toml"
+      printf '%s\n' \
+        '{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "local-stop"}]}]}}' \
+        >"$test_home/.codex/hooks.json"
+      codex_hooks_before="$(cksum "$test_home/.codex/hooks.json")"
+      ;;
+    hooks)
+      fail_at=3
+      failed_target="$test_home/.codex/hooks.json"
+      ;;
+  esac
   cat >"$shim/mv" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -410,7 +478,7 @@ EOF
     CLAUDE_CONFIG_DIR="$test_home/.claude" \
     PATH="$shim:$PATH" \
     TMPDIR="$transaction_tmp" \
-    POWER_AGENTS_FAIL_MV_AT=2 \
+    POWER_AGENTS_FAIL_MV_AT="$fail_at" \
     POWER_AGENTS_REAL_MV="$real_mv" \
     POWER_AGENTS_TEST_MV_COUNT="$test_home/mv-count" \
     PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
@@ -419,7 +487,7 @@ EOF
   fi
 
   assert_contains "$test_home/install.log" \
-    "ERROR: Could not activate managed settings: $test_home/.codex/config.toml"
+    "ERROR: Could not activate managed settings: $failed_target"
   assert_contains "$test_home/install.log" \
     "ERROR: Installation failed; restoring previous configuration."
   [[ "$(cksum "$test_home/.claude/settings.json")" == \
@@ -427,6 +495,15 @@ EOF
     fail "Rollback did not restore Claude settings"
   [[ "$(cksum "$test_home/.codex/config.toml")" == "$codex_config_before" ]] ||
     fail "Rollback did not restore Codex config"
+  if [[ -n "$codex_hooks_before" ]]; then
+    [[ "$(cksum "$test_home/.codex/hooks.json")" == "$codex_hooks_before" ]] ||
+      fail "Rollback did not restore Codex hooks"
+  else
+    [[ ! -e "$test_home/.codex/hooks.json" ]] ||
+      fail "Rollback left Codex hooks installed"
+  fi
+  [[ -z "$(find "$test_home/.codex" -name '*.tmp.*' -print -quit)" ]] ||
+    fail "Rollback left a temporary Codex file behind"
   [[ ! -e "$test_home/.codex/AGENTS.md" ]] ||
     fail "Rollback left Codex instructions installed"
   [[ ! -e "$test_home/.codex/rules" ]] ||
@@ -438,9 +515,14 @@ EOF
   [[ ! -e "$test_home/.claude/statusline-command.sh" ]] ||
     fail "Rollback left the Claude status line installed"
   [[ ! -e "$test_home/.agents" ]] ||
-    fail "Rollback left shared skills installed"
+    fail "Rollback left shared skills or the verify gate installed"
   [[ -z "$(find "$transaction_tmp" -mindepth 1 -print -quit)" ]] ||
     fail "Rollback left transaction data behind"
+}
+
+test_transaction_rollback() {
+  run_rollback_case config
+  run_rollback_case hooks
 }
 
 test_claude_settings_reconciliation() {
@@ -462,7 +544,9 @@ test_claude_settings_reconciliation() {
 EOF
 
   run_installer "$test_home"
-  jq -e --arg command "$test_home/.claude/statusline-command.sh" '
+  jq -e --arg command "$test_home/.claude/statusline-command.sh" \
+    --argjson hooks "$(managed_hooks claude \
+      "$test_home/.agents/hooks/verify-gate.py")" '
     . == {
       "model": "opus",
       "permissions": {
@@ -471,7 +555,8 @@ EOF
       "statusLine": {
         "type": "command",
         "command": $command
-      }
+      },
+      "hooks": $hooks
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
     fail "Installer did not preserve and reconcile Claude settings"
@@ -495,6 +580,123 @@ test_claude_settings_rejection() {
     fail "Installer partially installed after rejecting Claude settings"
   [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
     fail "Installer partially installed after rejecting Claude settings"
+}
+
+test_foreign_hooks_preservation() {
+  local claude_settings_before
+  local codex_hooks_before
+  local script
+  local test_home="$TEST_ROOT/foreign-hooks-home"
+
+  script="$test_home/.agents/hooks/verify-gate.py"
+  mkdir -p "$test_home/.claude" "$test_home/.codex"
+  cat >"$test_home/.claude/settings.json" <<'EOF'
+{
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "claude-audit", "timeout": 5}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "claude-notify"}]}
+    ]
+  }
+}
+EOF
+  cat >"$test_home/.codex/hooks.json" <<'EOF'
+{
+  "description": "local Codex hooks",
+  "hooks": {
+    "SessionStart": [
+      {"matcher": "startup", "hooks": [{"type": "command", "command": "codex-start"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "codex-notify"}]}
+    ]
+  }
+}
+EOF
+
+  run_installer "$test_home"
+
+  jq -e --arg command "$test_home/.claude/statusline-command.sh" \
+    --argjson managed "$(managed_hooks claude "$script")" '
+    . == {
+      "model": "opus",
+      "hooks": {
+        "PreToolUse": [
+          {"matcher": "Bash", "hooks": [{"type": "command", "command": "claude-audit", "timeout": 5}]}
+        ],
+        "Stop": ([
+          {"hooks": [{"type": "command", "command": "claude-notify"}]}
+        ] + $managed.Stop),
+        "UserPromptSubmit": $managed.UserPromptSubmit
+      },
+      "statusLine": {"type": "command", "command": $command}
+    }
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Installer did not preserve foreign Claude hooks"
+  jq -e --argjson managed "$(managed_hooks codex "$script")" '
+    . == {
+      "description": "local Codex hooks",
+      "hooks": {
+        "SessionStart": [
+          {"matcher": "startup", "hooks": [{"type": "command", "command": "codex-start"}]}
+        ],
+        "Stop": ([
+          {"hooks": [{"type": "command", "command": "codex-notify"}]}
+        ] + $managed.Stop),
+        "UserPromptSubmit": $managed.UserPromptSubmit
+      }
+    }
+  ' "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Installer did not preserve foreign Codex hooks"
+
+  claude_settings_before="$(cksum "$test_home/.claude/settings.json")"
+  codex_hooks_before="$(cksum "$test_home/.codex/hooks.json")"
+  run_installer "$test_home"
+  [[ "$(cksum "$test_home/.claude/settings.json")" == "$claude_settings_before" ]] ||
+    fail "Repeated install changed Claude settings with foreign hooks"
+  [[ "$(cksum "$test_home/.codex/hooks.json")" == "$codex_hooks_before" ]] ||
+    fail "Repeated install changed Codex hooks with foreign hooks"
+}
+
+test_legacy_verify_gate_rejection() {
+  local file
+  local kind
+  local legacy_command="python3 ~/.agent-hooks/verify_gate.py stop --agent"
+  local test_home
+
+  for kind in claude codex; do
+    test_home="$TEST_ROOT/legacy-$kind-hooks-home"
+    mkdir -p "$test_home/.claude" "$test_home/.codex"
+    case "$kind" in
+      claude) file="$test_home/.claude/settings.json" ;;
+      codex) file="$test_home/.codex/hooks.json" ;;
+    esac
+    jq -n --arg command "$legacy_command $kind" \
+      '{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": $command}]}]}}' \
+      >"$file"
+    cp "$file" "$test_home/before.json"
+
+    if run_installer "$test_home"; then
+      fail "Installer accepted a legacy standalone $kind verify gate hook"
+    fi
+
+    assert_contains "$test_home/install.log" \
+      "legacy standalone verify gate hook in $file"
+    assert_contains "$test_home/install.log" "$legacy_command $kind"
+    assert_contains "$test_home/install.log" "uninstall.sh"
+    cmp -s "$file" "$test_home/before.json" ||
+      fail "Installer changed a config with a legacy $kind hook"
+    [[ ! -e "$test_home/.agents" && ! -e "$test_home/.codex/AGENTS.md" && \
+      ! -e "$test_home/.claude/CLAUDE.md" ]] ||
+      fail "Installer partially installed after finding a legacy $kind hook"
+    [[ "$kind" == codex || ! -e "$test_home/.codex/hooks.json" ]] ||
+      fail "Installer wrote Codex hooks after finding a legacy Claude hook"
+    [[ "$kind" == claude || ! -e "$test_home/.claude/settings.json" ]] ||
+      fail "Installer wrote Claude settings after finding a legacy Codex hook"
+  done
 }
 
 test_skill_link_migration() {
@@ -702,6 +904,7 @@ test_claude_runtime_compatibility() {
   local claude_root="$TEST_ROOT/claude-runtime-home/config/claude"
   local claude_version
   local codex_root="$TEST_ROOT/claude-runtime-home/config/codex"
+  local invalid_hooks_runtime_log="$TEST_ROOT/claude-runtime-home/invalid-hooks-claude-doctor.log"
   local invalid_runtime_log="$TEST_ROOT/claude-runtime-home/invalid-claude-doctor.log"
   local runtime_log="$TEST_ROOT/claude-runtime-home/claude-doctor.log"
   local test_home="$TEST_ROOT/claude-runtime-home"
@@ -732,6 +935,17 @@ test_claude_runtime_compatibility() {
     DISABLE_AUTOUPDATER=1 \
     claude doctor >"$invalid_runtime_log" 2>&1 || true
   assert_contains "$invalid_runtime_log" "Invalid settings"
+
+  printf '%s\n' \
+    '{"hooks": {"Stop": [{"hooks": [{"type": "bogus", "command": "true"}]}]}}' \
+    >"$claude_root/settings.json"
+  HOME="$test_home" \
+    CLAUDE_CONFIG_DIR="$claude_root" \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_AUTOUPDATER=1 \
+    claude doctor >"$invalid_hooks_runtime_log" 2>&1 || true
+  assert_contains "$invalid_hooks_runtime_log" "Invalid settings"
+  assert_contains "$invalid_hooks_runtime_log" "hooks.Stop"
 }
 
 test_install_conflicts() {
@@ -1120,6 +1334,10 @@ test_installer_rejects_invalid_skill_metadata
 pass "installer rejects invalid skill metadata before installation"
 python3 "$ROOT/tests/test_reconcile_codex_config.py"
 pass "Codex TOML reconciler"
+python3 "$ROOT/tests/test_reconcile_hooks.py"
+pass "verify-gate hook reconciler"
+python3 "$ROOT/tests/test_verify_gate.py"
+pass "verify gate and cross-review hook with stub reviewers"
 test_clean_install_and_idempotence
 pass "clean install, stale-link cleanup, unrelated-skill preservation, and idempotence"
 test_custom_agent_roots
@@ -1132,6 +1350,10 @@ test_claude_settings_reconciliation
 pass "Claude settings preservation and managed-key reconciliation"
 test_claude_settings_rejection
 pass "invalid Claude settings fail without partial installation"
+test_foreign_hooks_preservation
+pass "foreign Claude and Codex hooks survive install and reinstall"
+test_legacy_verify_gate_rejection
+pass "legacy standalone verify gate hooks fail without partial installation"
 test_skill_link_migration
 pass "legacy whole-directory skill links migrate to per-skill links"
 test_codex_config_reconciliation
