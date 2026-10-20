@@ -108,7 +108,7 @@ objective assertions where possible.
 Run `make eval` to execute the fixtures using paid Anthropic API calls, or use
 `make eval EVAL_ARGS='--skill review-report'` to select one fixture set while
 keeping all skills available for routing. See the repository's
-[evaluation instructions](../README.md#behavioral-skill-evaluations) for runtime,
+[evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
 All 13 skills now have fixture sets, including security-specific positive and

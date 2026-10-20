@@ -15,7 +15,7 @@ and policy that runs or is consumed on that machine:
 - `policies/codex/shared.rules`
 - `settings/` and `instructions/` content that agents load automatically
 
-See the installed-paths table in [`README.md`](README.md) to audit exactly what
+See the [installed-paths table](docs/installation.md#installed-paths) to audit exactly what
 the installer creates before running it.
 
 ## Supported Versions
@@ -47,7 +47,7 @@ history are all rejected without moving `HEAD`. Sync also refuses tracked or
 staged local changes. If installation fails after a verified fast-forward, sync
 restores the previous commit and reruns its installer so symlinked and copied
 configuration return to the prior version. See
-[Syncing](README.md#syncing) for setup.
+[Syncing](docs/installation.md#syncing) for setup.
 
 The installer refuses to replace a same-name skill, a real file, or an incorrect
 symlink. It canonicalizes configuration roots before rejecting `/` or duplicate

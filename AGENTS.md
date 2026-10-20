@@ -12,7 +12,7 @@ Codex and Claude Code.
   remain in the application-managed Codex root.
 - Keep agent-specific settings under `settings/<agent>/`.
 - Run `./install.sh` after configuration changes. It must remain idempotent and
-  preserve supported unmanaged values as documented in `README.md`.
+  preserve supported unmanaged values as documented in `docs/installation.md`.
 - Run `./scripts/check.sh` before finishing changes. It includes Bash syntax and
   static analysis for every shell script, isolated behavioral tests, and
   `git diff --check` coverage.

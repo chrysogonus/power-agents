@@ -1,9 +1,9 @@
 # Contributing
 
 This repository is the canonical home for shared Codex and Claude Code
-configuration. Read [`AGENTS.md`](AGENTS.md) first. The tracked
-[`CLAUDE.md`](CLAUDE.md) symlink gives Claude Code the same authoritative
-project rules, and this document only summarizes the workflow around them.
+configuration. Read [`AGENTS.md`](AGENTS.md) first; both Codex and Claude Code
+load it as the authoritative project rules, and this document only summarizes
+the workflow around them.
 
 ## Ground Rules
 
@@ -45,7 +45,8 @@ Install the required tooling first; see
   `fix(installer): activate Claude Code status line`.
 - Sign commits with OpenPGP. `sync.sh` rejects any commit whose signature is
   missing or whose primary-key fingerprint is not allowlisted.
-- Update `README.md` or `skills/README.md` when behavior or inventory changes.
+- Update `README.md`, `docs/`, or `skills/README.md` when behavior or inventory
+  changes.
 - Keep diffs surgical: every changed line should trace to the stated purpose.
 
 ## Reporting Problems
