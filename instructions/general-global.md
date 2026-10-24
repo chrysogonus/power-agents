@@ -22,5 +22,7 @@ the task.
 ## Git and safety
 
 - Do not commit, push, or rewrite history unless asked.
+- Keep commit messages short and concise. Never add a `Co-Authored-By`
+  trailer.
 - Ask before destructive or hard-to-reverse actions and before writing to
   external services.
