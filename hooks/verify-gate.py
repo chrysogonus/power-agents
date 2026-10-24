@@ -222,16 +222,28 @@ def turn_changes(before, now):
     other = sorted(set(files) - paths)
     if not paths:
         return "", other
+    if not base:  # no commit yet: diff against the empty tree
+        base = (_git(top, "hash-object", "-t", "tree", "--stdin", stdin="")
+                or "").strip()
     specs = [":(literal)" + p for p in sorted(paths)]
     out = []
+    # ponytail: hashes can't recover the earlier contents, so flag them.
+    mixed = sorted(p for p in paths if before and p in before["files"])
+    if mixed:
+        out.append("Already modified before this turn; the diff includes "
+                   "those earlier edits: " + ", ".join(mixed))
     if base:
         out.append(_git(top, "diff", "--stat", base, "--", *specs) or "")
         out.append(_git(top, "diff", base, "--", *specs) or "")
     for p in sorted(paths):
         if not files.get(p, "").startswith("??"):
             continue
+        f = Path(top) / p
         try:
-            data = (Path(top) / p).read_bytes()[:MAX_DIFF_CHARS]
+            if f.is_symlink():  # never send what a link points to
+                out.append(f"new untracked symlink {p} -> {os.readlink(f)}")
+                continue
+            data = f.read_bytes()[:MAX_DIFF_CHARS]
         except OSError:
             continue
         body = "(binary)" if b"\0" in data else "\n".join(

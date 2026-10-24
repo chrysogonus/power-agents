@@ -507,6 +507,36 @@ class VerifyGateTests(unittest.TestCase):
         self.assertNotIn("user draft", bundle)
         self.assertNotIn("print('v2')", bundle)
 
+    def test_untracked_symlink_target_is_not_sent(self) -> None:
+        outside = self.base / "private.txt"
+        outside.write_text("OUTSIDE-SECRET\n", encoding="utf-8")
+        self.mark()
+        (self.repo / "link.txt").symlink_to(outside)
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+        bundle = self.reviewer_record("codex")["stdin"]
+        self.assertIn(f"new untracked symlink link.txt -> {outside}", bundle)
+        self.assertNotIn("OUTSIDE-SECRET", bundle)
+
+    def test_earlier_edits_to_a_changed_path_are_flagged(self) -> None:
+        self.change_file()
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+        bundle = self.reviewer_record("codex")["stdin"]
+        self.assertIn("Already modified before this turn; the diff includes "
+                      "those earlier edits: app.py", bundle)
+
+    def test_staged_files_before_the_first_commit_are_diffed(self) -> None:
+        shutil.rmtree(self.repo / ".git")
+        git(self.repo, "init", "-q")
+        self.mark()
+        git(self.repo, "add", "app.py")
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+        self.assertIn("+print('v1')", self.reviewer_record("codex")["stdin"])
+
     def test_review_scope_defaults_to_changed_files(self) -> None:
         self.mark()
         self.assert_verification_block(
