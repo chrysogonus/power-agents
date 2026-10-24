@@ -6,10 +6,11 @@
     {
       "name": "ponytail",
       "repository": "DietrichGebert/ponytail",
-      "revision": "cd765194f5e625d2f96e80e63df1c1af0b03705b",
+      "revision": "09c434ab73ca43761c5d8b0c5d341926c2fba710",
       "upstream_path": "skills/ponytail",
-      "local_adaptations": "Narrowed automatic routing; scoped persistence to the current task; replaced the output cap and one-test/no-framework rules with project-compatible reporting and verification.",
-      "whitespace_normalized": []
+      "local_adaptations": "Re-synced to Ponytail 5 on 2026-10-24. Narrowed automatic routing; scoped persistence to the current task (no session mode or off level); replaced the one-test/assert self-check rule with project-compatible verification; kept the reply-ending skipped/risk lines inside project-compatible reporting.",
+      "whitespace_normalized": [],
+      "resynced_on": "2026-10-24"
     },
     {
       "name": "writing-for-agents",

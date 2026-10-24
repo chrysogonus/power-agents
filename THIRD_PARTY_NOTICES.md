@@ -78,13 +78,14 @@ Apache License 2.0. The complete license is preserved at
 
 ## Skills Integrated from the Research Catalog
 
-The following packages were imported from pinned revisions on 2026-10-05.
+The following packages were imported from pinned revisions on 2026-10-05;
+`ponytail` was re-synced to Ponytail 5 on 2026-10-24.
 All have normal automatic discovery, as explicitly requested by the owner.
 Live routing and effect evaluations remain unmeasured.
 
 | Local skill | Upstream repository and path | Pinned revision | License |
 | --- | --- | --- | --- |
-| `ponytail` | [DietrichGebert/ponytail / skills/ponytail](https://github.com/DietrichGebert/ponytail/tree/cd765194f5e625d2f96e80e63df1c1af0b03705b/skills/ponytail) | `cd765194f5e625d2f96e80e63df1c1af0b03705b` | MIT |
+| `ponytail` | [DietrichGebert/ponytail / skills/ponytail](https://github.com/DietrichGebert/ponytail/tree/09c434ab73ca43761c5d8b0c5d341926c2fba710/skills/ponytail) | `09c434ab73ca43761c5d8b0c5d341926c2fba710` | MIT |
 | `writing-for-agents` | [mattpocock/skills / skills/productivity/writing-for-agents](https://github.com/mattpocock/skills/tree/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/writing-for-agents) | `4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d` | MIT |
 | `grilling` | [mattpocock/skills / skills/productivity/grilling](https://github.com/mattpocock/skills/tree/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/grilling) | `4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d` | MIT |
 | `vercel-react-best-practices` | [vercel-labs/agent-skills / skills/react-best-practices](https://github.com/vercel-labs/agent-skills/tree/063bee94c3f4df8453406c830b0a7df0f2860278/skills/react-best-practices) | `063bee94c3f4df8453406c830b0a7df0f2860278` | MIT (declared in SKILL.md) |
@@ -114,7 +115,7 @@ routing descriptions, a task/scope boundary, and
 no manual-only flags are added. Local routing fixtures are new and have not
 been run against live models. Specific adaptations:
 
-- `ponytail`: Narrowed automatic routing; scoped persistence to the current task; replaced the output cap and one-test/no-framework rules with project-compatible reporting and verification.
+- `ponytail`: Re-synced to Ponytail 5 on 2026-10-24. Narrowed automatic routing; scoped persistence to the current task (no session mode or `off` level); replaced the one-test/assert self-check rule with project-compatible verification; kept the reply-ending skipped/risk lines inside project-compatible reporting.
 - `writing-for-agents`: Narrowed document-authoring routing against prompt-refiner; updated SKILL-MECHANICS.md for Codex invocation policy and normal discovery by default.
 - `grilling`: Limited routing to requested interviews; allowed direct factual lookups when subagents are unavailable or unauthorized; made implementation a separate requested step.
 - `vercel-react-best-practices`: Separated performance from component API work and general review; repaired three compiled AGENTS.md links to rules/async-defer-await.md, rules/async-cheap-condition-before-await.md, and rules/server-hoist-static-io.md.

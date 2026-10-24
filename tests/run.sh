@@ -1528,6 +1528,8 @@ test_project_instruction_entrypoints
 pass "AGENTS.md is the sole project instruction entrypoint"
 python3 "$ROOT/tests/test_validate_skills.py"
 pass "shared skill metadata and evaluation validator"
+python3 "$ROOT/tests/test_check_skill_upstreams.py"
+pass "upstream skill pin parsing"
 python3 "$ROOT/tests/test_coding_fixtures.py"
 python3 "$ROOT/tests/test_run_coding_evals.py"
 pass "coding fixture integrity and isolated runtime adapters"

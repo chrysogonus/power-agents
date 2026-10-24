@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync test check ci eval coding-eval
+.PHONY: help install sync test check ci eval coding-eval skills-outdated
 
 help:
 	@printf '%s\n' \
@@ -13,7 +13,8 @@ help:
 		'  check    Run checks against the current working tree' \
 		'  ci       Run the same complete pipeline as GitHub Actions' \
 		'  eval     Run paid skill evaluations with Claude Code (EVAL_ARGS=...)' \
-		'  coding-eval  Describe coding trials; execution requires --execute (CODING_EVAL_ARGS=...)'
+		'  coding-eval  Describe coding trials; execution requires --execute (CODING_EVAL_ARGS=...)' \
+		'  skills-outdated  Check imported skill pins against upstream GitHub (needs gh)'
 
 install:
 	./install.sh
@@ -35,3 +36,6 @@ eval:
 
 coding-eval:
 	python3 ./scripts/run-coding-evals.py $(CODING_EVAL_ARGS)
+
+skills-outdated:
+	python3 ./scripts/check-skill-upstreams.py

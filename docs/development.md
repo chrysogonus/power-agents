@@ -62,6 +62,11 @@ records upstream candidates, sources, and integration notes. Ten selected skills
 are included in the [imported skill inventory](../skills/README.md#imported-skills);
 their live routing and task-effect evaluations remain unmeasured.
 
+Run `make skills-outdated` to check every pinned upstream path recorded in
+[Third-Party Notices](../THIRD_PARTY_NOTICES.md) against GitHub. It needs an
+authenticated `gh` CLI, exits 1 when any imported skill is behind, and is not
+part of `make check` or `make ci`.
+
 ## Behavioral Skill Evaluations
 
 `make eval` runs every case in `skills/*/evals/evals.json` using Claude Code and
