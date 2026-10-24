@@ -20,6 +20,16 @@ CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
 CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_STATUS_LINE_COMMAND=""
 VERIFY_GATE_COMMAND=""
+# The verify gate is always installed; these components are optional.
+ALL_COMPONENTS="instructions,skills,statusline,codex-rules"
+COMPONENTS_FILE=""
+CODEX_TUI_SNAPSHOT=""
+REQUESTED_COMPONENTS=""
+COMPONENTS_REQUESTED=0
+PREVIOUS_COMPONENTS=""
+SELECTED_COMPONENTS=""
+CODEX_CONFIG_MODE=""
+CODEX_TUI_SOURCE=""
 TRANSACTION_DIR=""
 # shellcheck disable=SC2034 # Read by the ERR trap at runtime.
 TRANSACTION_ACTIVE=0
@@ -121,6 +131,137 @@ trap 'handle_signal 129' HUP
 trap 'handle_signal 130' INT
 trap 'handle_signal 143' TERM
 
+usage() {
+  cat <<'EOF'
+Usage: ./install.sh [--components LIST]
+
+Installs the verify gate for Codex and Claude Code. LIST selects optional
+components: a comma-separated subset of instructions, skills, statusline, and
+codex-rules, or "all" or "none". Without --components, the selection saved by
+the previous install is reused.
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --components)
+      if (($# < 2)); then
+        echo "ERROR: --components requires a list." >&2
+        usage >&2
+        exit 2
+      fi
+      REQUESTED_COMPONENTS="$2"
+      COMPONENTS_REQUESTED=1
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Prints the components named in a list, in canonical order.
+normalize_components() {
+  local list="${1// /}"
+  local name
+  local -a names
+  local -a result=()
+
+  case "$list" in
+    all) list="$ALL_COMPONENTS" ;;
+    none) list="" ;;
+  esac
+
+  IFS=, read -r -a names <<<"$list"
+  for name in "${names[@]}"; do
+    if [[ -n "$name" && ",$ALL_COMPONENTS," != *",$name,"* ]]; then
+      echo "ERROR: Unknown component: $name" >&2
+      echo "       Choose from $ALL_COMPONENTS, all, or none." >&2
+      return 1
+    fi
+  done
+
+  IFS=, read -r -a names <<<"$ALL_COMPONENTS"
+  for name in "${names[@]}"; do
+    if [[ ",$list," == *",$name,"* ]]; then
+      result+=("$name")
+    fi
+  done
+  (IFS=,; printf '%s\n' "${result[*]}")
+}
+
+has_component() {
+  [[ ",$SELECTED_COMPONENTS," == *",$1,"* ]]
+}
+
+# True when a component was installed before and is now deselected.
+dropping_component() {
+  [[ ",$PREVIOUS_COMPONENTS," == *",$1,"* ]] && ! has_component "$1"
+}
+
+links_to() {
+  [[ -L "$2" && "$2" -ef "$1" ]]
+}
+
+skills_installed() {
+  local root
+  local skill_dir
+
+  for root in "$AGENTS_ROOT/skills" "$CLAUDE_ROOT/skills"; do
+    links_to "$SKILLS" "$root" && return 0
+    for skill_dir in "$SKILLS"/*; do
+      links_to "$skill_dir" "$root/${skill_dir##*/}" && return 0
+    done
+  done
+  return 1
+}
+
+# Prints the saved selection, failing when it was saved for other agent roots.
+read_saved_components() {
+  local claude=""
+  local codex=""
+  local components=""
+  local line
+
+  while IFS= read -r line; do
+    case "$line" in
+      components=*) components="${line#components=}" ;;
+      codex_root=*) codex="${line#codex_root=}" ;;
+      claude_root=*) claude="${line#claude_root=}" ;;
+    esac
+  done <"$COMPONENTS_FILE"
+
+  [[ "$codex" == "$CODEX_ROOT" && "$claude" == "$CLAUDE_ROOT" ]] || return 1
+  printf '%s\n' "$components"
+}
+
+# Without a saved selection for these roots, the links already present stand
+# in for one. Installs from before component selection linked everything.
+detect_installed_components() {
+  local detected=""
+
+  if links_to "$GLOBAL_INSTRUCTIONS" "$CODEX_ROOT/AGENTS.md" ||
+    links_to "$GLOBAL_INSTRUCTIONS" "$CLAUDE_ROOT/CLAUDE.md"; then
+    detected+=",instructions"
+  fi
+  if skills_installed; then
+    detected+=",skills"
+  fi
+  if links_to "$CLAUDE_STATUS_LINE" "$CLAUDE_ROOT/statusline-command.sh"; then
+    detected+=",statusline"
+  fi
+  if links_to "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"; then
+    detected+=",codex-rules"
+  fi
+  printf '%s\n' "${detected#,}"
+}
+
 canonicalize_install_root() {
   local label="$1"
   local path="$2"
@@ -196,14 +337,59 @@ canonicalize_install_root \
   "Shared configuration root" "$AGENTS_ROOT" AGENTS_ROOT
 CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
 VERIFY_GATE_COMMAND="$AGENTS_ROOT/hooks/verify-gate.py"
+COMPONENTS_FILE="$INSTALL_HOME/.config/power-agents/components"
+# The Codex TUI values the last statusline install wrote, so removal can tell
+# them apart from user values after settings/codex/tui.toml changes.
+CODEX_TUI_SNAPSHOT="$INSTALL_HOME/.config/power-agents/codex-tui.toml"
 
-if ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
+for state_file in "$COMPONENTS_FILE" "$CODEX_TUI_SNAPSHOT"; do
+  if [[ -L "$state_file" ]] ||
+    [[ -e "$state_file" && ! -f "$state_file" ]]; then
+    echo "ERROR: Installer state is not a regular file: $state_file" >&2
+    exit 1
+  fi
+done
+
+saved_for_roots=0
+if [[ -f "$COMPONENTS_FILE" ]] && saved_components="$(read_saved_components)"; then
+  saved_for_roots=1
+  PREVIOUS_COMPONENTS="$(normalize_components "$saved_components")" || {
+    echo "ERROR: Invalid component selection: $COMPONENTS_FILE" >&2
+    echo "       Fix or delete it; without it, installed components are detected." >&2
+    exit 1
+  }
+else
+  PREVIOUS_COMPONENTS="$(detect_installed_components)"
+fi
+
+if ((COMPONENTS_REQUESTED)); then
+  SELECTED_COMPONENTS="$(normalize_components "$REQUESTED_COMPONENTS")" ||
+    exit 2
+else
+  SELECTED_COMPONENTS="$PREVIOUS_COMPONENTS"
+fi
+
+# Codex config.toml is touched only to add the status line or to remove the
+# one a previous install added. Its keys carry no proof of ownership, unlike
+# links, so removal needs a selection saved for these exact roots and the
+# values that install wrote.
+if has_component statusline; then
+  CODEX_CONFIG_MODE="reconcile"
+  CODEX_TUI_SOURCE="$CODEX_TUI_SETTINGS"
+elif dropping_component statusline && ((saved_for_roots)) &&
+  [[ -f "$CODEX_TUI_SNAPSHOT" && -f "$CODEX_ROOT/config.toml" ]]; then
+  CODEX_CONFIG_MODE="remove"
+  CODEX_TUI_SOURCE="$CODEX_TUI_SNAPSHOT"
+fi
+
+if [[ -n "$CODEX_CONFIG_MODE" ]] &&
+  ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: tomlkit" >&2
   echo "       See README.md#installation for setup instructions." >&2
   exit 1
 fi
 
-if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+if has_component skills && ! python3 -c 'import yaml' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: yaml (PyYAML)" >&2
   echo "       See README.md#installation for setup instructions." >&2
   exit 1
@@ -266,8 +452,8 @@ validate_skills() {
 
 validate_codex_tui_settings() {
   if ! python3 "$CODEX_CONFIG_RECONCILER" \
-    validate-managed "$CODEX_TUI_SETTINGS"; then
-    echo "ERROR: Invalid Codex TUI settings fragment: $CODEX_TUI_SETTINGS" >&2
+    validate-managed "$CODEX_TUI_SOURCE"; then
+    echo "ERROR: Invalid Codex TUI settings fragment: $CODEX_TUI_SOURCE" >&2
     echo "       Expected one [tui] section with status_line and status_line_use_colors." >&2
     return 1
   fi
@@ -390,13 +576,7 @@ install_skill_links() {
     [[ ! -e "$expected_target" ]] || continue
     [[ "$(readlink "$skill_link")" == "$expected_target" ]] || continue
 
-    previous_target="$(readlink "$skill_link")"
-    record_rollback restore-symlink "$skill_link" "$previous_target"
-    if ! unlink "$skill_link"; then
-      echo "ERROR: Could not remove stale skill link: $skill_link" >&2
-      return 1
-    fi
-    echo "REMOVE: $skill_link (stale repository skill link)"
+    unlink_owned "$skill_link" "stale repository skill link"
   done
 
   for skill_dir in "$SKILLS"/*; do
@@ -404,6 +584,42 @@ install_skill_links() {
     install_link \
       "$skill_dir" \
       "$target_root/$(basename "$skill_dir")"
+  done
+}
+
+unlink_owned() {
+  local label="${2:-deselected component}"
+  local target="$1"
+
+  record_rollback restore-symlink "$target" "$(readlink "$target")"
+  if ! unlink "$target"; then
+    echo "ERROR: Could not remove link: $target" >&2
+    return 1
+  fi
+  echo "REMOVE: $target ($label)"
+}
+
+remove_owned_link() {
+  if links_to "$1" "$2"; then
+    unlink_owned "$2"
+  fi
+}
+
+# Removes only links that point into this checkout's skills directory.
+remove_skill_links() {
+  local skill_link
+  local target_root="$1"
+
+  if [[ -L "$target_root" ]]; then
+    remove_owned_link "$SKILLS" "$target_root"
+    return
+  fi
+
+  for skill_link in "$target_root"/*; do
+    [[ -L "$skill_link" ]] || continue
+    if [[ "$(readlink "$skill_link")" == "$SKILLS/${skill_link##*/}" ]]; then
+      unlink_owned "$skill_link"
+    fi
   done
 }
 
@@ -437,19 +653,38 @@ validate_claude_settings_target() {
 
 prepare_claude_settings() {
   local output="$1"
-  local source="$CLAUDE_SETTINGS"
   local target="$CLAUDE_ROOT/settings.json"
   local input="/dev/null"
   local status_line_output="$output.status-line"
+  local mode="keep"
+  local -a sources
 
   if [[ -f "$target" ]]; then
     input="$target"
   fi
+  sources=("$input")
 
-  if ! jq -s --arg command "$CLAUDE_STATUS_LINE_COMMAND" '
+  if has_component statusline; then
+    mode="install"
+    sources+=("$CLAUDE_SETTINGS")
+  elif dropping_component statusline &&
+    links_to "$CLAUDE_STATUS_LINE" "$CLAUDE_STATUS_LINE_COMMAND"; then
+    mode="remove"
+  fi
+
+  # A deselected status line is removed while it still runs the repository
+  # script through its link, which is removed with it.
+  if ! jq -s --arg command "$CLAUDE_STATUS_LINE_COMMAND" --arg mode "$mode" '
     reduce .[] as $settings ({}; . + $settings) |
-    .statusLine.command = $command
-  ' "$input" "$source" >"$status_line_output"; then
+    if $mode == "install" then
+      .statusLine.command = $command
+    elif $mode == "remove" and
+      (.statusLine | type == "object" and .command == $command) then
+      del(.statusLine)
+    else
+      .
+    end
+  ' "${sources[@]}" >"$status_line_output"; then
     echo "ERROR: Could not prepare Claude settings for $target" >&2
     return 1
   fi
@@ -463,11 +698,12 @@ prepare_claude_settings() {
 
   if ! jq -e '
     type == "object" and
-    .statusLine == {
+    ($mode != "install" or .statusLine == {
       "type": "command",
       "command": $command
-    }
-  ' --arg command "$CLAUDE_STATUS_LINE_COMMAND" "$output" >/dev/null; then
+    })
+  ' --arg command "$CLAUDE_STATUS_LINE_COMMAND" --arg mode "$mode" \
+    "$output" >/dev/null; then
     echo "ERROR: Prepared invalid Claude settings for $target" >&2
     return 1
   fi
@@ -498,7 +734,6 @@ validate_codex_config_target() {
 
 prepare_codex_tui_settings() {
   local output="$1"
-  local source="$CODEX_TUI_SETTINGS"
   local target="$CODEX_ROOT/config.toml"
   local input="/dev/null"
 
@@ -507,7 +742,7 @@ prepare_codex_tui_settings() {
   fi
 
   if ! python3 "$CODEX_CONFIG_RECONCILER" \
-    reconcile "$source" "$input" "$output"; then
+    "$CODEX_CONFIG_MODE" "$CODEX_TUI_SOURCE" "$input" "$output"; then
     echo "ERROR: Could not prepare Codex config for $target" >&2
     return 1
   fi
@@ -634,34 +869,50 @@ validate_legacy_codex_skills() {
   return "$failed"
 }
 
-validate_skills
-validate_claude_settings
-validate_codex_tui_settings
+if has_component skills; then
+  validate_skills
+fi
+if has_component statusline; then
+  validate_claude_settings
+fi
+if [[ -n "$CODEX_CONFIG_MODE" ]]; then
+  validate_codex_tui_settings
+fi
 validate_hook_fragments
 validate_distinct_install_roots
 
 failed=0
-validate_link_target \
-  "$GLOBAL_INSTRUCTIONS" \
-  "$CODEX_ROOT/AGENTS.md" || failed=1
-validate_link_target \
-  "$GLOBAL_INSTRUCTIONS" \
-  "$CLAUDE_ROOT/CLAUDE.md" || failed=1
-validate_skill_links_target "$AGENTS_ROOT/skills" || failed=1
-validate_skill_links_target "$CLAUDE_ROOT/skills" || failed=1
-validate_link_target \
-  "$CLAUDE_STATUS_LINE" \
-  "$CLAUDE_ROOT/statusline-command.sh" || failed=1
+if has_component instructions; then
+  validate_link_target \
+    "$GLOBAL_INSTRUCTIONS" \
+    "$CODEX_ROOT/AGENTS.md" || failed=1
+  validate_link_target \
+    "$GLOBAL_INSTRUCTIONS" \
+    "$CLAUDE_ROOT/CLAUDE.md" || failed=1
+fi
+if has_component skills; then
+  validate_skill_links_target "$AGENTS_ROOT/skills" || failed=1
+  validate_skill_links_target "$CLAUDE_ROOT/skills" || failed=1
+  validate_legacy_codex_skills || failed=1
+fi
+if has_component statusline; then
+  validate_link_target \
+    "$CLAUDE_STATUS_LINE" \
+    "$CLAUDE_ROOT/statusline-command.sh" || failed=1
+fi
 validate_claude_settings_target || failed=1
-validate_link_target \
-  "$CODEX_SHARED_RULES" \
-  "$CODEX_ROOT/rules/shared.rules" || failed=1
-validate_codex_config_target || failed=1
+if has_component codex-rules; then
+  validate_link_target \
+    "$CODEX_SHARED_RULES" \
+    "$CODEX_ROOT/rules/shared.rules" || failed=1
+fi
+if [[ -n "$CODEX_CONFIG_MODE" ]]; then
+  validate_codex_config_target || failed=1
+fi
 validate_codex_hooks_target || failed=1
 validate_link_target \
   "$VERIFY_GATE" \
   "$VERIFY_GATE_COMMAND" || failed=1
-validate_legacy_codex_skills || failed=1
 
 if ((failed)); then
   exit 1
@@ -676,55 +927,91 @@ TRANSACTION_ACTIVE=1
 claude_candidate="$TRANSACTION_DIR/claude-settings.json"
 codex_candidate="$TRANSACTION_DIR/codex-config.toml"
 codex_hooks_candidate="$TRANSACTION_DIR/codex-hooks.json"
+components_candidate="$TRANSACTION_DIR/components"
 prepare_claude_settings "$claude_candidate"
-prepare_codex_tui_settings "$codex_candidate"
+if [[ -n "$CODEX_CONFIG_MODE" ]]; then
+  prepare_codex_tui_settings "$codex_candidate"
+fi
 prepare_codex_hooks "$codex_hooks_candidate"
+printf 'components=%s\ncodex_root=%s\nclaude_root=%s\n' \
+  "$SELECTED_COMPONENTS" "$CODEX_ROOT" "$CLAUDE_ROOT" >"$components_candidate"
 
 ensure_directory "$AGENTS_ROOT"
 ensure_directory "$AGENTS_ROOT/hooks"
 ensure_directory "$CODEX_ROOT"
-ensure_directory "$CODEX_ROOT/rules"
+if has_component codex-rules; then
+  ensure_directory "$CODEX_ROOT/rules"
+fi
 ensure_directory "$CLAUDE_ROOT"
+ensure_directory "${COMPONENTS_FILE%/*}"
 
 claude_staged=""
 codex_staged=""
 codex_hooks_staged=""
+components_staged=""
+snapshot_staged=""
 stage_managed_file \
   "$claude_candidate" \
   "$CLAUDE_ROOT/settings.json" \
   claude_staged
-stage_managed_file \
-  "$codex_candidate" \
-  "$CODEX_ROOT/config.toml" \
-  codex_staged
+if [[ -n "$CODEX_CONFIG_MODE" ]]; then
+  stage_managed_file \
+    "$codex_candidate" \
+    "$CODEX_ROOT/config.toml" \
+    codex_staged
+fi
 stage_managed_file \
   "$codex_hooks_candidate" \
   "$CODEX_ROOT/hooks.json" \
   codex_hooks_staged
+if has_component statusline; then
+  stage_managed_file \
+    "$CODEX_TUI_SETTINGS" \
+    "$CODEX_TUI_SNAPSHOT" \
+    snapshot_staged
+fi
+stage_managed_file \
+  "$components_candidate" \
+  "$COMPONENTS_FILE" \
+  components_staged
 
 echo
 echo "Installing global agent configuration..."
 echo
 
 # Shared instructions.
-install_link \
-  "$GLOBAL_INSTRUCTIONS" \
-  "$CODEX_ROOT/AGENTS.md"
+if has_component instructions; then
+  install_link \
+    "$GLOBAL_INSTRUCTIONS" \
+    "$CODEX_ROOT/AGENTS.md"
 
-install_link \
-  "$GLOBAL_INSTRUCTIONS" \
-  "$CLAUDE_ROOT/CLAUDE.md"
+  install_link \
+    "$GLOBAL_INSTRUCTIONS" \
+    "$CLAUDE_ROOT/CLAUDE.md"
+elif dropping_component instructions; then
+  remove_owned_link "$GLOBAL_INSTRUCTIONS" "$CODEX_ROOT/AGENTS.md"
+  remove_owned_link "$GLOBAL_INSTRUCTIONS" "$CLAUDE_ROOT/CLAUDE.md"
+fi
 
 # Codex discovers ~/.agents/skills. Claude Code discovers skills in its selected
 # configuration root. Link each canonical skill so unrelated local skills remain
 # untouched.
-install_skill_links "$AGENTS_ROOT/skills"
-install_skill_links "$CLAUDE_ROOT/skills"
+if has_component skills; then
+  install_skill_links "$AGENTS_ROOT/skills"
+  install_skill_links "$CLAUDE_ROOT/skills"
+elif dropping_component skills; then
+  remove_skill_links "$AGENTS_ROOT/skills"
+  remove_skill_links "$CLAUDE_ROOT/skills"
+fi
 
 # Agent-specific configuration that remains canonical in this repository.
-install_link \
-  "$CLAUDE_STATUS_LINE" \
-  "$CLAUDE_ROOT/statusline-command.sh"
+if has_component statusline; then
+  install_link \
+    "$CLAUDE_STATUS_LINE" \
+    "$CLAUDE_ROOT/statusline-command.sh"
+elif dropping_component statusline; then
+  remove_owned_link "$CLAUDE_STATUS_LINE" "$CLAUDE_ROOT/statusline-command.sh"
+fi
 
 # Both agents' hook entries run the verify gate through this link.
 install_link \
@@ -738,16 +1025,22 @@ activate_managed_file \
   "$claude_staged" \
   "$CLAUDE_ROOT/settings.json"
 
-install_link \
-  "$CODEX_SHARED_RULES" \
-  "$CODEX_ROOT/rules/shared.rules"
+if has_component codex-rules; then
+  install_link \
+    "$CODEX_SHARED_RULES" \
+    "$CODEX_ROOT/rules/shared.rules"
+elif dropping_component codex-rules; then
+  remove_owned_link "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"
+fi
 
 # Codex keeps machine-local state in config.toml, so only the centrally managed
 # TUI keys are reconciled instead of linking the complete file.
-activate_managed_file \
-  "Codex TUI settings" \
-  "$codex_staged" \
-  "$CODEX_ROOT/config.toml"
+if [[ -n "$CODEX_CONFIG_MODE" ]]; then
+  activate_managed_file \
+    "Codex TUI settings" \
+    "$codex_staged" \
+    "$CODEX_ROOT/config.toml"
+fi
 
 # Codex hooks.json may hold local hooks, so only the verify-gate entries are
 # reconciled instead of linking the complete file.
@@ -756,26 +1049,47 @@ activate_managed_file \
   "$codex_hooks_staged" \
   "$CODEX_ROOT/hooks.json"
 
+if has_component statusline; then
+  activate_managed_file \
+    "installed Codex TUI values" \
+    "$snapshot_staged" \
+    "$CODEX_TUI_SNAPSHOT"
+fi
+
+# Saved last so that a failed install leaves the previous selection in place.
+activate_managed_file \
+  "component selection" \
+  "$components_staged" \
+  "$COMPONENTS_FILE"
+
 TRANSACTION_ACTIVE=0
 
 echo
 echo "Done."
+echo "Installed: verify gate${SELECTED_COMPONENTS:+, ${SELECTED_COMPONENTS//,/, }}"
+echo "Change optional components with: ./install.sh --components LIST"
 echo "Codex: trust the verify-gate hooks with /hooks in a new session."
 echo
-echo "Canonical instructions:"
-echo "  $GLOBAL_INSTRUCTIONS"
-echo
-echo "Canonical skills:"
-echo "  $SKILLS"
-echo
-echo "Canonical Claude status line:"
-echo "  $CLAUDE_STATUS_LINE"
-echo
-echo "Canonical Claude settings:"
-echo "  $CLAUDE_SETTINGS"
-echo
-echo "Canonical Codex TUI settings:"
-echo "  $CODEX_TUI_SETTINGS"
-echo
-echo "Canonical Codex command policy:"
-echo "  $CODEX_SHARED_RULES"
+echo "Canonical verify gate:"
+echo "  $VERIFY_GATE"
+if has_component instructions; then
+  echo
+  echo "Canonical instructions:"
+  echo "  $GLOBAL_INSTRUCTIONS"
+fi
+if has_component skills; then
+  echo
+  echo "Canonical skills:"
+  echo "  $SKILLS"
+fi
+if has_component statusline; then
+  echo
+  echo "Canonical status lines:"
+  echo "  $CLAUDE_STATUS_LINE"
+  echo "  $CODEX_TUI_SETTINGS"
+fi
+if has_component codex-rules; then
+  echo
+  echo "Canonical Codex command policy:"
+  echo "  $CODEX_SHARED_RULES"
+fi

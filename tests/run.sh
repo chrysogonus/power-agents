@@ -62,20 +62,29 @@ assert_contains() {
 }
 
 run_installer() {
+  run_installer_args "$1" --components all
+}
+
+# Runs the installer with exactly the given arguments.
+run_installer_args() {
   local test_home="$1"
 
+  shift
   run_installer_with_roots \
     "$test_home" \
     "$test_home/.codex" \
-    "$test_home/.claude"
+    "$test_home/.claude" \
+    "$@"
 }
 
+# INSTALLER selects another checkout's install.sh.
 run_installer_with_roots() {
   local claude_root="$3"
   local codex_root="$2"
   local path
   local test_home="$1"
 
+  shift 3
   for path in "$test_home" "$codex_root" "$claude_root"; do
     case "$path" in
       "$TEST_ROOT"/*) ;;
@@ -88,7 +97,7 @@ run_installer_with_roots() {
     CODEX_HOME="$codex_root" \
     CLAUDE_CONFIG_DIR="$claude_root" \
     PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
-    "$ROOT/install.sh" >"$test_home/install.log" 2>&1
+    "${INSTALLER:-$ROOT/install.sh}" "$@" >"$test_home/install.log" 2>&1
 }
 
 expect_installer_failure() {
@@ -116,6 +125,10 @@ managed_hooks() {
       "timeout": 600
     }]}]
   }'
+}
+
+saved_components() {
+  sed -n 's/^components=//p' "$1/.config/power-agents/components"
 }
 
 render_status_line() {
@@ -150,7 +163,8 @@ EOF
     CODEX_HOME="$test_home/.codex" \
     CLAUDE_CONFIG_DIR="$test_home/.claude" \
     PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
-    "$invalid_repo/install.sh" >"$test_home/install.log" 2>&1; then
+    "$invalid_repo/install.sh" --components all \
+    >"$test_home/install.log" 2>&1; then
     fail "Installer accepted invalid skill metadata"
   fi
 
@@ -267,7 +281,8 @@ test_custom_agent_roots() {
   local codex_root="$TEST_ROOT/custom-root-home/config roots/codex"
   local test_home="$TEST_ROOT/custom-root-home"
 
-  run_installer_with_roots "$test_home" "$codex_root" "$claude_root"
+  run_installer_with_roots "$test_home" "$codex_root" "$claude_root" \
+    --components all
 
   assert_same_link \
     "$ROOT/instructions/general-global.md" "$codex_root/AGENTS.md"
@@ -421,6 +436,7 @@ run_rollback_case() {
   local claude_settings_before
   local codex_config_before
   local codex_hooks_before=""
+  local components_file
   local fail_at
   local failed_target
   local kind="$1"
@@ -429,6 +445,7 @@ run_rollback_case() {
   local test_home="$TEST_ROOT/rollback-$kind-home"
   local transaction_tmp="$test_home/tmp"
 
+  components_file="$test_home/.config/power-agents/components"
   mkdir -p "$test_home/.claude" "$test_home/.codex" "$shim" "$transaction_tmp"
   cat >"$test_home/.claude/settings.json" <<'EOF'
 {
@@ -438,7 +455,8 @@ EOF
   cat >"$test_home/.codex/config.toml" <<'EOF'
 model = "machine-local-model"
 EOF
-  # Activation order: Claude settings, Codex config, then Codex hooks.
+  # Activation order: Claude settings, Codex config, Codex hooks, then the
+  # component selection.
   case "$kind" in
     config)
       fail_at=2
@@ -451,6 +469,12 @@ EOF
     hooks)
       fail_at=3
       failed_target="$test_home/.codex/hooks.json"
+      ;;
+    components)
+      fail_at=5
+      failed_target="$components_file"
+      mkdir -p "${components_file%/*}"
+      printf '%s\n' "instructions" >"$components_file"
       ;;
   esac
   cat >"$shim/mv" <<'EOF'
@@ -482,7 +506,7 @@ EOF
     POWER_AGENTS_REAL_MV="$real_mv" \
     POWER_AGENTS_TEST_MV_COUNT="$test_home/mv-count" \
     PYTHONPATH="$TOMLKIT_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}" \
-    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    "$ROOT/install.sh" --components all >"$test_home/install.log" 2>&1; then
     fail "Installer unexpectedly succeeded after an activation failure"
   fi
 
@@ -516,6 +540,17 @@ EOF
     fail "Rollback left the Claude status line installed"
   [[ ! -e "$test_home/.agents" ]] ||
     fail "Rollback left shared skills or the verify gate installed"
+  if [[ "$kind" == components ]]; then
+    [[ "$(<"$components_file")" == "instructions" ]] ||
+      fail "Rollback did not restore the component selection"
+    [[ -z "$(find "${components_file%/*}" -name 'components.tmp.*' -print -quit)" ]] ||
+      fail "Rollback left a temporary component selection behind"
+    [[ ! -e "${components_file%/*}/codex-tui.toml" ]] ||
+      fail "Rollback left the installed Codex TUI values behind"
+  else
+    [[ ! -e "$test_home/.config" ]] ||
+      fail "Rollback left a component selection behind"
+  fi
   [[ -z "$(find "$transaction_tmp" -mindepth 1 -print -quit)" ]] ||
     fail "Rollback left transaction data behind"
 }
@@ -523,6 +558,7 @@ EOF
 test_transaction_rollback() {
   run_rollback_case config
   run_rollback_case hooks
+  run_rollback_case components
 }
 
 test_claude_settings_reconciliation() {
@@ -714,6 +750,266 @@ test_skill_link_migration() {
     "MIGRATE: $test_home/.agents/skills (per-skill links)"
   assert_contains "$test_home/install.log" \
     "MIGRATE: $test_home/.claude/skills (per-skill links)"
+}
+
+test_gate_only_install() {
+  local blocker="$TEST_ROOT/missing-optional-modules"
+  local local_status_line
+  local module
+  local test_home="$TEST_ROOT/gate-only-home"
+
+  local_status_line="$test_home/.claude/statusline-command.sh"
+  mkdir -p "$blocker" "$test_home/.claude"
+  for module in tomlkit yaml; do
+    printf '%s\n' 'raise ImportError("hidden by the gate-only test")' \
+      >"$blocker/$module.py"
+  done
+  printf '%s\n' '#!/bin/sh' 'echo local' >"$local_status_line"
+  jq -n --arg command "$local_status_line" \
+    '{"statusLine": {"type": "command", "command": $command}}' \
+    >"$test_home/.claude/settings.json"
+
+  if ! HOME="$test_home" \
+    CODEX_HOME="$test_home/.codex" \
+    CLAUDE_CONFIG_DIR="$test_home/.claude" \
+    PYTHONPATH="$blocker" \
+    "$ROOT/install.sh" >"$test_home/install.log" 2>&1; then
+    sed 's/^/  /' "$test_home/install.log" >&2
+    fail "Gate-only install failed without tomlkit and PyYAML"
+  fi
+
+  assert_same_link \
+    "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
+  jq -e --arg command "$local_status_line" \
+    --argjson hooks "$(managed_hooks claude \
+      "$test_home/.agents/hooks/verify-gate.py")" '
+    . == {
+      "statusLine": {"type": "command", "command": $command},
+      "hooks": $hooks
+    }
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Gate-only install changed the local Claude status line"
+  jq -e --argjson hooks "$(managed_hooks codex \
+    "$test_home/.agents/hooks/verify-gate.py")" \
+    '. == {"hooks": $hooks}' "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Gate-only install produced unexpected Codex hooks"
+  [[ -f "$local_status_line" && ! -L "$local_status_line" ]] ||
+    fail "Gate-only install replaced a local status-line script"
+  [[ ! -e "$test_home/.codex/AGENTS.md" && ! -e "$test_home/.claude/CLAUDE.md" && \
+    ! -e "$test_home/.agents/skills" && ! -e "$test_home/.claude/skills" && \
+    ! -e "$test_home/.codex/config.toml" && ! -e "$test_home/.codex/rules" ]] ||
+    fail "Gate-only install installed an optional component"
+  [[ -f "$test_home/.config/power-agents/components" && \
+    -z "$(saved_components "$test_home")" ]] ||
+    fail "Gate-only install did not save an empty component selection"
+  assert_contains "$test_home/install.log" "Installed: verify gate"
+}
+
+test_component_selection() {
+  local repository_links
+  local test_home="$TEST_ROOT/component-selection-home"
+
+  mkdir -p "$test_home/.codex"
+  printf '%s\n' 'model = "local"' >"$test_home/.codex/config.toml"
+
+  run_installer_args "$test_home" --components "skills, codex-rules"
+  [[ "$(saved_components "$test_home")" == "skills,codex-rules" ]] ||
+    fail "Installer saved an unexpected component selection"
+  assert_skill_links "$test_home/.agents/skills"
+  assert_skill_links "$test_home/.claude/skills"
+  assert_same_link \
+    "$ROOT/policies/codex/shared.rules" "$test_home/.codex/rules/shared.rules"
+  [[ ! -e "$test_home/.codex/AGENTS.md" && \
+    ! -e "$test_home/.claude/statusline-command.sh" ]] ||
+    fail "Installer installed an unselected component"
+  [[ "$(<"$test_home/.codex/config.toml")" == 'model = "local"' ]] ||
+    fail "Installer changed Codex config without the status line selected"
+
+  run_installer_args "$test_home"
+  [[ "$(saved_components "$test_home")" == "skills,codex-rules" ]] ||
+    fail "A plain rerun changed the saved component selection"
+  assert_skill_links "$test_home/.claude/skills"
+  [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
+    fail "A plain rerun installed an unselected component"
+
+  run_installer_args "$test_home" --components all
+  ln -s "$TEST_ROOT/elsewhere" "$test_home/.agents/skills/local-link"
+  jq '.model = "opus" | .statusLine.padding = 2' \
+    "$test_home/.claude/settings.json" \
+    >"$test_home/settings.json"
+  mv "$test_home/settings.json" "$test_home/.claude/settings.json"
+
+  run_installer_args "$test_home" --components none
+  [[ -z "$(saved_components "$test_home")" ]] ||
+    fail "Installer did not save an empty component selection"
+  repository_links="$(find "$test_home/.agents" "$test_home/.claude" \
+    "$test_home/.codex" -lname "$ROOT/*" -print)"
+  [[ "$repository_links" == "$test_home/.agents/hooks/verify-gate.py" ]] ||
+    fail "Deselected components left repository links: $repository_links"
+  [[ "$(readlink "$test_home/.agents/skills/local-link")" == \
+    "$TEST_ROOT/elsewhere" ]] ||
+    fail "Removing skills changed an unrelated skill link"
+  jq -e --argjson hooks "$(managed_hooks claude \
+    "$test_home/.agents/hooks/verify-gate.py")" \
+    '. == {"model": "opus", "hooks": $hooks}' \
+    "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Removing the status line did not keep only local Claude settings"
+  assert_contains "$test_home/.codex/config.toml" 'model = "local"'
+  if grep -q 'status_line' "$test_home/.codex/config.toml"; then
+    fail "Removing the status line left managed Codex TUI keys"
+  fi
+
+  if run_installer_args "$test_home" --components bogus; then
+    fail "Installer accepted an unknown component"
+  fi
+  assert_contains "$test_home/install.log" "ERROR: Unknown component: bogus"
+  [[ -z "$(saved_components "$test_home")" ]] ||
+    fail "Rejected component selection changed the saved selection"
+}
+
+test_component_detection() {
+  local test_home="$TEST_ROOT/component-detection-home"
+
+  run_installer "$test_home"
+  rm "$test_home/.config/power-agents/components"
+  rm "$test_home/.codex/rules/shared.rules"
+
+  run_installer_args "$test_home"
+  [[ "$(saved_components "$test_home")" == \
+    "instructions,skills,statusline" ]] ||
+    fail "Installer did not detect previously installed components"
+  [[ ! -e "$test_home/.codex/rules/shared.rules" ]] ||
+    fail "Installer reinstalled an undetected component"
+  assert_skill_links "$test_home/.agents/skills"
+}
+
+test_component_profiles() {
+  local profile_b="$TEST_ROOT/component-profiles-home/profile-b"
+  local status_line_b
+  local test_home="$TEST_ROOT/component-profiles-home"
+
+  run_installer "$test_home"
+
+  status_line_b="$profile_b/claude/statusline-command.sh"
+  mkdir -p "$profile_b/claude" "$profile_b/codex"
+  printf '%s\n' '[tui]' 'status_line_use_colors = true' \
+    >"$profile_b/codex/config.toml"
+  printf '%s\n' '#!/bin/sh' >"$status_line_b"
+  jq -n --arg command "$status_line_b" \
+    '{"statusLine": {"type": "command", "command": $command}}' \
+    >"$profile_b/claude/settings.json"
+  cp "$profile_b/codex/config.toml" "$test_home/profile-b-config.toml"
+
+  run_installer_with_roots \
+    "$test_home" "$profile_b/codex" "$profile_b/claude" --components none
+  cmp -s "$test_home/profile-b-config.toml" "$profile_b/codex/config.toml" ||
+    fail "Another profile's selection removed unmanaged Codex settings"
+  jq -e --arg command "$status_line_b" \
+    '.statusLine == {"type": "command", "command": $command}' \
+    "$profile_b/claude/settings.json" >/dev/null ||
+    fail "Another profile's selection removed an unmanaged Claude status line"
+  assert_same_link \
+    "$ROOT/instructions/general-global.md" "$test_home/.claude/CLAUDE.md"
+  assert_skill_links "$test_home/.claude/skills"
+
+  # The first profile's links still identify its components.
+  run_installer_args "$test_home"
+  [[ "$(saved_components "$test_home")" == \
+    "instructions,skills,statusline,codex-rules" ]] ||
+    fail "Switching profiles lost the first profile's components"
+  assert_skill_links "$test_home/.agents/skills"
+
+  # Changing only one agent root must not treat that root's unmanaged status
+  # line as installed.
+  mkdir -p "$profile_b/codex-only"
+  cp "$test_home/profile-b-config.toml" "$profile_b/codex-only/config.toml"
+  run_installer_with_roots \
+    "$test_home" "$profile_b/codex-only" "$test_home/.claude" --components none
+  cmp -s "$test_home/profile-b-config.toml" "$profile_b/codex-only/config.toml" ||
+    fail "Changing only CODEX_HOME removed unmanaged Codex settings"
+
+  run_installer "$test_home"
+  run_installer_with_roots \
+    "$test_home" "$test_home/.codex" "$profile_b/claude" --components none
+  jq -e --arg command "$status_line_b" \
+    '.statusLine == {"type": "command", "command": $command}' \
+    "$profile_b/claude/settings.json" >/dev/null ||
+    fail "Changing only CLAUDE_CONFIG_DIR removed an unmanaged status line"
+}
+
+test_replaced_status_line_script() {
+  local script
+  local test_home="$TEST_ROOT/replaced-status-line-home"
+
+  script="$test_home/.claude/statusline-command.sh"
+  run_installer "$test_home"
+  rm "$script"
+  printf '%s\n' '#!/bin/sh' 'echo local' >"$script"
+
+  run_installer_args "$test_home" --components none
+  [[ -f "$script" && ! -L "$script" ]] ||
+    fail "Removing the status line deleted a local replacement script"
+  jq -e --arg command "$script" \
+    '.statusLine == {"type": "command", "command": $command}' \
+    "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Removing the status line dropped the setting for a local script"
+}
+
+# Removal compares against the values the install wrote, not the current
+# settings/codex/tui.toml, which may have changed since.
+test_status_line_removal_after_update() {
+  local checkout
+  local config
+  local old_values
+  local snapshot
+  local test_home="$TEST_ROOT/status-line-update-home"
+
+  config="$test_home/.codex/config.toml"
+  snapshot="$test_home/.config/power-agents/codex-tui.toml"
+  old_values="$(printf '%s\n' '[tui]' 'status_line = ["old-item"]' \
+    'status_line_use_colors = false')"
+
+  run_installer "$test_home"
+  cmp -s "$ROOT/settings/codex/tui.toml" "$snapshot" ||
+    fail "Installer did not save the installed Codex TUI values"
+
+  # Installed from an older tui.toml whose values still match.
+  printf '%s\n' "$old_values" >"$snapshot"
+  printf 'model = "local"\n%s\n' "$old_values" >"$config"
+  run_installer_args "$test_home" --components none
+  [[ "$(<"$config")" == 'model = "local"' ]] ||
+    fail "Removal kept unchanged values from an older install"
+
+  # A user value that equals the current tui.toml was not written by the install.
+  run_installer "$test_home"
+  printf '%s\n' "$old_values" >"$snapshot"
+  run_installer_args "$test_home" --components none
+  cmp -s <(sed -n '/^status_line/p' "$ROOT/settings/codex/tui.toml") \
+    <(sed -n '/^status_line/p' "$config") ||
+    fail "Removal deleted values the install did not write"
+
+  # Without a snapshot, nothing proves ownership.
+  run_installer "$test_home"
+  rm "$snapshot"
+  run_installer_args "$test_home" --components none
+  assert_contains "$config" "status_line ="
+
+  # Removal needs only the snapshot, even when tui.toml is now invalid.
+  checkout="$TEST_ROOT/status-line-update-checkout"
+  test_home="$TEST_ROOT/status-line-update-copy-home"
+  config="$test_home/.codex/config.toml"
+  mkdir -p "$checkout"
+  tar -C "$ROOT" --exclude=.git -cf - . | tar -C "$checkout" -xf -
+  INSTALLER="$checkout/install.sh" run_installer "$test_home"
+  printf '%s\n' 'not toml [' >"$checkout/settings/codex/tui.toml"
+  if ! INSTALLER="$checkout/install.sh" \
+    run_installer_args "$test_home" --components none; then
+    sed 's/^/  /' "$test_home/install.log" >&2
+    fail "Status-line removal failed with an invalid current tui.toml"
+  fi
+  if grep -q 'status_line' "$config"; then
+    fail "Removal with an invalid current tui.toml left managed keys"
+  fi
 }
 
 test_codex_config_reconciliation() {
@@ -909,7 +1205,8 @@ test_claude_runtime_compatibility() {
   local runtime_log="$TEST_ROOT/claude-runtime-home/claude-doctor.log"
   local test_home="$TEST_ROOT/claude-runtime-home"
 
-  run_installer_with_roots "$test_home" "$codex_root" "$claude_root"
+  run_installer_with_roots "$test_home" "$codex_root" "$claude_root" \
+    --components all
   claude_version="$(HOME="$test_home" CLAUDE_CONFIG_DIR="$claude_root" \
     claude --version)"
   echo "INFO: Testing $claude_version"
@@ -1356,6 +1653,18 @@ test_legacy_verify_gate_rejection
 pass "legacy standalone verify gate hooks fail without partial installation"
 test_skill_link_migration
 pass "legacy whole-directory skill links migrate to per-skill links"
+test_gate_only_install
+pass "default install adds only the verify gate and needs no optional modules"
+test_component_selection
+pass "optional components install, persist, and remove only owned links and keys"
+test_component_detection
+pass "installs without a saved selection keep their detected components"
+test_component_profiles
+pass "a selection saved for other agent roots is not applied to these roots"
+test_replaced_status_line_script
+pass "a status-line script replaced by a local file keeps its setting"
+test_status_line_removal_after_update
+pass "status-line removal compares against the values the install wrote"
 test_codex_config_reconciliation
 pass "Codex config preservation and managed-key reconciliation"
 test_invalid_codex_config_rejection

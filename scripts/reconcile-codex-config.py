@@ -110,6 +110,41 @@ def reconcile(source_path: Path, input_path: Path, output_path: Path) -> None:
         raise ValueError(f"could not write {output_path}: {error}") from error
 
 
+def remove(source_path: Path, input_path: Path, output_path: Path) -> None:
+    """Drop managed keys that still hold the managed values."""
+    source = parse_file(source_path)
+    validate_managed_settings(source)
+
+    document = parse_file(input_path)
+    validate_config(document)
+    original_values = document_values(document)
+    managed_values = document_values(source)["tui"]
+
+    tui = document.get("tui")
+    if tui is not None:
+        for key in MANAGED_KEYS:
+            if original_values["tui"].get(key) == managed_values[key]:
+                del tui[key]
+        if not tui:
+            del document["tui"]
+
+    candidate_text = tomlkit.dumps(document)
+    try:
+        candidate_values = document_values(tomlkit.parse(candidate_text))
+    except tomlkit.exceptions.ParseError as error:
+        raise ValueError(f"generated invalid TOML: {error}") from error
+
+    if without_managed_values(original_values) != without_managed_values(
+        candidate_values
+    ):
+        raise ValueError("generated TOML changes unmanaged values")
+
+    try:
+        output_path.write_text(candidate_text, encoding="utf-8")
+    except OSError as error:
+        raise ValueError(f"could not write {output_path}: {error}") from error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -120,10 +155,11 @@ def main() -> int:
     validate_config_parser = subparsers.add_parser("validate-config")
     validate_config_parser.add_argument("config", type=Path)
 
-    reconcile_parser = subparsers.add_parser("reconcile")
-    reconcile_parser.add_argument("source", type=Path)
-    reconcile_parser.add_argument("input", type=Path)
-    reconcile_parser.add_argument("output", type=Path)
+    for command in ("reconcile", "remove"):
+        command_parser = subparsers.add_parser(command)
+        command_parser.add_argument("source", type=Path)
+        command_parser.add_argument("input", type=Path)
+        command_parser.add_argument("output", type=Path)
 
     arguments = parser.parse_args()
 
@@ -134,6 +170,8 @@ def main() -> int:
         elif arguments.command == "validate-config":
             document = parse_file(arguments.config)
             validate_config(document)
+        elif arguments.command == "remove":
+            remove(arguments.source, arguments.input, arguments.output)
         else:
             reconcile(arguments.source, arguments.input, arguments.output)
     except ValueError as error:

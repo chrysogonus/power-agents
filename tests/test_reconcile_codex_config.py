@@ -35,13 +35,15 @@ class ReconcileCodexConfigTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
-    def reconcile(self, content: str) -> subprocess.CompletedProcess[str]:
+    def reconcile(
+        self, content: str, command: str = "reconcile"
+    ) -> subprocess.CompletedProcess[str]:
         self.input_path.write_text(content, encoding="utf-8")
         return subprocess.run(
             [
                 "python3",
                 str(RECONCILER),
-                "reconcile",
+                command,
                 str(MANAGED_SETTINGS),
                 str(self.input_path),
                 str(self.output_path),
@@ -200,6 +202,39 @@ class ReconcileCodexConfigTests(unittest.TestCase):
 
         self.assertEqual(
             self.output_path.read_text(encoding="utf-8"), first_result
+        )
+
+    def test_remove_drops_only_unchanged_managed_values(self) -> None:
+        cases = {
+            "other tui keys": (
+                'model = "local"\n\n[tui]\ntheme = "dark"\n',
+                {"model": "local", "tui": {"theme": "dark"}},
+            ),
+            "managed keys only": ('model = "local"\n', {"model": "local"}),
+        }
+
+        for name, (content, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assert_reconciled(self.reconcile(content))
+                installed = self.output_path.read_text(encoding="utf-8")
+
+                result = self.reconcile(installed, "remove")
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    tomlkit.parse(
+                        self.output_path.read_text(encoding="utf-8")
+                    ).value,
+                    expected,
+                )
+
+        result = self.reconcile(
+            '[tui]\nstatus_line = ["user-choice"]\n', "remove"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            tomlkit.parse(self.output_path.read_text(encoding="utf-8")).value,
+            {"tui": {"status_line": ["user-choice"]}},
         )
 
 

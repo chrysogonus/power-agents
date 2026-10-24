@@ -1,8 +1,11 @@
 # Project Instructions
 
-This repository is the canonical source for personal configuration shared by
-Codex and Claude Code.
+This repository's core is the verify gate (`hooks/verify-gate.py`), installed
+for Codex and Claude Code. Instructions, skills, status lines, and Codex rules
+are optional components selected with `./install.sh --components`.
 
+- Keep a gate-only install working: it must not need `tomlkit` or PyYAML, and
+  must not create or change files that belong to optional components.
 - Edit files in this repository, not their installed copies under `~/.agents`
   or the configured Codex and Claude roots.
 - Keep cross-project instructions in `instructions/general-global.md`.

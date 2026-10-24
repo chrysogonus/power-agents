@@ -11,24 +11,69 @@ or `~/.codex` when it is unset. *Claude root* means the directory selected by
 `CLAUDE_CONFIG_DIR`, or `~/.claude` when it is unset. The shared Codex skill
 directory remains `~/.agents/skills`, even when `CODEX_HOME` is set.
 
-| Configuration | Installed path | Source relative to checkout | Method |
-| --- | --- | --- | --- |
-| Codex skills | `~/.agents/skills/<name>` | `skills/<name>` | Per-skill symlink |
-| Claude Code skills | `<Claude root>/skills/<name>` | `skills/<name>` | Per-skill symlink |
-| Codex instructions | `<Codex root>/AGENTS.md` | `instructions/general-global.md` | Symlink |
-| Claude Code instructions | `<Claude root>/CLAUDE.md` | `instructions/general-global.md` | Symlink |
-| Claude Code settings | `<Claude root>/settings.json` | `settings/claude/settings.json` | Managed keys |
-| Claude Code verify-gate hooks | `<Claude root>/settings.json` (`hooks`) | `settings/claude/hooks.json` | Managed entries |
-| Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Symlink |
-| Claude Code status line | `<Claude root>/statusline-command.sh` | `settings/claude/statusline-command.sh` | Symlink |
-| Codex TUI settings | `<Codex root>/config.toml` | `settings/codex/tui.toml` | Managed keys |
-| Codex verify-gate hooks | `<Codex root>/hooks.json` | `settings/codex/hooks.json` | Managed entries |
-| Verify gate script | `~/.agents/hooks/verify-gate.py` | `hooks/verify-gate.py` | Symlink |
+| Component | Configuration | Installed path | Source relative to checkout | Method |
+| --- | --- | --- | --- | --- |
+| always | Claude Code verify-gate hooks | `<Claude root>/settings.json` (`hooks`) | `settings/claude/hooks.json` | Managed entries |
+| always | Codex verify-gate hooks | `<Codex root>/hooks.json` | `settings/codex/hooks.json` | Managed entries |
+| always | Verify gate script | `~/.agents/hooks/verify-gate.py` | `hooks/verify-gate.py` | Symlink |
+| always | Component selection | `~/.config/power-agents/components` | none | Written by the installer |
+| `instructions` | Codex instructions | `<Codex root>/AGENTS.md` | `instructions/general-global.md` | Symlink |
+| `instructions` | Claude Code instructions | `<Claude root>/CLAUDE.md` | `instructions/general-global.md` | Symlink |
+| `skills` | Codex skills | `~/.agents/skills/<name>` | `skills/<name>` | Per-skill symlink |
+| `skills` | Claude Code skills | `<Claude root>/skills/<name>` | `skills/<name>` | Per-skill symlink |
+| `statusline` | Claude Code settings | `<Claude root>/settings.json` | `settings/claude/settings.json` | Managed keys |
+| `statusline` | Claude Code status line | `<Claude root>/statusline-command.sh` | `settings/claude/statusline-command.sh` | Symlink |
+| `statusline` | Codex TUI settings | `<Codex root>/config.toml` | `settings/codex/tui.toml` | Managed keys |
+| `statusline` | Installed Codex TUI values | `~/.config/power-agents/codex-tui.toml` | `settings/codex/tui.toml` | Copy |
+| `codex-rules` | Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Symlink |
 
 Application-managed state, caches, plugins, and bundled skills remain in each
 application's own directory and are not managed by this repository. In
 particular, Codex continues to own `<Codex root>/rules/default.rules` for rules
 created through interactive approvals.
+
+## Choosing Components
+
+The verify gate is always installed. Select optional components with
+`./install.sh --components LIST`, where `LIST` is a comma-separated subset of
+`instructions`, `skills`, `statusline`, and `codex-rules`, or `all` or `none`.
+An unknown name fails before anything changes.
+
+- **The selection is saved.** The installer writes it to
+  `~/.config/power-agents/components`, together with the Codex and Claude roots
+  it was installed into, as the last step of a successful install; a failed
+  install leaves the previous file in place. Without `--components`,
+  `make install`, `make sync`, and sync's own recovery reuse the saved
+  selection.
+- **Without a saved selection for the current roots**, the installer keeps what
+  is already installed there: it treats each optional component whose links
+  already point into this checkout as selected, and saves that. This covers
+  upgrades from installs made before components existed, and switching
+  `CODEX_HOME` or `CLAUDE_CONFIG_DIR` between profiles. A saved selection is
+  never applied to roots it was not saved for.
+- **Deselecting a component removes only what the installer added for it.** It
+  unlinks only links that resolve into this checkout. For `statusline`, it
+  removes Claude Code's `statusLine` while its command still runs this
+  checkout's script through the installed link, even if you added fields such as
+  `padding`. It removes Codex's `tui.status_line` and
+  `tui.status_line_use_colors` only while they still hold the values the
+  installer wrote, which it saves in `~/.config/power-agents/codex-tui.toml`,
+  and only when the saved selection was recorded for the current Codex and
+  Claude roots, because those keys carry no other proof of ownership. Changes
+  to `settings/codex/tui.toml` since that install do not affect what is
+  removed. Otherwise they stay, and values you changed always stay. Directories such as
+  `~/.agents/skills` and `<Codex root>/rules` are kept. The removal runs only
+  when a component changes from selected to deselected, so a status-line script
+  of your own at `<Claude root>/statusline-command.sh` is never touched by an
+  install that does not select `statusline`.
+- **Some paths are shared by every profile.** Codex reads `~/.agents/skills`
+  whatever `CODEX_HOME` is, and both agents run the gate from
+  `~/.agents/hooks/verify-gate.py`. Deselecting `skills` for one profile
+  removes the shared Codex skill links; the next install for a profile that
+  still selects `skills` restores them.
+- **Python modules are needed only by their component.** `statusline` needs
+  `tomlkit`, also for removing it, and `skills` needs PyYAML for validation. A
+  gate-only install needs neither.
 
 ## Installation Details
 
@@ -50,10 +95,12 @@ configuration worth keeping into this repository, remove the conflicting path,
 and rerun the installer.
 
 The regular machine-local settings files are exceptions to symlink management.
-The installer preserves unrelated values while updating only Claude Code's
-`statusLine` key in `<Claude root>/settings.json`, `tui.status_line` and
-`tui.status_line_use_colors` in `<Codex root>/config.toml`, and the verify-gate
-hook entries in `<Claude root>/settings.json` and `<Codex root>/hooks.json`.
+The installer preserves unrelated values while updating only the verify-gate
+hook entries in `<Claude root>/settings.json` and `<Codex root>/hooks.json`,
+and, with the `statusline` component, Claude Code's `statusLine` key in
+`<Claude root>/settings.json` and `tui.status_line` and
+`tui.status_line_use_colors` in `<Codex root>/config.toml`. Without
+`statusline`, it does not create or change `<Codex root>/config.toml`.
 Hook entries are reconciled one handler at a time: handlers whose command
 references `~/.agents/hooks/verify-gate.py` are replaced, and every other hook,
 matcher group, and event is kept. The installer refuses a symlinked or invalid
@@ -91,9 +138,9 @@ one of those files, set **Project instructions** in `/config` to
 confirm the project instructions loaded. See
 [Claude Code's AGENTS.md documentation](https://code.claude.com/docs/en/memory#agentsmd).
 
-The installer still links the shared global instructions to
-`<Claude root>/CLAUDE.md`; Claude's user-wide instruction entrypoint remains
-separate from project `AGENTS.md` discovery.
+With the `instructions` component, the installer links the shared global
+instructions to `<Claude root>/CLAUDE.md`; Claude's user-wide instruction
+entrypoint remains separate from project `AGENTS.md` discovery.
 
 ## Resolving an Installation Conflict
 
@@ -160,7 +207,8 @@ cannot run after `SIGKILL`, a process crash, or machine failure.
 
 ## Updating the Codex Status Line
 
-Edit `settings/codex/tui.toml`, then rerun `./install.sh`. The installer replaces
+Edit `settings/codex/tui.toml`, then rerun `./install.sh` with the `statusline`
+component selected. The installer replaces
 only `tui.status_line` and `tui.status_line_use_colors` in
 `<Codex root>/config.toml`; all other Codex settings remain local.
 
@@ -185,25 +233,22 @@ paths.
 
 ## Manual Uninstall
 
-There is no automated uninstaller. Before removing anything, use `readlink` to
-verify that each managed symlink in the [installed-paths table](#installed-paths)
-resolves into this checkout. Use `unlink` only on verified links, including each
-repository-owned entry under `~/.agents/skills/` and `<Claude root>/skills/`;
-keep those directories and all unrelated skills intact. Older installations may
-instead have a verified whole-directory `skills` symlink, which can be unlinked
-as one path.
+There is no automated uninstaller for the verify gate. First remove every
+optional component the installer added:
 
-Next, edit `<Codex root>/config.toml` and remove `status_line` and
-`status_line_use_colors` from `[tui]` if those managed values are no longer
-wanted. Keep the `[tui]` table when it contains other local settings.
+```bash
+./install.sh --components none
+```
 
-In `<Claude root>/settings.json`, remove the `statusLine` key if it still points
-to this repository's status-line script, or restore your own status-line setting.
-Keep all other settings. The installer does not retain a backup of earlier
-managed values after a successful run.
+This unlinks only links that resolve into this checkout and removes managed
+status-line values only while they are unchanged; see
+[Choosing Components](#choosing-components). It does not restore a status-line
+setting you had before installing `statusline`, because the installer keeps no
+backup of earlier managed values.
 
-Remove the verify-gate hook entries from both files, check the results, and only
-then replace the originals. Run this from the checkout, substituting your roots if
+Then remove the verify-gate hook entries from `<Claude root>/settings.json` and
+`<Codex root>/hooks.json`, check the results, and only then replace the
+originals. Run this from the checkout, substituting your roots if
 `CLAUDE_CONFIG_DIR` or `CODEX_HOME` is set:
 
 ```bash
@@ -216,5 +261,7 @@ python3 scripts/reconcile-hooks.py remove \
 Only handlers that reference `~/.agents/hooks/verify-gate.py` are removed, along
 with any matcher group, event, or `hooks` object that becomes empty as a result.
 Review each `.new` file, then move it over the original. Finally, verify
-`~/.agents/hooks/verify-gate.py` with `readlink` and `unlink` it. Once the links
-and managed settings are removed, the checkout can be removed separately.
+`~/.agents/hooks/verify-gate.py` with `readlink` and `unlink` it, and delete
+`~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
+Once the links and managed settings are
+removed, the checkout can be removed separately.

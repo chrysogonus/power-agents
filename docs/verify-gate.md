@@ -1,5 +1,7 @@
 # Verify Gate and Cross-Review
 
+The verify gate is this repository's core: `make install` always installs it,
+with or without the [optional components](installation.md#choosing-components).
 Both agents run [`hooks/verify-gate.py`](../hooks/verify-gate.py) on
 `UserPromptSubmit` and `Stop`. A turn qualifies when it changed files in the
 working tree, or when the final answer is at least 600 characters and does not

@@ -6,9 +6,15 @@ imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
 
-Follow the repository's [quick installation guide](../README.md#installation).
-`make install` links every skill for both Codex and Claude Code; there is no
-separate skill-installation step.
+Skills are an optional component. Follow the repository's
+[quick installation guide](../README.md#installation), then select them:
+
+```bash
+./install.sh --components skills   # add other components to the list as needed
+```
+
+This links every skill for both Codex and Claude Code. Later runs of
+`make install` keep the saved selection.
 
 Ask for a skill explicitly, or let the agent select one from your request:
 
@@ -138,7 +144,7 @@ for isolation, interpretation, and external instruction conflicts.
 ## Adding a Skill
 
 Create the directory and `SKILL.md`, then run `./install.sh` from the repository
-root to validate all skill names and create the new per-skill links for Codex
+root, with the `skills` component selected, to validate all skill names and create the new per-skill links for Codex
 and Claude Code. Existing unrelated skills in either agent's skill directory
 remain untouched. Run `make check` to validate the change. Edits to an
 already linked skill are available immediately through its link.
