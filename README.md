@@ -257,7 +257,7 @@ Run these from your checkout. `make` on its own lists them.
 | Command | What it does |
 | --- | --- |
 | `make install` | Install or update the verify gate and your saved optional components for both agents. |
-| `make sync` | Safely pull signed updates and reinstall. Needs a [one-time setup](docs/installation.md#syncing). |
+| `make sync` | Pull upstream updates and reinstall. [Details](docs/installation.md#syncing) |
 | `make check` | Run all checks and tests on your working copy. |
 | `make test` | Run only the behavioral tests. |
 | `make ci` | Run the same checks as GitHub Actions. |
@@ -266,11 +266,10 @@ Run these from your checkout. `make` on its own lists them.
 
 ## Quality Checks
 
-`make check` and `make ci` additionally need GnuPG and ShellCheck. On Debian or
-Ubuntu:
+`make check` and `make ci` additionally need ShellCheck. On Debian or Ubuntu:
 
 ```bash
-sudo apt-get install make gnupg jq python3 python3-tomlkit python3-yaml shellcheck
+sudo apt-get install make jq python3 python3-tomlkit python3-yaml shellcheck
 ```
 
 Use `make check` while you work and `make ci` before you push. What the checks
@@ -286,7 +285,7 @@ power-agents/
 ├── settings/       Agent-specific settings: status lines and hook entries
 ├── policies/       Codex command approval rules
 ├── install.sh      The installer (run through `make install`)
-├── sync.sh         Signature-checked updater (run through `make sync`)
+├── sync.sh         Fast-forward updater (run through `make sync`)
 ├── scripts/        Checks, settings merging, and evaluation runners
 ├── tests/          Isolated tests that never touch your real setup
 ├── evals/          Tasks for the coding-outcome evaluations
@@ -300,7 +299,7 @@ repository; it is not installed globally.
 ## Further Reading
 
 - [Installation reference](docs/installation.md): every installed path, merge
-  rules, conflicts, signed sync, and manual uninstall
+  rules, conflicts, sync, and manual uninstall
 - [Verify gate and cross-review](docs/verify-gate.md): when it runs, controls,
   cost, and privacy
 - [Skills](skills/README.md): the full inventory and how to write a skill

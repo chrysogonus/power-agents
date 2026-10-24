@@ -163,47 +163,32 @@ Rerun `make install` after resolving the reported conflict.
 
 ## Syncing
 
-Use `make sync` to update an installed checkout. It verifies every incoming
-commit's OpenPGP signature before updating files or running the installer.
-This verification applies to sync updates; the initial clone and installation
-do not perform this signature check.
-
-### Set up trusted signers once
-
-1. Install GnuPG (`sudo apt-get install gnupg` on Debian or Ubuntu).
-2. Obtain and import the public keys of the people whose signed commits you
-   intend to accept. Confirm their full primary-key fingerprints through a
-   trusted channel; `gpg --fingerprint` lists fingerprints for imported keys.
-3. Create an allowlist **outside this repository**, at the path used by sync:
-
-   ```bash
-   mkdir -p ~/.config/power-agents
-   ${EDITOR:-vi} ~/.config/power-agents/trusted-signing-keys
-   ```
-
-   Add one trusted full primary-key fingerprint per line. Blank lines and lines
-   starting with `#` are ignored. If you create your own commits, configure
-   OpenPGP signing and include your key when those commits will be synced to
-   another machine; see [Contributing](../CONTRIBUTING.md#commits-and-pull-requests).
-
-### Update your checkout
+Use `make sync` to update an installed checkout:
 
 ```bash
 make -C ~/power-agents sync
 ```
 
-`sync.sh` fetches the current branch's configured upstream, verifies every
-commit in the incoming range with `git verify-commit`, then fast-forwards and
-reruns the installer. It requires each primary-key fingerprint to appear in the
-allowlist and rejects unsigned, invalid, expired, revoked, or unlisted
-signatures and divergent history without changing `HEAD` or running incoming
-code. An up-to-date checkout may still rerun the already-trusted installer.
+`sync.sh` fetches the current branch's configured upstream, fast-forwards to
+it, and reruns the installer. It does not check commit signatures: anyone who
+can push to the upstream controls the code that sync installs, including the
+verify gate both agents run as a hook. Divergent history is rejected without
+changing `HEAD`. An up-to-date checkout still reruns the installer.
 
 Sync requires a working tree with no tracked or staged changes; untracked files
 are preserved. If the incoming installer fails after a fast-forward, or sync
 receives a handled signal during activation, sync restores the previous commit
 and reruns its installer to restore the prior configuration. This recovery
 cannot run after `SIGKILL`, a process crash, or machine failure.
+
+Checkouts whose `sync.sh` still verifies signatures reject the unsigned
+commits that removed that check. Update such a checkout once by hand, then
+use `make sync` again:
+
+```bash
+git -C ~/power-agents pull --ff-only
+~/power-agents/install.sh
+```
 
 ## Updating the Codex Status Line
 

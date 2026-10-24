@@ -6,8 +6,8 @@ required workflow is summarized in [Contributing](../CONTRIBUTING.md).
 
 ## Quality Checks
 
-The core local checks use Make, Bash, Git, GnuPG, `jq`, Python 3 with `tomlkit`
-and PyYAML, and [ShellCheck](https://www.shellcheck.net/). The
+The core local checks use Make, Bash, Git, `jq`, Python 3 with `tomlkit` and
+PyYAML, and [ShellCheck](https://www.shellcheck.net/). The
 [README](../README.md#quality-checks) lists the install command for Debian or
 Ubuntu.
 
@@ -39,8 +39,7 @@ current npm releases of both agents and requires both compatibility checks; use
 `make check` works from either a Git checkout or an exported source archive
 without `.git`; `make ci` requires a Git checkout. Installer and agent-runtime
 tests never use the invoking user's live configuration. `jq` is an installer and
-status-line runtime dependency; GnuPG is needed for sync signature tests, and
-ShellCheck is used for static analysis at warning-or-higher severity.
+status-line runtime dependency, and ShellCheck is used for static analysis at warning-or-higher severity.
 
 ## Adding or Updating a Skill
 

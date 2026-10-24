@@ -14,5 +14,5 @@
 - [ ] `make ci` passes
 - [ ] Documentation updated (`README.md`, `skills/README.md`) where behavior or
       inventory changed
-- [ ] Commits are signed and follow the `type(scope): summary` convention
+- [ ] Commits follow the `type(scope): summary` convention
 - [ ] Every changed line traces to the stated purpose

@@ -38,16 +38,13 @@ vulnerability until a fix is available.
 
 ## Trust Model
 
-`sync.sh` verifies incoming history before it changes the working tree or runs
-any incoming code. Every commit in the incoming range must carry a valid
-OpenPGP signature whose primary-key fingerprint appears in an allowlist stored
-outside this repository at `~/.config/power-agents/trusted-signing-keys`.
-Unsigned, invalid, expired, revoked, or unlisted signatures and divergent
-history are all rejected without moving `HEAD`. Sync also refuses tracked or
-staged local changes. If installation fails after a verified fast-forward, sync
-restores the previous commit and reruns its installer so symlinked and copied
-configuration return to the prior version. See
-[Syncing](docs/installation.md#syncing) for setup.
+`sync.sh` fast-forwards to the current branch's configured upstream and reruns
+the installer. It does not verify commit signatures, so write access to the
+upstream repository is what controls the code sync installs. Divergent history
+is rejected without moving `HEAD`, and sync refuses tracked or staged local
+changes. If installation fails after a fast-forward, sync restores the previous
+commit and reruns its installer so symlinked and copied configuration return to
+the prior version. See [Syncing](docs/installation.md#syncing).
 
 The installer refuses to replace a same-name skill, a real file, or an incorrect
 symlink. It canonicalizes configuration roots before rejecting `/` or duplicate
@@ -58,9 +55,9 @@ Codex records hook trust against the hook *definition* in `hooks.json`, not the
 contents of the script it runs. After the first `/hooks` approval, changes to
 `hooks/verify-gate.py` reach Codex through the installed symlink, for example
 via `make sync`, without another Codex review. Claude Code likewise runs the
-current script contents. Signed sync is therefore the control for this script:
-only verified commits from allowlisted signers can change the code both agents
-run as hooks. With cross-review enabled, the script also sends session
+current script contents. Write access to the upstream repository is therefore
+the control for this script: anyone who can push there can change the code both
+agents run as hooks. With cross-review enabled, the script also sends session
 transcripts and diffs to the other agent's vendor; redaction is best-effort.
 
 ## Out of Scope
@@ -72,4 +69,4 @@ transcripts and diffs to the other agent's vendor; redaction is best-effort.
 - Third-party components listed in
   [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md); report those upstream.
 - Findings that require an attacker who already has write access to the
-  machine, the home directory, or the signing key.
+  machine, the home directory, or the upstream repository.

@@ -1389,56 +1389,26 @@ test_status_line() {
     fail "Status line wrote errors for out-of-range percentage values"
 }
 
-test_sync_signature_verification() {
-  local allowlist
+test_sync() {
   local clone
   local dirty_kind
   local failed_commit
-  local fingerprint
-  local gpg_home
-  local reported_primary
-  local reported_signer
   local remote
-  local signing_fingerprint
   local source
   local sync_home
-  local sync_root="$TEST_ROOT/sync-verification"
-  local trusted_commit
-  local unsigned_commit
+  local sync_root="$TEST_ROOT/sync"
+  local update_commit
 
-  allowlist="$sync_root/home/.config/power-agents/trusted-signing-keys"
   clone="$sync_root/clone"
-  gpg_home="$sync_root/gnupg"
   remote="$sync_root/remote.git"
   source="$sync_root/source"
   sync_home="$sync_root/home"
 
-  mkdir -p "$gpg_home" "$sync_home/.config/power-agents"
-  chmod 700 "$gpg_home"
-  GNUPGHOME="$gpg_home" gpg --batch --quiet --pinentry-mode loopback \
-    --passphrase '' --quick-generate-key \
-    'Power Agents Test <power-agents@example.invalid>' rsa2048 cert 0
-  fingerprint="$(GNUPGHOME="$gpg_home" gpg --batch --with-colons \
-    --list-secret-keys 2>/dev/null |
-    awk -F: '$1 == "fpr" { print $10; exit }')"
-  [[ "$fingerprint" =~ ^[[:xdigit:]]{40}$ ]] ||
-    fail "Test primary key did not have a full OpenPGP fingerprint"
-  GNUPGHOME="$gpg_home" gpg --batch --quiet --pinentry-mode loopback \
-    --passphrase '' --quick-add-key "$fingerprint" rsa2048 sign 0
-  signing_fingerprint="$(GNUPGHOME="$gpg_home" gpg --batch --with-colons \
-    --list-secret-keys 2>/dev/null |
-    awk -F: '$1 == "fpr" { count++; if (count == 2) { print $10; exit } }')"
-  [[ "$signing_fingerprint" =~ ^[[:xdigit:]]{40}$ ]] ||
-    fail "Test signing subkey did not have a full OpenPGP fingerprint"
-  [[ "$signing_fingerprint" != "$fingerprint" ]] ||
-    fail "Test signing subkey unexpectedly matched the primary key"
-
+  mkdir -p "$sync_home"
   git init -q --bare -b main "$remote"
   git init -q -b main "$source"
   git -C "$source" config user.name "Power Agents Test"
   git -C "$source" config user.email "power-agents@example.invalid"
-  git -C "$source" config user.signingkey "$fingerprint"
-  git -C "$source" config gpg.format openpgp
   git -C "$source" config commit.gpgsign false
 
   cp "$ROOT/sync.sh" "$source/sync.sh"
@@ -1452,71 +1422,28 @@ EOF
   chmod +x "$source/install.sh" "$source/sync.sh"
   printf '%s\n' "initial" >"$source/version"
   git -C "$source" add install.sh sync.sh version
-  git -C "$source" commit -qm "initial unsigned baseline"
+  git -C "$source" commit -qm "initial baseline"
   git -C "$source" remote add origin "$remote"
   git -C "$source" push -qu -u origin main
   git clone -q "$remote" "$clone"
 
-  printf '%s\n' "signed" >"$source/version"
-  GNUPGHOME="$gpg_home" git -C "$source" commit -q \
-    -S"$fingerprint" -am "trusted signed update"
-  trusted_commit="$(git -C "$source" rev-parse HEAD)"
-  read -r reported_signer reported_primary < <(
-    GNUPGHOME="$gpg_home" git -C "$source" show -s \
-      --format='%GF %GP' "$trusted_commit" 2>/dev/null
-  )
-  [[ "$reported_signer" == "$signing_fingerprint" ]] ||
-    fail "Test commit was not signed by the signing subkey"
-  [[ "$reported_primary" == "$fingerprint" ]] ||
-    fail "Git did not report the expected primary signing-key fingerprint"
+  printf '%s\n' "updated" >"$source/version"
+  git -C "$source" commit -qam "update"
+  update_commit="$(git -C "$source" rev-parse HEAD)"
   git -C "$source" push -q
 
-  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
-    "$clone/sync.sh" >"$sync_root/missing-allowlist.log" 2>&1; then
-    fail "Sync accepted an update without a trusted signer allowlist"
-  fi
-  assert_contains "$sync_root/missing-allowlist.log" \
-    "Missing trusted signer allowlist:"
-  [[ "$(git -C "$clone" rev-parse HEAD)" != "$trusted_commit" ]] ||
-    fail "Sync changed HEAD without a trusted signer allowlist"
-  [[ ! -e "$sync_home/installed-version" ]] ||
-    fail "Sync ran the installer without a trusted signer allowlist"
-
-  printf '%s\n' "$fingerprint" >"$clone/repository-signers"
-  ln -s "$clone/repository-signers" "$allowlist"
-  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
-    "$clone/sync.sh" >"$sync_root/repository-allowlist.log" 2>&1; then
-    fail "Sync accepted a signer allowlist controlled by the repository"
-  fi
-  assert_contains "$sync_root/repository-allowlist.log" \
-    "Trusted signer allowlist must be stored outside the repository."
-  rm "$allowlist"
-
-  printf '%040d\n' 0 >"$allowlist"
-  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
-    "$clone/sync.sh" >"$sync_root/untrusted-signer.log" 2>&1; then
-    fail "Sync accepted a signed commit from an unlisted key"
-  fi
-  assert_contains "$sync_root/untrusted-signer.log" \
-    "Incoming commit $trusted_commit is not signed by a trusted key."
-  [[ "$(git -C "$clone" rev-parse HEAD)" != "$trusted_commit" ]] ||
-    fail "Sync changed HEAD for an unlisted signing key"
-  [[ ! -e "$sync_home/installed-version" ]] ||
-    fail "Sync ran the installer for an unlisted signing key"
-
-  printf '%s\n' "$fingerprint" >"$allowlist"
   for dirty_kind in unstaged staged; do
     printf '%s\n' "$dirty_kind-local-change" >"$clone/version"
     if [[ "$dirty_kind" == "staged" ]]; then
       git -C "$clone" add version
     fi
-    if HOME="$sync_home" GNUPGHOME="$gpg_home" \
+    if HOME="$sync_home" \
       "$clone/sync.sh" >"$sync_root/dirty-$dirty_kind.log" 2>&1; then
       fail "Sync accepted a $dirty_kind tracked change"
     fi
     assert_contains "$sync_root/dirty-$dirty_kind.log" \
       "Tracked or staged changes are present; commit or discard them before syncing."
-    [[ "$(git -C "$clone" rev-parse HEAD)" != "$trusted_commit" ]] ||
+    [[ "$(git -C "$clone" rev-parse HEAD)" != "$update_commit" ]] ||
       fail "Sync changed HEAD with a $dirty_kind tracked change"
     [[ "$(<"$clone/version")" == "$dirty_kind-local-change" ]] ||
       fail "Sync changed a $dirty_kind tracked change"
@@ -1525,12 +1452,11 @@ EOF
   done
 
   printf '%s\n' "keep this untracked file" >"$clone/local-note"
-  HOME="$sync_home" GNUPGHOME="$gpg_home" \
-    "$clone/sync.sh" >"$sync_root/trusted-update.log" 2>&1
-  [[ "$(git -C "$clone" rev-parse HEAD)" == "$trusted_commit" ]] ||
-    fail "Sync did not fast-forward to a trusted signed commit"
-  [[ "$(<"$sync_home/installed-version")" == "signed" ]] ||
-    fail "Sync did not install the trusted signed update"
+  HOME="$sync_home" "$clone/sync.sh" >"$sync_root/update.log" 2>&1
+  [[ "$(git -C "$clone" rev-parse HEAD)" == "$update_commit" ]] ||
+    fail "Sync did not fast-forward to the upstream commit"
+  [[ "$(<"$sync_home/installed-version")" == "updated" ]] ||
+    fail "Sync did not install the update"
   [[ "$(<"$clone/local-note")" == "keep this untracked file" ]] ||
     fail "Sync changed an unrelated untracked file"
 
@@ -1543,12 +1469,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp "$ROOT/version" "$HOME/installed-version"
 exit 91
 EOF
-  GNUPGHOME="$gpg_home" git -C "$source" commit -q \
-    -S"$fingerprint" -am "signed update with failing installer"
+  git -C "$source" commit -qam "update with failing installer"
   failed_commit="$(git -C "$source" rev-parse HEAD)"
   git -C "$source" push -q
 
-  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
+  if HOME="$sync_home" \
     "$clone/sync.sh" >"$sync_root/failed-install.log" 2>&1; then
     fail "Sync accepted an update whose installer failed"
   fi
@@ -1556,29 +1481,10 @@ EOF
     "ERROR: Sync failed after update activation; restoring the previous version."
   assert_contains "$sync_root/failed-install.log" \
     "Previous checkout and installed configuration restored."
-  [[ "$(git -C "$clone" rev-parse HEAD)" == "$trusted_commit" ]] ||
+  [[ "$(git -C "$clone" rev-parse HEAD)" == "$update_commit" ]] ||
     fail "Sync did not restore HEAD after installer failure at $failed_commit"
-  [[ "$(<"$sync_home/installed-version")" == "signed" ]] ||
+  [[ "$(<"$sync_home/installed-version")" == "updated" ]] ||
     fail "Sync did not restore the installed version after installer failure"
-
-  printf '%s\n' "signed-two" >"$source/version"
-  GNUPGHOME="$gpg_home" git -C "$source" commit -q \
-    -S"$fingerprint" -am "second trusted signed update"
-  printf '%s\n' "unsigned" >"$source/version"
-  git -C "$source" commit -qam "unsigned update"
-  unsigned_commit="$(git -C "$source" rev-parse HEAD)"
-  git -C "$source" push -q
-
-  if HOME="$sync_home" GNUPGHOME="$gpg_home" \
-    "$clone/sync.sh" >"$sync_root/unsigned-update.log" 2>&1; then
-    fail "Sync accepted an unsigned incoming commit"
-  fi
-  assert_contains "$sync_root/unsigned-update.log" \
-    "Signature verification failed for incoming commit $unsigned_commit."
-  [[ "$(git -C "$clone" rev-parse HEAD)" == "$trusted_commit" ]] ||
-    fail "Sync partially applied commits before rejecting an unsigned update"
-  [[ "$(<"$sync_home/installed-version")" == "signed" ]] ||
-    fail "Sync ran incoming code before rejecting an unsigned update"
 }
 
 test_make_targets() {
@@ -1693,8 +1599,8 @@ test_install_conflicts
 pass "file, same-name skill, and incorrect-symlink conflict refusal"
 test_status_line
 pass "status-line output and input validation"
-test_sync_signature_verification
-pass "sync verifies incoming commits and rolls back failed activation"
+test_sync
+pass "sync fast-forwards, refuses local changes, and rolls back failed activation"
 test_make_targets
 pass "Make targets"
 test_ci_workflow

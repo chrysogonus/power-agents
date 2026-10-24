@@ -10,7 +10,7 @@ if ((BASH_VERSINFO[0] < 4)); then
   exit 1
 fi
 
-for command in git gpg jq make python3 shellcheck; do
+for command in git jq make python3 shellcheck; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: $command" >&2
     echo "       See README.md#quality-checks for setup instructions." >&2

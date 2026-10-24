@@ -43,8 +43,6 @@ Install the required tooling first; see
 
 - Use the existing `type(scope): summary` commit style, for example
   `fix(installer): activate Claude Code status line`.
-- Sign commits with OpenPGP. `sync.sh` rejects any commit whose signature is
-  missing or whose primary-key fingerprint is not allowlisted.
 - Update `README.md`, `docs/`, or `skills/README.md` when behavior or inventory
   changes.
 - Keep diffs surgical: every changed line should trace to the stated purpose.

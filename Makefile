@@ -8,7 +8,7 @@ help:
 		'' \
 		'Targets:' \
 		"  install  Install this repository's agent configuration" \
-		'  sync     Verify, fast-forward, and reinstall configuration' \
+		'  sync     Fast-forward and reinstall configuration' \
 		'  test     Run the isolated behavioral tests' \
 		'  check    Run checks against the current working tree' \
 		'  ci       Run the same complete pipeline as GitHub Actions' \
