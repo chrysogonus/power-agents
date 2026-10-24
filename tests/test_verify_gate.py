@@ -26,6 +26,12 @@ import json, os, sys, time
 name = os.path.basename(sys.argv[0])
 log = os.environ["STUB_LOG_DIR"]
 mode = os.environ.get("STUB_MODE", "ok")
+if sys.argv[1:3] == ["mcp", "list"]:
+    if mode == "hang-list":
+        os.system("sleep " + os.environ["STUB_SLEEP"] + " &")
+        time.sleep(60)
+    print(os.environ.get("STUB_MCP", "[]"))
+    sys.exit(0)
 record = {
     "argv": sys.argv[1:],
     "env": {k: os.environ.get(k) for k in ("VERIFY_GATE", "CROSS_REVIEW")},
@@ -46,6 +52,10 @@ if "-o" in sys.argv:
 else:
     print(review)
 """
+
+
+def pairs(argv: list[str]) -> list[list[str]]:
+    return [argv[i:i + 2] for i in range(len(argv) - 1)]
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -268,6 +278,8 @@ class VerifyGateTests(unittest.TestCase):
             self.assertIn(flag, argv)
         self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
         self.assertEqual(argv[argv.index("--disable") + 1], "hooks")
+        for feature in ("apps", "plugins", "browser_use", "computer_use"):
+            self.assertIn(["--disable", feature], pairs(argv))
         self.assertEqual(record["env"], {"VERIFY_GATE": "0", "CROSS_REVIEW": "0"})
         bundle = record["stdin"]
         self.assertIn("USER: Fix the null bug in app.py", bundle)
@@ -359,19 +371,59 @@ class VerifyGateTests(unittest.TestCase):
                     output,
                 )
 
+    def test_codex_reviewer_disables_configured_mcp_servers(self) -> None:
+        servers = json.dumps([{"name": "docs"}, {"name": "mail_sender-2"}])
+        self.mark()
+        self.change_file()
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(
+            self.stop(CROSS_REVIEW="1", STUB_MCP=servers), "codex"
+        )
+        argv = self.reviewer_record("codex")["argv"]
+        for name in ("docs", "mail_sender-2"):
+            self.assertIn(["-c", f"mcp_servers.{name}.enabled=false"], pairs(argv))
+
+    def test_unlisted_codex_mcp_servers_skip_cross_review(self) -> None:
+        cases = {
+            "invalid JSON": "not json",
+            "unsafe name": json.dumps([{"name": "a.b"}]),
+            "missing name": json.dumps([{}]),
+        }
+        for name, listing in cases.items():
+            with self.subTest(name=name):
+                self.session += 1
+                self.mark()
+                (self.repo / "app.py").write_text(f"# {name}\n", encoding="utf-8")
+                self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+                output = self.stop(CROSS_REVIEW="1", STUB_MCP=listing)
+                self.assertNotIn("decision", output)
+                self.assertTrue(
+                    output["systemMessage"].startswith("cross-review skipped:"),
+                    output,
+                )
+                self.assertFalse((self.logs / "codex.json").exists())
+
     def test_timeout_kills_the_reviewer_process_group(self) -> None:
+        self.assert_timeout_kills_children("hang", "timed out")
+
+    def test_mcp_listing_timeout_kills_its_process_group(self) -> None:
+        self.assert_timeout_kills_children(
+            "hang-list", "could not list Codex MCP servers"
+        )
+
+    def assert_timeout_kills_children(self, mode: str, message: str) -> None:
         if not shutil.which("pgrep"):
             self.skipTest("pgrep is not installed")
         duration = f"{random.randint(100, 999)}.{random.randint(1000, 9999)}"
         pattern = f"sleep {duration}"
-        env = {"STUB_MODE": "hang", "CROSS_REVIEW_TIMEOUT": "1",
+        env = {"STUB_MODE": mode, "CROSS_REVIEW_TIMEOUT": "1",
                "STUB_SLEEP": duration}
         self.addCleanup(subprocess.run, ["pkill", "-fx", pattern], check=False)
         self.mark()
         self.change_file()
         self.assert_verification_block(self.stop(CROSS_REVIEW="1", **env))
         output = self.stop(CROSS_REVIEW="1", **env)
-        self.assertIn("timed out", output["systemMessage"])
+        self.assertIn(message, output["systemMessage"])
 
         for _ in range(20):
             survivor = subprocess.run(

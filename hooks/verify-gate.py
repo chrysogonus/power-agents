@@ -391,6 +391,60 @@ def detect_agent(event, arg):
     return "codex" if "/.codex/" in tp else "claude"
 
 
+# Codex features whose tools act outside the read-only shell sandbox.
+CODEX_EXTERNAL_FEATURES = ("apps", "plugins", "browser_use", "computer_use")
+
+
+def run_group(cmd, cwd, env, stdin, timeout):
+    """Return (returncode, stdout, stderr); raise TimeoutExpired.
+
+    Own process group: on timeout, kill the CLI *and* its children so an
+    abandoned run doesn't keep running and spending tokens.
+    """
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, env=env, text=True, start_new_session=True,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = proc.communicate(stdin, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, 9)
+        except OSError:
+            pass
+        proc.communicate()
+        raise
+    return proc.returncode, stdout, stderr
+
+
+def codex_tools_off(binary, cwd, env):
+    """Return (args disabling Codex MCP servers and external tools, error).
+
+    --sandbox read-only covers only shell commands. `-c mcp_servers={}`
+    merges instead of replacing, so each server is disabled by name.
+    """
+    try:
+        code, stdout, _ = run_group(
+            [binary, "mcp", "list", "--json"], cwd, env, None,
+            min(30, REVIEW_TIMEOUT),
+        )
+        servers = json.loads(stdout) if code == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        servers = None
+    if not isinstance(servers, list):
+        return None, "could not list Codex MCP servers to disable them"
+    args = []
+    for server in servers:
+        name = server.get("name") if isinstance(server, dict) else None
+        if not isinstance(name, str) or not re.fullmatch(r"[\w-]+", name, re.A):
+            return None, f"cannot disable Codex MCP server {str(name)[:60]!r}"
+        args += ["-c", f"mcp_servers.{name}.enabled=false"]
+    for feature in CODEX_EXTERNAL_FEATURES:
+        args += ["--disable", feature]
+    return args, None
+
+
 def run_reviewer(reviewer, bundle, cwd):
     """Return (feedback, error)."""
     env = dict(os.environ, VERIFY_GATE="0", CROSS_REVIEW="0")
@@ -407,6 +461,11 @@ def run_reviewer(reviewer, bundle, cwd):
         out_file = None
     else:
         binary = os.environ.get("CROSS_REVIEW_CODEX_BIN") or "codex"
+        if not shutil.which(binary):
+            return None, f"{binary} not found on PATH"
+        tools_off, err = codex_tools_off(binary, cwd, env)
+        if err:
+            return None, err
         fd, out_file = tempfile.mkstemp(prefix="xreview-", suffix=".md")
         os.close(fd)
         cmd = [
@@ -415,6 +474,7 @@ def run_reviewer(reviewer, bundle, cwd):
             "--skip-git-repo-check",
             "--ephemeral",
             "--disable", "hooks",
+            *tools_off,
             "--color", "never",
             "-c", 'approval_policy="never"',
             "-C", cwd,
@@ -424,25 +484,12 @@ def run_reviewer(reviewer, bundle, cwd):
     if not shutil.which(cmd[0]):
         return None, f"{cmd[0]} not found on PATH"
     try:
-        # Own process group: on timeout, kill the CLI *and* its children
-        # so an abandoned review doesn't keep running and spending tokens.
-        proc = subprocess.Popen(
-            cmd, cwd=cwd, env=env, text=True, start_new_session=True,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        try:
-            stdout, stderr = proc.communicate(bundle, timeout=REVIEW_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(proc.pid, 9)
-            except OSError:
-                pass
-            proc.communicate()
-            return None, f"{reviewer} timed out after {REVIEW_TIMEOUT}s"
+        code, stdout, stderr = run_group(cmd, cwd, env, bundle, REVIEW_TIMEOUT)
         text = stdout
         if out_file:
             text = Path(out_file).read_text(errors="replace")
+    except subprocess.TimeoutExpired:
+        return None, f"{reviewer} timed out after {REVIEW_TIMEOUT}s"
     except OSError as e:
         return None, f"{reviewer} failed to start: {e}"
     finally:
@@ -452,9 +499,9 @@ def run_reviewer(reviewer, bundle, cwd):
             except OSError:
                 pass
     text = text.strip()
-    if proc.returncode != 0 or not text:
+    if code != 0 or not text:
         err = (stderr or "").strip().splitlines()[-1:] or ["no output"]
-        return None, f"{reviewer} exited {proc.returncode}: {err[0][:200]}"
+        return None, f"{reviewer} exited {code}: {err[0][:200]}"
     return text, None
 
 

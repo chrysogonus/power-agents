@@ -20,6 +20,30 @@ end in a question.
 | `python3 ~/.agents/hooks/verify-gate.py cross-review on\|off\|status` | Persistently toggles cross-review through `~/.config/power-agents/cross-review-on`. |
 | `CROSS_REVIEW=1` or `CROSS_REVIEW=0` | Forces cross-review on or off for sessions started with it. |
 | `VERIFY_GATE=0` | Disables the gate, including cross-review, for sessions started with it. |
+| `VERIFY_GATE_MIN_CHARS=600` | Sets the answer length that makes a turn qualify. |
+| `CROSS_REVIEW_TIMEOUT=480` | Sets how many seconds the reviewer may run before it is skipped. |
+| `CROSS_REVIEW_MAX_CHARS=150000` | Sets how much transcript is sent to the reviewer. |
+| `CROSS_REVIEW_CLAUDE_BIN`, `CROSS_REVIEW_CODEX_BIN` | Override the reviewer CLI paths. |
+
+The full self-check and review prompts are at the top of
+[`hooks/verify-gate.py`](../hooks/verify-gate.py). The self-check is a prompt:
+the gate cannot confirm that the agent ran the checks it was asked to run.
+
+## How the Reviewer Is Restricted
+
+Both reviewers are told not to change anything, and both run with hooks
+disabled, so a review cannot trigger another review. The technical limits
+differ:
+
+- **Claude Code as reviewer** may only use its `Read`, `Grep`, and `Glob` tools,
+  and loads no MCP servers.
+- **Codex as reviewer** runs with `--sandbox read-only`, which limits its shell
+  commands. The gate also disables every MCP server that `codex mcp list` reports
+  and turns off the `apps`, `plugins`, `browser_use`, and `computer_use`
+  features, whose tools act outside that sandbox. If the server list cannot be
+  read, or a server name cannot be safely disabled, the review is skipped with a
+  notice. Tools that Codex adds later under other feature names are not covered
+  until they are added to `CODEX_EXTERNAL_FEATURES` in the script.
 
 ## Cost, Privacy, and Trust
 
