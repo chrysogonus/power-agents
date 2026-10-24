@@ -227,7 +227,7 @@ def turn_changes(before, now):
                 or "").strip()
     specs = [":(literal)" + p for p in sorted(paths)]
     out = []
-    # ponytail: hashes can't recover the earlier contents, so flag them.
+    # shortcut: hashes can't recover the earlier contents, so flag them.
     mixed = sorted(p for p in paths if before and p in before["files"])
     if mixed:
         out.append("Already modified before this turn; the diff includes "
