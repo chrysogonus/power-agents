@@ -83,8 +83,15 @@ important changes yourself.
 **The trade-offs:** each qualifying turn takes longer and costs an extra model
 pass, and cross-review adds a full review by the other agent. Cross-review also
 sends your transcript and diff to the *other* vendor, so leave it off for work
-that must stay with one vendor. The effect on answer quality has not been
-measured yet: the evaluations in this repository run with hooks disabled.
+that must stay with one vendor.
+
+**Measured so far (October 2026, one user, Claude Code only, 20 sessions over
+two days):** 94 turns were self-checked, and in 41 of them (44%) the agent
+reported fixing something. Of 43 cross-reviews by Codex, 23 (53%) reported
+issues. These numbers count how often the gate led to a change, not whether
+the final answers were better: the evaluations in this repository run with
+hooks disabled, so the effect on answer quality has not been measured. Run
+`python3 ~/.agents/hooks/verify-gate.py stats` to see your own numbers.
 
 [Controls, cost, and privacy details →](docs/verify-gate.md)
 
