@@ -107,11 +107,12 @@ class VerifyGateTests(unittest.TestCase):
         return env
 
     def run_gate(
-        self, args: list[str], stdin: str, **env: str
+        self, args: list[str], stdin: str, cwd: Path | None = None, **env: str
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["python3", str(SCRIPT), *args],
             input=stdin,
+            cwd=cwd,
             capture_output=True,
             text=True,
             env=self.environment(**env),
@@ -669,6 +670,67 @@ class VerifyGateTests(unittest.TestCase):
         invalid = self.run_gate(["cross-review", "maybe"], "")
         self.assertNotEqual(invalid.returncode, 0)
         self.assertIn("usage: verify-gate.py cross-review", invalid.stderr)
+
+    # ----------------------------------------------------- manual review
+
+    def test_manual_review_covers_changes_since_the_base(self) -> None:
+        self.change_file()
+        git(self.repo, "commit", "-qam", "v2")
+        (self.repo / "new.py").write_text("print('new')\n", encoding="utf-8")
+        result = self.run_gate(
+            ["review", "--agent", "claude", "--base", "HEAD~1",
+             "--focus", "FOCUS-321"], "", cwd=self.repo,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("STUB REVIEW from codex", result.stdout)
+        bundle = self.reviewer_record("codex")["stdin"]
+        for text in ("+print('v2')", "new untracked file new.py",
+                     "<focus>\nFOCUS-321\n</focus>", "manual review"):
+            self.assertIn(text, bundle)
+
+        uncommitted = self.run_gate(["review", "--reviewer", "claude"], "",
+                                    cwd=self.repo)
+        self.assertEqual(uncommitted.returncode, 0, uncommitted.stderr)
+        bundle = self.reviewer_record("claude")["stdin"]
+        self.assertIn("new untracked file new.py", bundle)
+        self.assertNotIn("+print('v2')", bundle)
+
+        failed = self.run_gate(["review", "--reviewer", "codex"], "",
+                               cwd=self.repo, STUB_MODE="fail")
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("review failed: codex exited 3", failed.stderr)
+        usage = self.run_gate(["review"], "", cwd=self.repo)
+        self.assertEqual(usage.returncode, 2)
+
+    def test_status_and_cancel_a_running_review(self) -> None:
+        if not shutil.which("pgrep"):
+            self.skipTest("pgrep is not installed")
+        duration = f"{random.randint(100, 999)}.{random.randint(1000, 9999)}"
+        pattern = f"sleep {duration}"
+        self.addCleanup(subprocess.run, ["pkill", "-fx", pattern], check=False)
+        self.assertIn("no reviews running", self.run_gate(["status"], "").stdout)
+        self.mark()
+        self.change_file()
+        self.assert_verification_block(self.stop(
+            CROSS_REVIEW="1", STUB_MODE="hang", STUB_SLEEP=duration,
+            CROSS_REVIEW_TIMEOUT="60",
+        ))
+        for _ in range(100):
+            if subprocess.run(["pgrep", "-fx", pattern],
+                              capture_output=True).returncode == 0:
+                break
+            time.sleep(0.1)
+        else:
+            self.fail("the reviewer did not start")
+        self.assertIn(f"session-{self.session}: Codex reviewing for",
+                      self.run_gate(["status"], "").stdout)
+        self.assertIn("no reviews running",
+                      self.run_gate(["cancel", "other-session"], "").stdout)
+        self.assertIn(f"session-{self.session}: review cancelled",
+                      self.run_gate(["cancel"], "").stdout)
+        self.assert_process_gone(pattern)
+        output = self.stop(CROSS_REVIEW="1")
+        self.assertIn("cross-review skipped", output["systemMessage"])
 
     # ------------------------------------------------------------ doctor
 

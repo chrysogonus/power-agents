@@ -21,6 +21,12 @@ CLI:
   (toggle file: ~/.config/power-agents/cross-review-on)
   verify-gate.py stats       summarize the decision log
   verify-gate.py doctor      check the installed hooks and reviewers
+  verify-gate.py review [--reviewer claude|codex | --agent claude|codex]
+                 [--base REF] [--focus TEXT]
+                             review the working tree, or the changes since
+                             REF's merge base, now
+  verify-gate.py status      list running background reviews
+  verify-gate.py cancel [SESSION]  stop running background reviews
 
 Env:
   VERIFY_GATE=0               disable everything (also the recursion guard)
@@ -31,6 +37,7 @@ Env:
   CROSS_REVIEW_MAX_CHARS=150000  transcript budget sent to the reviewer
   CROSS_REVIEW_CLAUDE_BIN / CROSS_REVIEW_CODEX_BIN  CLI overrides
 """
+import argparse
 import json
 import os
 import re
@@ -682,9 +689,14 @@ def start_review(event, agent, state, cwd, now):
     """Start the reviewer in the background; return its state record."""
     reviewer = "codex" if agent == "claude" else "claude"
     result = state_path(event).with_suffix(f".{state['turn']}.review.json")
-    record = {"reviewer": reviewer, "result": str(result), "snap": now,
-              "started": time.time()}
-    bundle = build_bundle(event, agent, state, now)
+    record = {"reviewer": reviewer, "result": str(result), "snap": now}
+    return spawn_worker(record, build_bundle(event, agent, state, now), cwd)
+
+
+def spawn_worker(record, bundle, cwd):
+    """Start the review worker on bundle; return record with its pid."""
+    reviewer, result = record["reviewer"], record["result"]
+    record["started"] = time.time()
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         proc = subprocess.Popen(
@@ -990,6 +1002,103 @@ def doctor():
     return 1 if failed else 0
 
 
+def _reap(*_):
+    try:
+        os.waitpid(-1, os.WNOHANG)
+    except ChildProcessError:
+        pass
+
+
+def manual_review(args):
+    """Run a review of the working tree now and print it; return status."""
+    parser = argparse.ArgumentParser(prog="verify-gate.py review")
+    parser.add_argument("--reviewer", choices=NAMES)
+    parser.add_argument("--agent", choices=NAMES)
+    parser.add_argument("--base")
+    parser.add_argument("--focus")
+    opts = parser.parse_args(args)
+    reviewer = opts.reviewer or {"claude": "codex", "codex": "claude"}.get(
+        opts.agent)
+    if not reviewer:
+        parser.error("name the reviewer with --reviewer, or yourself with --agent")
+    cwd = os.getcwd()
+    now = snapshot(cwd)
+    if now is None:
+        sys.exit("verify-gate.py review: not a git repository")
+    before = None
+    if opts.base:
+        base = (_git(cwd, "merge-base", opts.base, "HEAD") or "").strip()
+        if not base:
+            sys.exit(f"verify-gate.py review: no merge base with {opts.base}")
+        before = {"head": base, "top": now["top"], "files": {}}
+    diff, _ = turn_changes(before, now)
+    request = "Review the changes in <git_diff>."
+    if opts.focus:
+        request += f"\n<focus>\n{opts.focus}\n</focus>"
+    bundle = redact("\n".join([
+        f"<latest_request>\n{request}\n</latest_request>",
+        "<transcript>(no transcript: manual review)</transcript>",
+        f"<git_diff cwd=\"{cwd}\">\n{diff or '(no changes)'}\n</git_diff>",
+    ]))
+    result = STATE_DIR / f"manual-{os.getpid()}.review.json"
+    # Reap the worker at once, so a crashed one isn't seen alive as a zombie.
+    # A handler, unlike SIG_IGN, is not inherited by the worker's own CLIs.
+    signal.signal(signal.SIGCHLD, _reap)
+    review = spawn_worker({"reviewer": reviewer, "result": str(result)},
+                          bundle, cwd)
+    print(f"{NAMES[reviewer]} is reviewing...", file=sys.stderr)
+    try:
+        feedback, err, _ = collect_review(review)
+    except KeyboardInterrupt:  # the worker is in its own session
+        kill_review(review)
+        return 130
+    if err:
+        print(f"review failed: {err}", file=sys.stderr)
+        return 1
+    print(feedback)
+    return 0
+
+
+def running_reviews(session=None):
+    """Yield (session, review) for background reviews still running."""
+    try:
+        paths = sorted(STATE_DIR.glob("*.json"))
+    except OSError:
+        return
+    for path in paths:
+        if path.name.endswith(".review.json"):
+            continue
+        if session and path.stem != session:
+            continue
+        try:
+            review = json.loads(path.read_text()).get("review") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        pid = review.get("pid")
+        if pid and not Path(review["result"]).exists() and _alive(pid):
+            yield path.stem, review
+
+
+def status():
+    found = False
+    for session, review in running_reviews():
+        found = True
+        print(f"{session}: {NAMES.get(review['reviewer'], review['reviewer'])} "
+              f"reviewing for {time.time() - review['started']:.0f}s")
+    if not found:
+        print("no reviews running")
+
+
+def cancel(session=None):
+    found = False
+    for name, review in running_reviews(session):
+        found = True
+        kill_review(review)
+        print(f"{name}: review cancelled")
+    if not found:
+        print("no reviews running")
+
+
 def main():
     args = sys.argv[1:]
     mode = args[0] if args else "stop"
@@ -1001,6 +1110,14 @@ def main():
         return
     if mode == "doctor":
         sys.exit(doctor())
+    if mode == "review":
+        sys.exit(manual_review(args[1:]))
+    if mode == "status":
+        status()
+        return
+    if mode == "cancel":
+        cancel(args[1] if len(args) > 1 else None)
+        return
     if mode == "review-worker" and len(args) == 4:
         review_worker(*args[1:])
         return

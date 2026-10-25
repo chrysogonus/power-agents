@@ -28,6 +28,9 @@ Changes include edits to untracked files and commits made during the turn.
 | --- | --- |
 | `python3 ~/.agents/hooks/verify-gate.py cross-review on\|off\|status` | Persistently toggles cross-review through `~/.config/power-agents/cross-review-on`. |
 | `python3 ~/.agents/hooks/verify-gate.py doctor` | Checks that both agents' hook entries run the gate, the state directory is writable, and, when cross-review is on, that both reviewer CLIs are on PATH and the Codex reviewer's MCP servers can be disabled. Exits 1 if a required check fails. |
+| `python3 ~/.agents/hooks/verify-gate.py review --agent claude\|codex [--base REF] [--focus TEXT]` | Runs a review now, outside the gate, and prints it. With `--agent` the *other* agent reviews; name the reviewer directly with `--reviewer`. It reviews uncommitted and untracked changes, or with `--base` also the commits since the merge base with `REF`. `--focus` tells the reviewer what to concentrate on. No transcript is sent; the reviewer runs with the same restrictions as in the gate. |
+| `python3 ~/.agents/hooks/verify-gate.py status` | Lists background reviews that are still running, per session. |
+| `python3 ~/.agents/hooks/verify-gate.py cancel [SESSION]` | Stops running background reviews, or only that session's. The gate then skips the review with a notice. |
 | `CROSS_REVIEW=1` or `CROSS_REVIEW=0` | Forces cross-review on or off for sessions started with it. |
 | `CROSS_REVIEW_SCOPE=changes` | Set to `all` to also cross-review long answers from turns that changed no files. |
 | `VERIFY_GATE=0` | Disables the gate, including cross-review, for sessions started with it. |
