@@ -746,13 +746,21 @@ class VerifyGateTests(unittest.TestCase):
     def test_reviews_past_their_deadline_are_not_running(self) -> None:
         leader = subprocess.Popen(["sleep", "30"], start_new_session=True)
         self.addCleanup(leader.kill)
-        state = self.cache / "verify-gate" / "old-session.json"
+        state = self.cache / "verify-gate" / f"session-{self.session}.json"
         state.parent.mkdir(parents=True)
         state.write_text(json.dumps({"review": {
             "reviewer": "codex", "pid": leader.pid, "started": time.time() - 9999,
             "result": str(state.with_suffix(".x.review.json"))}}))
         self.assertIn("no reviews running", self.run_gate(["status"], "").stdout)
         self.assertIn("no reviews running", self.run_gate(["cancel"], "").stdout)
+        self.assertIsNone(leader.poll())
+        # A recent record whose pid now runs something else: not the worker.
+        data = json.loads(state.read_text())
+        data["review"]["started"] = time.time()
+        state.write_text(json.dumps(data))
+        self.assertIn("no reviews running", self.run_gate(["status"], "").stdout)
+        self.assertIn("no reviews running", self.run_gate(["cancel"], "").stdout)
+        self.mark()  # a new prompt kills only a matching worker
         self.assertIsNone(leader.poll())
 
     # ------------------------------------------------------------ doctor

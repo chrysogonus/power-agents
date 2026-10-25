@@ -715,13 +715,25 @@ def spawn_worker(record, bundle, cwd):
     return record
 
 
+def _is_worker(review):
+    """True if the review's pid still runs its worker, not a reused pid."""
+    try:
+        args = subprocess.run(
+            ["ps", "-ww", "-o", "args=", "-p", str(review["pid"])],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    # The result path is unique to the session and turn.
+    return "review-worker" in args and review["result"] in args
+
+
 def kill_review(review):
     pid = (review or {}).get("pid")
     if not pid or Path(review["result"]).exists():
         return  # finished, or never started
     try:
-        # shortcut: the pgid check is the only guard against pid reuse.
-        if os.getpgid(pid) == pid:
+        if os.getpgid(pid) == pid and _is_worker(review):
             os.killpg(pid, signal.SIGKILL)
     except OSError:
         pass
@@ -1082,7 +1094,7 @@ def running_reviews(session=None):
         # No worker outlives its deadline, so an older pid was reused.
         late = time.time() > review.get("started", 0) + REVIEW_TIMEOUT + 45
         if pid and not late and not Path(review["result"]).exists() \
-                and _alive(pid):
+                and _is_worker(review):
             yield path, review
 
 
@@ -1103,9 +1115,12 @@ def cancel(session=None):
         kill_review(review)
         try:  # retire the pid; the gate reports the cancellation
             state = json.loads(path.read_text())
-            state["review"].pop("pid", None)
-            state["review"]["error"] = "cancelled"
-            path.write_text(json.dumps(state))
+            if state["review"]["result"] == review["result"]:  # same turn
+                state["review"].pop("pid", None)
+                state["review"]["error"] = "cancelled"
+                tmp = path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(state))
+                os.replace(tmp, path)
         except (OSError, ValueError, KeyError, TypeError):
             pass
         print(f"{path.stem}: review cancelled")
