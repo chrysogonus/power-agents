@@ -62,7 +62,9 @@ def pairs(argv: list[str]) -> list[list[str]]:
 def git(cwd: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-c", "user.name=Test", "-c", "user.email=t@example.invalid",
-         "-c", "commit.gpgsign=false", *args],
+         "-c", "commit.gpgsign=false",
+         # A detached auto-maintenance would race the tests' rmtree of .git.
+         "-c", "maintenance.auto=false", *args],
         cwd=cwd, check=True, capture_output=True,
     )
 
