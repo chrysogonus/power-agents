@@ -260,7 +260,9 @@ class VerifyGateTests(unittest.TestCase):
             {"type": "user", "message": {"content": [
                 {"type": "tool_result", "content": "edit applied"},
             ]}},
-            {"type": "user", "message": {"content":
+            {"type": "user", "isMeta": True, "message": {"content":
+                "<command-message>META-777</command-message>"}},
+            {"type": "user", "isMeta": True, "message": {"content":
                 "Stop hook feedback:\nAutomated verification pass GATE-555"}},
             {"type": "assistant", "isSidechain": True,
              "message": {"content": [{"type": "text", "text": "SIDECHAIN-456"}]}},
@@ -312,6 +314,7 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn("+print('v2')", bundle)
         self.assertNotIn("PRIVATE-THOUGHT-123", bundle)
         self.assertNotIn("SIDECHAIN-456", bundle)
+        self.assertNotIn("META-777", bundle)
         self.assertNotIn("supersecret123", bundle)
         self.assertIn("[REDACTED]", bundle)
 
@@ -378,6 +381,29 @@ class VerifyGateTests(unittest.TestCase):
         self.assertNotIn("INJECTED-222", bundle)
         self.assertNotIn("APPS-444", bundle)
         self.assertIn('GATE: <hook_prompt hook_run_id="stop:1">', bundle)
+
+    def test_tool_calls_after_the_verify_prompt_are_logged(self) -> None:
+        claude = self.write_claude_transcript()
+        with claude.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "Bash", "input": {"command": "make test"}},
+            ]}}) + "\n")
+        codex = self.write_codex_rollout()  # ends at the prompt: no checks
+        for agent, path in (("claude", claude), ("codex", codex), ("claude", None)):
+            self.session += 1
+            fields = {"transcript_path": str(path)} if path else {}
+            self.mark(agent=agent)
+            self.change_file()
+            self.stop(agent=agent, fields=fields)
+            self.stop(agent=agent, answer="Verification: no issues", fields=fields)
+            git(self.repo, "checkout", "--", "app.py")
+
+        log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
+        checks = [json.loads(line).get("checks") for line in log.splitlines()
+                  if json.loads(line)["step"] == "verified"]
+        self.assertEqual(checks, [1, 0, None])
+        stats = self.run_gate(["stats"], "").stdout
+        self.assertIn("verification no issues with 0 tool calls: 1", stats)
 
     def test_reviewer_failures_skip_cross_review(self) -> None:
         cases = {

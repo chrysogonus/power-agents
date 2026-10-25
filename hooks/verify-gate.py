@@ -64,6 +64,7 @@ REVIEW_TIMEOUT = _int_env("CROSS_REVIEW_TIMEOUT", 480)
 MAX_TRANSCRIPT = _int_env("CROSS_REVIEW_MAX_CHARS", 150_000)
 MAX_TOOL_CHARS = 1500
 MAX_DIFF_CHARS = 40_000
+CHECKS_TAIL = 4_000_000  # bytes: the verify pass sits at the transcript's end
 REVIEW_SCOPE = os.environ.get("CROSS_REVIEW_SCOPE", "changes")
 
 VERIFY_PREFIX = "Automated verification pass"
@@ -311,7 +312,8 @@ def _clip(text, limit=MAX_TOOL_CHARS):
     return text[:limit] + f" ...[{len(text) - limit} chars cut]"
 
 
-def _jsonl(path):
+def _jsonl(path, tail=None):
+    """Yield JSON objects; with tail, only from the file's last bytes."""
     p = Path(path)
     if p.suffix == ".zst":
         if not shutil.which("zstd"):
@@ -321,6 +323,12 @@ def _jsonl(path):
             timeout=30,
         )
         lines = out.stdout.splitlines()
+    elif tail:
+        start = max(0, p.stat().st_size - tail)
+        with p.open("rb") as f:
+            f.seek(start)
+            lines = f.read().decode(errors="replace").splitlines()
+        lines = lines[1:] if start else lines  # drop the cut-off first line
     else:
         lines = p.read_text(errors="replace").splitlines()
     for line in lines:
@@ -339,16 +347,19 @@ def _user(text):
     return "USER: " + text
 
 
-def render_claude(path):
+def render_claude(path, tail=None):
     out = []
-    for obj in _jsonl(path):
+    for obj in _jsonl(path, tail):
         kind = obj.get("type")
         if kind not in ("user", "assistant"):
             continue
-        if obj.get("isSidechain") or obj.get("isMeta"):
+        content = (obj.get("message") or {}).get("content")
+        # Claude Code records the gate's own prompts as meta messages.
+        gate = isinstance(content, str) and content.lstrip().startswith(
+            _GATE_MARKERS)
+        if obj.get("isSidechain") or (obj.get("isMeta") and not gate):
             continue
         say = _user if kind == "user" else (lambda text: "AGENT: " + text)
-        content = (obj.get("message") or {}).get("content")
         if isinstance(content, str):
             out.append(say(content))
             continue
@@ -387,9 +398,9 @@ def _codex_text(content):
     return "\n".join(parts).strip()
 
 
-def render_codex(path):
+def render_codex(path, tail=None):
     out, legacy = [], []
-    for obj in _jsonl(path):
+    for obj in _jsonl(path, tail):
         p = obj.get("payload")
         if not isinstance(p, dict):
             continue
@@ -470,6 +481,22 @@ def redact(text):
     for pat, repl in _SECRET_PATTERNS:
         text = pat.sub(repl, text)
     return text
+
+
+def checks_after_gate(event, agent):
+    """Count tool calls after the last verify prompt; None if not found."""
+    path = event.get("transcript_path")
+    try:
+        render = render_claude if agent == "claude" else render_codex
+        exists = path and Path(path).exists()
+        entries = render(path, CHECKS_TAIL) if exists else []
+    except (OSError, subprocess.SubprocessError):
+        return None
+    marks = [i for i, e in enumerate(entries)
+             if e.startswith("GATE: ") and VERIFY_PREFIX in e]
+    if not marks:
+        return None
+    return sum(e.startswith("AGENT TOOL ") for e in entries[marks[-1]:])
 
 
 def build_bundle(event, agent, state, now):
@@ -806,18 +833,19 @@ def stop(event, agent):
 
     if phase == "verified":
         result = first_line(event)
+        checks = checks_after_gate(event, agent)
         review = state.get("review")
         state.update(phase="reviewed")
         if not review:
             save_state(event, state)
-            log(event, agent, step="verified", result=result)
+            log(event, agent, step="verified", result=result, checks=checks)
             allow()
         state["blocks"] = state.get("blocks", 0) + 1
         save_state(event, state)  # before the wait: no double runs
         waited = time.time()
         feedback, err, seconds = collect_review(review)
         found = None if err else verdict(feedback)
-        log(event, agent, step="verified", result=result,
+        log(event, agent, step="verified", result=result, checks=checks,
             reviewer=review["reviewer"], seconds=seconds, error=err,
             verdict=found, waited=round(time.time() - waited, 1))
         name = NAMES[review["reviewer"]]
@@ -868,6 +896,8 @@ def stats():
             m = re.match(r"\W*verification:\W*(no issues|fixed)",
                          r.get("result") or "", re.I)
             counts["verification " + (m.group(1).lower() if m else "other")] += 1
+            if r.get("checks") == 0 and m and m.group(1).lower() == "no issues":
+                counts["verification no issues with 0 tool calls"] += 1
             if r.get("reviewer"):
                 outcome = "error" if r.get("error") else r.get("verdict")
                 counts[f"cross-review {outcome or 'no verdict'}"] += 1

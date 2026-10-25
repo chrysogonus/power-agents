@@ -43,7 +43,9 @@ the gate cannot confirm that the agent ran the checks it was asked to run.
 
 Each decision is appended to `~/.cache/verify-gate/log.jsonl`. A record holds
 why a turn qualified or was skipped, the first line of the agent's
-verification reply (for example `Verification: no issues`), the reviewer's
+verification reply (for example `Verification: no issues`), how many tool
+calls the agent made after the verification prompt (read from the last 4 MB of
+the transcript; empty when the prompt isn't found there), the reviewer's
 verdict or error, the reviewer's run time, how long the agent waited for it,
 and the first line of the agent's reply to the feedback (for example
 `Review: accepted 1, rejected 2`). No transcript or diff content is logged. To
