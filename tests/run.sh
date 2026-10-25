@@ -803,6 +803,85 @@ test_gate_only_install() {
     -z "$(saved_components "$test_home")" ]] ||
     fail "Gate-only install did not save an empty component selection"
   assert_contains "$test_home/install.log" "Installed: verify gate"
+
+  if ! HOME="$test_home" \
+    CODEX_HOME="$test_home/.codex" \
+    CLAUDE_CONFIG_DIR="$test_home/.claude" \
+    PYTHONPATH="$blocker" \
+    "$ROOT/install.sh" --uninstall >"$test_home/install.log" 2>&1; then
+    sed 's/^/  /' "$test_home/install.log" >&2
+    fail "Gate-only uninstall failed without tomlkit and PyYAML"
+  fi
+  jq -e --arg command "$local_status_line" '
+    . == {"statusLine": {"type": "command", "command": $command}}
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Gate-only uninstall changed the local Claude status line"
+  [[ ! -e "$test_home/.agents/hooks/verify-gate.py" ]] ||
+    fail "Gate-only uninstall kept the verify-gate link"
+}
+
+test_uninstall() {
+  local empty_home="$TEST_ROOT/uninstall-empty-home"
+  local settings_before
+  local test_home="$TEST_ROOT/uninstall-home"
+
+  mkdir -p "$test_home/.claude" "$test_home/.codex" "$test_home/.agents/skills"
+  jq -n '{"model": "local", "hooks": {"Stop": [{"hooks": [
+    {"type": "command", "command": "echo local"}]}]}}' \
+    >"$test_home/.claude/settings.json"
+  jq -n '{"hooks": {"Stop": [{"hooks": [
+    {"type": "command", "command": "echo local"}]}]}}' \
+    >"$test_home/.codex/hooks.json"
+  printf '%s\n' 'model = "local"' >"$test_home/.codex/config.toml"
+  printf '%s\n' "keep this skill" >"$test_home/.agents/skills/local-skill"
+  run_installer "$test_home"
+  touch "$test_home/.config/power-agents/cross-review-on"
+
+  run_installer_args "$test_home" --uninstall ||
+    fail "Uninstall failed: $(<"$test_home/install.log")"
+  jq -e '. == {"model": "local", "hooks": {"Stop": [{"hooks": [
+    {"type": "command", "command": "echo local"}]}]}}' \
+    "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Uninstall did not restore the local Claude settings"
+  jq -e '. == {"hooks": {"Stop": [{"hooks": [
+    {"type": "command", "command": "echo local"}]}]}}' \
+    "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Uninstall did not restore the local Codex hooks"
+  [[ "$(<"$test_home/.codex/config.toml")" == 'model = "local"' ]] ||
+    fail "Uninstall did not restore the local Codex config"
+  [[ "$(<"$test_home/.agents/skills/local-skill")" == "keep this skill" ]] ||
+    fail "Uninstall changed an unrelated skill"
+  [[ ! -e "$test_home/.agents/hooks/verify-gate.py" && \
+    ! -e "$test_home/.codex/AGENTS.md" && ! -e "$test_home/.claude/CLAUDE.md" && \
+    ! -e "$test_home/.claude/statusline-command.sh" && \
+    ! -e "$test_home/.codex/rules/shared.rules" && \
+    -z "$(find "$test_home/.agents/skills" "$test_home/.claude/skills" -type l)" ]] ||
+    fail "Uninstall kept an installed link"
+  [[ ! -e "$test_home/.config/power-agents/components" && \
+    ! -e "$test_home/.config/power-agents/codex-tui.toml" ]] ||
+    fail "Uninstall kept installer state"
+  [[ -e "$test_home/.config/power-agents/cross-review-on" ]] ||
+    fail "Uninstall removed the cross-review toggle"
+  assert_contains "$test_home/install.log" \
+    "Done. Removed the verify gate and all optional components."
+
+  settings_before="$(cksum "$test_home/.claude/settings.json")"
+  run_installer_args "$test_home" --uninstall ||
+    fail "Repeated uninstall failed: $(<"$test_home/install.log")"
+  [[ "$(cksum "$test_home/.claude/settings.json")" == "$settings_before" ]] ||
+    fail "Repeated uninstall changed Claude settings"
+  run_installer "$test_home"
+  assert_same_link \
+    "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
+
+  run_installer_args "$empty_home" --uninstall ||
+    fail "Uninstall without an install failed: $(<"$empty_home/install.log")"
+  [[ "$(find "$empty_home" -mindepth 1 ! -name install.log)" == "" ]] ||
+    fail "Uninstall without an install created files"
+
+  if run_installer_args "$test_home" --uninstall --components all; then
+    fail "Uninstall accepted --components"
+  fi
 }
 
 test_component_selection() {
@@ -1494,10 +1573,11 @@ test_make_targets() {
   actual="$(make --no-print-directory -C "$ROOT")"
   assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
 
-  for target in install sync test check ci eval coding-eval; do
+  for target in install uninstall sync test check ci eval coding-eval; do
     actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
     case "$target" in
       install) [[ "$actual" == "./install.sh" ]] ;;
+      uninstall) [[ "$actual" == "./install.sh --uninstall" ]] ;;
       sync) [[ "$actual" == "./sync.sh" ]] ;;
       test) [[ "$actual" == "./tests/run.sh" ]] ;;
       check) [[ "$actual" == "./scripts/check.sh" ]] ;;
@@ -1563,6 +1643,8 @@ test_skill_link_migration
 pass "legacy whole-directory skill links migrate to per-skill links"
 test_gate_only_install
 pass "default install adds only the verify gate and needs no optional modules"
+test_uninstall
+pass "uninstall removes only what the installer added and is idempotent"
 test_component_selection
 pass "optional components install, persist, and remove only owned links and keys"
 test_component_detection

@@ -306,7 +306,7 @@ repository; it is not installed globally.
 ## Further Reading
 
 - [Installation reference](docs/installation.md): every installed path, merge
-  rules, conflicts, sync, and manual uninstall
+  rules, conflicts, sync, and uninstall
 - [Verify gate and cross-review](docs/verify-gate.md): when it runs, controls,
   cost, and privacy
 - [Skills](skills/README.md): the full inventory and how to write a skill

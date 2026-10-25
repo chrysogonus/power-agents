@@ -90,5 +90,5 @@ installing, start a new Codex session and approve the verify-gate hooks with
 Edit gate behavior in [`hooks/verify-gate.py`](../hooks/verify-gate.py) and the
 hook entries in [`settings/claude/hooks.json`](../settings/claude/hooks.json)
 and [`settings/codex/hooks.json`](../settings/codex/hooks.json), then rerun
-`make install`. To remove the hooks, follow
-[Manual Uninstall](installation.md#manual-uninstall).
+`make install`. To remove the hooks, run `make uninstall`; see
+[Uninstall](installation.md#uninstall).

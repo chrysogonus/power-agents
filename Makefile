@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync test check ci eval coding-eval skills-outdated
+.PHONY: help install uninstall sync test check ci eval coding-eval skills-outdated
 
 help:
 	@printf '%s\n' \
@@ -8,6 +8,7 @@ help:
 		'' \
 		'Targets:' \
 		"  install  Install this repository's agent configuration" \
+		'  uninstall  Remove everything the installer added' \
 		'  sync     Fast-forward and reinstall configuration' \
 		'  test     Run the isolated behavioral tests' \
 		'  check    Run checks against the current working tree' \
@@ -18,6 +19,9 @@ help:
 
 install:
 	./install.sh
+
+uninstall:
+	./install.sh --uninstall
 
 sync:
 	./sync.sh

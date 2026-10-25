@@ -216,37 +216,28 @@ Python launchers. Prefix rules match literal argument prefixes, so they cannot
 exhaustively cover virtual environments invoked through arbitrary absolute
 paths.
 
-## Manual Uninstall
-
-There is no automated uninstaller for the verify gate. First remove every
-optional component the installer added:
+## Uninstall
 
 ```bash
-./install.sh --components none
+make uninstall   # or: ./install.sh --uninstall
 ```
 
-This unlinks only links that resolve into this checkout and removes managed
-status-line values only while they are unchanged; see
-[Choosing Components](#choosing-components). It does not restore a status-line
-setting you had before installing `statusline`, because the installer keeps no
-backup of earlier managed values.
+This removes, for the agent roots selected by `CODEX_HOME` and
+`CLAUDE_CONFIG_DIR`:
 
-Then remove the verify-gate hook entries from `<Claude root>/settings.json` and
-`<Codex root>/hooks.json`, check the results, and only then replace the
-originals. Run this from the checkout, substituting your roots if
-`CLAUDE_CONFIG_DIR` or `CODEX_HOME` is set:
+- every optional component, exactly as `./install.sh --components none` does:
+  it unlinks only links that resolve into this checkout, and removes managed
+  status-line values only while they are unchanged;
+- the verify-gate entries in `<Claude root>/settings.json` and
+  `<Codex root>/hooks.json`, along with any matcher group, event, or `hooks`
+  object that becomes empty as a result. Every other setting and hook is kept;
+- the `~/.agents/hooks/verify-gate.py` link, if it points into this checkout;
+- `~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
 
-```bash
-python3 scripts/reconcile-hooks.py remove \
-  ~/.claude/settings.json ~/.claude/settings.json.new
-python3 scripts/reconcile-hooks.py remove \
-  ~/.codex/hooks.json ~/.codex/hooks.json.new
-```
-
-Only handlers that reference `~/.agents/hooks/verify-gate.py` are removed, along
-with any matcher group, event, or `hooks` object that becomes empty as a result.
-Review each `.new` file, then move it over the original. Finally, verify
-`~/.agents/hooks/verify-gate.py` with `readlink` and `unlink` it, and delete
-`~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
-Once the links and managed settings are
-removed, the checkout can be removed separately.
+It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`) and
+the gate's decision log and state in `~/.cache/verify-gate`; delete those by
+hand if you want them gone. It does not restore a status-line setting you had
+before installing `statusline`, because the installer keeps no backup of
+earlier managed values. It creates no files, and running it again changes
+nothing. Like an install, it rolls back if it fails partway. Once it is done,
+the checkout can be removed separately.

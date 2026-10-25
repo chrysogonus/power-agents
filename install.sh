@@ -26,6 +26,7 @@ COMPONENTS_FILE=""
 CODEX_TUI_SNAPSHOT=""
 REQUESTED_COMPONENTS=""
 COMPONENTS_REQUESTED=0
+UNINSTALL=0
 PREVIOUS_COMPONENTS=""
 SELECTED_COMPONENTS=""
 CODEX_CONFIG_MODE=""
@@ -134,11 +135,15 @@ trap 'handle_signal 143' TERM
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--components LIST]
+       ./install.sh --uninstall
 
 Installs the verify gate for Codex and Claude Code. LIST selects optional
 components: a comma-separated subset of instructions, skills, statusline, and
 codex-rules, or "all" or "none". Without --components, the selection saved by
 the previous install is reused.
+
+--uninstall removes the verify gate and every component this checkout
+installed, and keeps all other settings.
 EOF
 }
 
@@ -154,6 +159,10 @@ while (($#)); do
       COMPONENTS_REQUESTED=1
       shift 2
       ;;
+    --uninstall)
+      UNINSTALL=1
+      shift
+      ;;
     -h | --help)
       usage
       exit 0
@@ -165,6 +174,15 @@ while (($#)); do
       ;;
   esac
 done
+
+if ((UNINSTALL)); then
+  if ((COMPONENTS_REQUESTED)); then
+    echo "ERROR: --uninstall cannot be combined with --components." >&2
+    exit 2
+  fi
+  REQUESTED_COMPONENTS="none"
+  COMPONENTS_REQUESTED=1
+fi
 
 # Prints the components named in a list, in canonical order.
 normalize_components() {
@@ -623,6 +641,40 @@ remove_skill_links() {
   done
 }
 
+# Writes INPUT to OUTPUT with the verify-gate hooks from SOURCE added, or
+# removed when uninstalling.
+reconcile_gate_hooks() {
+  if ((UNINSTALL)); then
+    python3 "$HOOKS_RECONCILER" remove "$2" "$3" --script "$VERIFY_GATE_COMMAND"
+  else
+    python3 "$HOOKS_RECONCILER" reconcile "$1" "$2" "$3" \
+      --script "$VERIFY_GATE_COMMAND"
+  fi
+}
+
+# True for settings files to reconcile: all of them on install, and only
+# existing ones on uninstall, so that it creates none.
+managed_target() {
+  ! ((UNINSTALL)) || [[ -f "$1" ]]
+}
+
+remove_state_file() {
+  local backup
+
+  [[ -f "$1" ]] || return 0
+  backup="$TRANSACTION_DIR/backup-${#ROLLBACK_TYPES[@]}"
+  if ! cp -p -- "$1" "$backup"; then
+    echo "ERROR: Could not back up $1" >&2
+    return 1
+  fi
+  record_rollback restore-file "$1" "$backup"
+  if ! rm -f -- "$1"; then
+    echo "ERROR: Could not remove $1" >&2
+    return 1
+  fi
+  echo "REMOVE: $1 (installer state)"
+}
+
 validate_claude_settings_target() {
   local target="$CLAUDE_ROOT/settings.json"
 
@@ -689,9 +741,7 @@ prepare_claude_settings() {
     return 1
   fi
 
-  if ! python3 "$HOOKS_RECONCILER" reconcile \
-    "$CLAUDE_HOOKS" "$status_line_output" "$output" \
-    --script "$VERIFY_GATE_COMMAND"; then
+  if ! reconcile_gate_hooks "$CLAUDE_HOOKS" "$status_line_output" "$output"; then
     echo "ERROR: Could not prepare Claude hooks for $target" >&2
     return 1
   fi
@@ -780,9 +830,7 @@ prepare_codex_hooks() {
     input="$target"
   fi
 
-  if ! python3 "$HOOKS_RECONCILER" reconcile \
-    "$CODEX_HOOKS" "$input" "$output" \
-    --script "$VERIFY_GATE_COMMAND"; then
+  if ! reconcile_gate_hooks "$CODEX_HOOKS" "$input" "$output"; then
     echo "ERROR: Could not prepare Codex hooks for $target" >&2
     return 1
   fi
@@ -910,9 +958,11 @@ if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   validate_codex_config_target || failed=1
 fi
 validate_codex_hooks_target || failed=1
-validate_link_target \
-  "$VERIFY_GATE" \
-  "$VERIFY_GATE_COMMAND" || failed=1
+if ! ((UNINSTALL)); then
+  validate_link_target \
+    "$VERIFY_GATE" \
+    "$VERIFY_GATE_COMMAND" || failed=1
+fi
 
 if ((failed)); then
   exit 1
@@ -928,55 +978,71 @@ claude_candidate="$TRANSACTION_DIR/claude-settings.json"
 codex_candidate="$TRANSACTION_DIR/codex-config.toml"
 codex_hooks_candidate="$TRANSACTION_DIR/codex-hooks.json"
 components_candidate="$TRANSACTION_DIR/components"
-prepare_claude_settings "$claude_candidate"
+if managed_target "$CLAUDE_ROOT/settings.json"; then
+  prepare_claude_settings "$claude_candidate"
+fi
 if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   prepare_codex_tui_settings "$codex_candidate"
 fi
-prepare_codex_hooks "$codex_hooks_candidate"
+if managed_target "$CODEX_ROOT/hooks.json"; then
+  prepare_codex_hooks "$codex_hooks_candidate"
+fi
 printf 'components=%s\ncodex_root=%s\nclaude_root=%s\n' \
   "$SELECTED_COMPONENTS" "$CODEX_ROOT" "$CLAUDE_ROOT" >"$components_candidate"
 
-ensure_directory "$AGENTS_ROOT"
-ensure_directory "$AGENTS_ROOT/hooks"
-ensure_directory "$CODEX_ROOT"
-if has_component codex-rules; then
-  ensure_directory "$CODEX_ROOT/rules"
+if ! ((UNINSTALL)); then
+  ensure_directory "$AGENTS_ROOT"
+  ensure_directory "$AGENTS_ROOT/hooks"
+  ensure_directory "$CODEX_ROOT"
+  if has_component codex-rules; then
+    ensure_directory "$CODEX_ROOT/rules"
+  fi
+  ensure_directory "$CLAUDE_ROOT"
+  ensure_directory "${COMPONENTS_FILE%/*}"
 fi
-ensure_directory "$CLAUDE_ROOT"
-ensure_directory "${COMPONENTS_FILE%/*}"
 
 claude_staged=""
 codex_staged=""
 codex_hooks_staged=""
 components_staged=""
 snapshot_staged=""
-stage_managed_file \
-  "$claude_candidate" \
-  "$CLAUDE_ROOT/settings.json" \
-  claude_staged
+if managed_target "$CLAUDE_ROOT/settings.json"; then
+  stage_managed_file \
+    "$claude_candidate" \
+    "$CLAUDE_ROOT/settings.json" \
+    claude_staged
+fi
 if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   stage_managed_file \
     "$codex_candidate" \
     "$CODEX_ROOT/config.toml" \
     codex_staged
 fi
-stage_managed_file \
-  "$codex_hooks_candidate" \
-  "$CODEX_ROOT/hooks.json" \
-  codex_hooks_staged
+if managed_target "$CODEX_ROOT/hooks.json"; then
+  stage_managed_file \
+    "$codex_hooks_candidate" \
+    "$CODEX_ROOT/hooks.json" \
+    codex_hooks_staged
+fi
 if has_component statusline; then
   stage_managed_file \
     "$CODEX_TUI_SETTINGS" \
     "$CODEX_TUI_SNAPSHOT" \
     snapshot_staged
 fi
-stage_managed_file \
-  "$components_candidate" \
-  "$COMPONENTS_FILE" \
-  components_staged
+if ! ((UNINSTALL)); then
+  stage_managed_file \
+    "$components_candidate" \
+    "$COMPONENTS_FILE" \
+    components_staged
+fi
 
 echo
-echo "Installing global agent configuration..."
+if ((UNINSTALL)); then
+  echo "Removing global agent configuration..."
+else
+  echo "Installing global agent configuration..."
+fi
 echo
 
 # Shared instructions.
@@ -1014,16 +1080,22 @@ elif dropping_component statusline; then
 fi
 
 # Both agents' hook entries run the verify gate through this link.
-install_link \
-  "$VERIFY_GATE" \
-  "$VERIFY_GATE_COMMAND"
+if ((UNINSTALL)); then
+  remove_owned_link "$VERIFY_GATE" "$VERIFY_GATE_COMMAND"
+else
+  install_link \
+    "$VERIFY_GATE" \
+    "$VERIFY_GATE_COMMAND"
+fi
 
 # Claude keeps machine-local state in settings.json, so only the centrally
 # managed statusLine key and verify-gate hook entries are reconciled.
-activate_managed_file \
-  "Claude managed settings" \
-  "$claude_staged" \
-  "$CLAUDE_ROOT/settings.json"
+if [[ -n "$claude_staged" ]]; then
+  activate_managed_file \
+    "Claude managed settings" \
+    "$claude_staged" \
+    "$CLAUDE_ROOT/settings.json"
+fi
 
 if has_component codex-rules; then
   install_link \
@@ -1044,10 +1116,12 @@ fi
 
 # Codex hooks.json may hold local hooks, so only the verify-gate entries are
 # reconciled instead of linking the complete file.
-activate_managed_file \
-  "Codex verify-gate hooks" \
-  "$codex_hooks_staged" \
-  "$CODEX_ROOT/hooks.json"
+if [[ -n "$codex_hooks_staged" ]]; then
+  activate_managed_file \
+    "Codex verify-gate hooks" \
+    "$codex_hooks_staged" \
+    "$CODEX_ROOT/hooks.json"
+fi
 
 if has_component statusline; then
   activate_managed_file \
@@ -1057,12 +1131,25 @@ if has_component statusline; then
 fi
 
 # Saved last so that a failed install leaves the previous selection in place.
-activate_managed_file \
-  "component selection" \
-  "$components_staged" \
-  "$COMPONENTS_FILE"
+if ((UNINSTALL)); then
+  remove_state_file "$COMPONENTS_FILE"
+  remove_state_file "$CODEX_TUI_SNAPSHOT"
+else
+  activate_managed_file \
+    "component selection" \
+    "$components_staged" \
+    "$COMPONENTS_FILE"
+fi
 
 TRANSACTION_ACTIVE=0
+
+if ((UNINSTALL)); then
+  echo
+  echo "Done. Removed the verify gate and all optional components."
+  echo "Kept: the cross-review toggle in ${COMPONENTS_FILE%/*} and the gate's"
+  echo "log in ${XDG_CACHE_HOME:-$INSTALL_HOME/.cache}/verify-gate."
+  exit 0
+fi
 
 echo
 echo "Done."
