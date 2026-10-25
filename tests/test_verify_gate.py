@@ -585,20 +585,37 @@ class VerifyGateTests(unittest.TestCase):
         self.mark(prompt="Thanks")
         self.assertEqual(self.stop(), {})
 
+        self.mark(prompt="Fix it again")
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        issues = "VERDICT: issues\nSTUB REVIEW from codex: check the null case."
+        self.stop(CROSS_REVIEW="1", STUB_REVIEW=issues)
+        feedback = self.stop(answer="Verification: fixed the test", CROSS_REVIEW="1")
+        self.assert_feedback_block(feedback, "codex")
+        self.assertIn('"Review: accepted <n>, rejected <m>"', feedback["reason"])
+        self.assertEqual(self.stop(
+            answer="Review: accepted 1, rejected 2\nThe null case was real."
+        ), {})
+
         log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
         records = [json.loads(line) for line in log.splitlines()]
         self.assertEqual(
             [(r["step"], r.get("why")) for r in records],
-            [("check", "changed"), ("verified", None), ("check", None)],
+            [("check", "changed"), ("verified", None), ("check", None),
+             ("check", "changed"), ("verified", None), ("responded", None)],
         )
         self.assertEqual(records[1]["verdict"], "clean")
         self.assertEqual(records[1]["reviewer"], "codex")
-        for text in ("Fix the bug", "Thanks", "print("):
+        self.assertEqual(records[4]["verdict"], "issues")
+        self.assertEqual(records[5]["result"], "Review: accepted 1, rejected 2")
+        for text in ("Fix the bug", "Thanks", "print(", "null case"):
             self.assertNotIn(text, log)
 
         stats = self.run_gate(["stats"], "").stdout
-        for line in ("turns changed: 1", "turns skipped: 1",
-                     "verification no issues: 1", "cross-review clean: 1"):
+        for line in ("turns changed: 2", "turns skipped: 1",
+                     "verification no issues: 1", "verification fixed: 1",
+                     "verification fixed rate: 50%", "cross-review clean: 1",
+                     "cross-review issues: 1", "cross-review responses parsed: 1",
+                     "cross-review points accepted: 1, rejected: 2 (33% accepted)"):
             self.assertIn(line, stats)
 
     # ------------------------------------------------------------ toggle

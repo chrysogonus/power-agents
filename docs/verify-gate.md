@@ -44,8 +44,11 @@ the gate cannot confirm that the agent ran the checks it was asked to run.
 Each decision is appended to `~/.cache/verify-gate/log.jsonl`. A record holds
 why a turn qualified or was skipped, the first line of the agent's
 verification reply (for example `Verification: no issues`), the reviewer's
-verdict or error, the reviewer's run time, and how long the agent waited for
-it. No transcript or diff content is logged. To summarize the log, run
+verdict or error, the reviewer's run time, how long the agent waited for it,
+and the first line of the agent's reply to the feedback (for example
+`Review: accepted 1, rejected 2`). No transcript or diff content is logged. To
+summarize the log, including the share of self-checks that fixed something and
+the share of review points the agent accepted, run
 `python3 ~/.agents/hooks/verify-gate.py stats`. Per-session state files in the
 same directory are deleted after seven days.
 
