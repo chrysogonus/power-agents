@@ -741,7 +741,19 @@ class VerifyGateTests(unittest.TestCase):
                       self.run_gate(["cancel"], "").stdout)
         self.assert_process_gone(pattern)
         output = self.stop(CROSS_REVIEW="1")
-        self.assertIn("cross-review skipped", output["systemMessage"])
+        self.assertEqual(output["systemMessage"], "cross-review skipped: cancelled")
+
+    def test_reviews_past_their_deadline_are_not_running(self) -> None:
+        leader = subprocess.Popen(["sleep", "30"], start_new_session=True)
+        self.addCleanup(leader.kill)
+        state = self.cache / "verify-gate" / "old-session.json"
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps({"review": {
+            "reviewer": "codex", "pid": leader.pid, "started": time.time() - 9999,
+            "result": str(state.with_suffix(".x.review.json"))}}))
+        self.assertIn("no reviews running", self.run_gate(["status"], "").stdout)
+        self.assertIn("no reviews running", self.run_gate(["cancel"], "").stdout)
+        self.assertIsNone(leader.poll())
 
     # ------------------------------------------------------------ doctor
 

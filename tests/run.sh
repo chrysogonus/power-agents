@@ -837,6 +837,15 @@ test_uninstall() {
   run_installer "$test_home"
   touch "$test_home/.config/power-agents/cross-review-on"
 
+  run_installer_with_roots "$test_home" \
+    "$test_home/other-codex" "$test_home/other-claude" --uninstall ||
+    fail "Uninstall for other roots failed: $(<"$test_home/install.log")"
+  [[ -f "$test_home/.config/power-agents/components" && \
+    -f "$test_home/.config/power-agents/codex-tui.toml" ]] ||
+    fail "Uninstall for other roots removed this install's state"
+  assert_same_link \
+    "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
+
   run_installer_args "$test_home" --uninstall ||
     fail "Uninstall failed: $(<"$test_home/install.log")"
   jq -e '. == {"model": "local", "hooks": {"Stop": [{"hooks": [
@@ -882,6 +891,17 @@ test_uninstall() {
   if run_installer_args "$test_home" --uninstall --components all; then
     fail "Uninstall accepted --components"
   fi
+
+  printf '%s\n' "another checkout" >"$TEST_ROOT/other-verify-gate.py"
+  ln -sfn "$TEST_ROOT/other-verify-gate.py" \
+    "$test_home/.agents/hooks/verify-gate.py"
+  settings_before="$(cksum "$test_home/.claude/settings.json")"
+  if run_installer_args "$test_home" --uninstall; then
+    fail "Uninstall removed another checkout's verify gate hooks"
+  fi
+  assert_contains "$test_home/install.log" "is not this checkout's verify gate"
+  [[ "$(cksum "$test_home/.claude/settings.json")" == "$settings_before" ]] ||
+    fail "Refused uninstall changed Claude settings"
 }
 
 test_component_selection() {

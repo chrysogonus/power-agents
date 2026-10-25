@@ -962,6 +962,12 @@ if ! ((UNINSTALL)); then
   validate_link_target \
     "$VERIFY_GATE" \
     "$VERIFY_GATE_COMMAND" || failed=1
+elif [[ -e "$VERIFY_GATE_COMMAND" || -L "$VERIFY_GATE_COMMAND" ]] &&
+  ! links_to "$VERIFY_GATE" "$VERIFY_GATE_COMMAND"; then
+  # The hook entries name only the shared path, so they would go too.
+  echo "ERROR: $VERIFY_GATE_COMMAND is not this checkout's verify gate." >&2
+  echo "       Run --uninstall from the checkout it links to." >&2
+  failed=1
 fi
 
 if ((failed)); then
@@ -1080,7 +1086,10 @@ elif dropping_component statusline; then
 fi
 
 # Both agents' hook entries run the verify gate through this link.
-if ((UNINSTALL)); then
+if ((UNINSTALL)) && [[ -f "$COMPONENTS_FILE" ]] && ! ((saved_for_roots)); then
+  # Shared by all agent roots: the install saved for other roots still runs it.
+  echo "KEEP: $VERIFY_GATE_COMMAND (used by the install for other agent roots)"
+elif ((UNINSTALL)); then
   remove_owned_link "$VERIFY_GATE" "$VERIFY_GATE_COMMAND"
 else
   install_link \
@@ -1132,8 +1141,11 @@ fi
 
 # Saved last so that a failed install leaves the previous selection in place.
 if ((UNINSTALL)); then
-  remove_state_file "$COMPONENTS_FILE"
-  remove_state_file "$CODEX_TUI_SNAPSHOT"
+  # State saved for other agent roots still describes that install.
+  if ((saved_for_roots)); then
+    remove_state_file "$COMPONENTS_FILE"
+    remove_state_file "$CODEX_TUI_SNAPSHOT"
+  fi
 else
   activate_managed_file \
     "component selection" \

@@ -1064,7 +1064,7 @@ def manual_review(args):
 
 
 def running_reviews(session=None):
-    """Yield (session, review) for background reviews still running."""
+    """Yield (state path, review) for background reviews still running."""
     try:
         paths = sorted(STATE_DIR.glob("*.json"))
     except OSError:
@@ -1079,15 +1079,18 @@ def running_reviews(session=None):
         except (OSError, ValueError, AttributeError):
             continue
         pid = review.get("pid")
-        if pid and not Path(review["result"]).exists() and _alive(pid):
-            yield path.stem, review
+        # No worker outlives its deadline, so an older pid was reused.
+        late = time.time() > review.get("started", 0) + REVIEW_TIMEOUT + 45
+        if pid and not late and not Path(review["result"]).exists() \
+                and _alive(pid):
+            yield path, review
 
 
 def status():
     found = False
-    for session, review in running_reviews():
+    for path, review in running_reviews():
         found = True
-        print(f"{session}: {NAMES.get(review['reviewer'], review['reviewer'])} "
+        print(f"{path.stem}: {NAMES.get(review['reviewer'], review['reviewer'])} "
               f"reviewing for {time.time() - review['started']:.0f}s")
     if not found:
         print("no reviews running")
@@ -1095,10 +1098,17 @@ def status():
 
 def cancel(session=None):
     found = False
-    for name, review in running_reviews(session):
+    for path, review in running_reviews(session):
         found = True
         kill_review(review)
-        print(f"{name}: review cancelled")
+        try:  # retire the pid; the gate reports the cancellation
+            state = json.loads(path.read_text())
+            state["review"].pop("pid", None)
+            state["review"]["error"] = "cancelled"
+            path.write_text(json.dumps(state))
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        print(f"{path.stem}: review cancelled")
     if not found:
         print("no reviews running")
 

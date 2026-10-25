@@ -234,6 +234,12 @@ This removes, for the agent roots selected by `CODEX_HOME` and
 - the `~/.agents/hooks/verify-gate.py` link, if it points into this checkout;
 - `~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
 
+It refuses to run when `~/.agents/hooks/verify-gate.py` belongs to another
+checkout; run it from that checkout instead. When the saved selection in
+`~/.config/power-agents/components` belongs to other agent roots, it removes
+only these roots' hook entries and links, and keeps the shared gate link and
+that saved state, which the other install still uses.
+
 It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`) and
 the gate's decision log and state in `~/.cache/verify-gate`; delete those by
 hand if you want them gone. It does not restore a status-line setting you had
