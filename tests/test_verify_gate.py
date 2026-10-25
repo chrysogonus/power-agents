@@ -405,6 +405,7 @@ class VerifyGateTests(unittest.TestCase):
         self.assertEqual(checks, [1, 0, None])
         stats = self.run_gate(["stats"], "").stdout
         self.assertIn("verification no issues with 0 tool calls: 1", stats)
+        self.assertIn("verification fixed rate: 0%", stats)  # 0 of 3, not 4
 
     def test_reviewer_failures_skip_cross_review(self) -> None:
         cases = {
@@ -580,6 +581,16 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
 
     # -------------------------------------------------------- verdicts
+
+    def test_collected_review_is_not_running(self) -> None:
+        self.mark()
+        self.change_file()
+        self.stop(CROSS_REVIEW="1")
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+        state = json.loads((self.cache / "verify-gate" /
+                            f"session-{self.session}.json").read_text())
+        self.assertNotIn("pid", state["review"])
+        self.assertIn("no reviews running", self.run_gate(["cancel"], "").stdout)
 
     def test_clean_verdict_ends_the_turn(self) -> None:
         self.mark()
@@ -762,6 +773,14 @@ class VerifyGateTests(unittest.TestCase):
             env, CROSS_REVIEW="0", CROSS_REVIEW_CODEX_BIN="no-codex"))
         self.assertEqual(off.returncode, 0, off.stdout)
         self.assertIn("warn: Codex reviewer", off.stdout)
+
+        claude_settings = roots["claude"][0] / "settings.json"
+        swapped = claude_settings.read_text().replace(" mark ", " MARK ") \
+            .replace(" stop ", " mark ").replace(" MARK ", " stop ")
+        claude_settings.write_text(swapped)
+        result = self.run_gate(["doctor"], "", **env)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("FAIL: Claude Code: gate hooks in", result.stdout)
 
         (roots["codex"][0] / "hooks.json").write_text('{"hooks": []}')
         broken = self.run_gate(["doctor"], "", **env)

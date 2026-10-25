@@ -857,6 +857,8 @@ def stop(event, agent):
         save_state(event, state)  # before the wait: no double runs
         waited = time.time()
         feedback, err, seconds = collect_review(review)
+        review.pop("pid", None)  # finished: never signal that pid again
+        save_state(event, state)
         found = None if err else verdict(feedback)
         log(event, agent, step="verified", result=result, checks=checks,
             reviewer=review["reviewer"], seconds=seconds, error=err,
@@ -929,7 +931,8 @@ def stats():
         print(f"no decisions logged in {LOG}")
     for key in sorted(counts):
         print(f"{key}: {counts[key]}")
-    verified = sum(v for k, v in counts.items() if k.startswith("verification "))
+    verified = sum(counts["verification " + k]
+                   for k in ("fixed", "no issues", "other"))
     if verified:
         print(f"verification fixed rate: "
               f"{counts['verification fixed'] / verified:.0%}")
@@ -945,16 +948,17 @@ def stats():
 
 
 def _gate_hooked(config, script, agent):
-    """True when both hook events in config run script for agent."""
+    """True when config runs the managed mark and stop commands for agent."""
     try:
         hooks = json.loads(config.read_text())["hooks"]
-        commands = [[str(h.get("command")) for g in hooks.get(event) or []
-                     for h in g.get("hooks") or []]
-                    for event in ("UserPromptSubmit", "Stop")]
+        return all(
+            f'python3 "{script}" {step} --agent {agent}' in
+            [h.get("command") for g in hooks.get(event) or []
+             for h in g.get("hooks") or []]
+            for event, step in (("UserPromptSubmit", "mark"), ("Stop", "stop"))
+        )
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return False
-    return all(any(str(script) in c and f"--agent {agent}" in c for c in cs)
-               for cs in commands)
 
 
 def doctor():
