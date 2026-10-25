@@ -27,6 +27,7 @@ Changes include edits to untracked files and commits made during the turn.
 | Control | Effect |
 | --- | --- |
 | `python3 ~/.agents/hooks/verify-gate.py cross-review on\|off\|status` | Persistently toggles cross-review through `~/.config/power-agents/cross-review-on`. |
+| `python3 ~/.agents/hooks/verify-gate.py doctor` | Checks that both agents' hook entries run the gate, the state directory is writable, and, when cross-review is on, that both reviewer CLIs are on PATH and the Codex reviewer's MCP servers can be disabled. Exits 1 if a required check fails. |
 | `CROSS_REVIEW=1` or `CROSS_REVIEW=0` | Forces cross-review on or off for sessions started with it. |
 | `CROSS_REVIEW_SCOPE=changes` | Set to `all` to also cross-review long answers from turns that changed no files. |
 | `VERIFY_GATE=0` | Disables the gate, including cross-review, for sessions started with it. |

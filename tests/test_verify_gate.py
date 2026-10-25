@@ -670,6 +670,42 @@ class VerifyGateTests(unittest.TestCase):
         self.assertNotEqual(invalid.returncode, 0)
         self.assertIn("usage: verify-gate.py cross-review", invalid.stderr)
 
+    # ------------------------------------------------------------ doctor
+
+    def test_doctor_reports_installation_and_reviewers(self) -> None:
+        script = self.home / ".agents" / "hooks" / "verify-gate.py"
+        script.parent.mkdir(parents=True)
+        script.symlink_to(SCRIPT)
+        roots = {"claude": (self.home / ".claude", "settings.json"),
+                 "codex": (self.home / ".codex", "hooks.json")}
+        for agent, (root, name) in roots.items():
+            root.mkdir()
+            (root / name).write_text(json.dumps({"hooks": {
+                event: [{"hooks": [{"type": "command", "command":
+                    f'python3 "{script}" {step} --agent {agent}'}]}]
+                for event, step in (("UserPromptSubmit", "mark"), ("Stop", "stop"))
+            }}), encoding="utf-8")
+        env = {"CLAUDE_CONFIG_DIR": str(roots["claude"][0]),
+               "CODEX_HOME": str(roots["codex"][0]), "CROSS_REVIEW": "1"}
+
+        healthy = self.run_gate(["doctor"], "", **env)
+        self.assertEqual(healthy.returncode, 0, healthy.stdout)
+        self.assertNotIn("FAIL", healthy.stdout)
+        self.assertIn("Codex reviewer MCP servers can be disabled", healthy.stdout)
+
+        missing = self.run_gate(["doctor"], "", CROSS_REVIEW_CODEX_BIN="no-codex", **env)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("FAIL: Codex reviewer: no-codex not on PATH", missing.stdout)
+        off = self.run_gate(["doctor"], "", **dict(
+            env, CROSS_REVIEW="0", CROSS_REVIEW_CODEX_BIN="no-codex"))
+        self.assertEqual(off.returncode, 0, off.stdout)
+        self.assertIn("warn: Codex reviewer", off.stdout)
+
+        (roots["codex"][0] / "hooks.json").write_text('{"hooks": []}')
+        broken = self.run_gate(["doctor"], "", **env)
+        self.assertEqual(broken.returncode, 1)
+        self.assertIn("FAIL: Codex: gate hooks in", broken.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

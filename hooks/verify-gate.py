@@ -20,6 +20,7 @@ CLI:
   verify-gate.py cross-review on|off|status
   (toggle file: ~/.config/power-agents/cross-review-on)
   verify-gate.py stats       summarize the decision log
+  verify-gate.py doctor      check the installed hooks and reviewers
 
 Env:
   VERIFY_GATE=0               disable everything (also the recursion guard)
@@ -931,6 +932,64 @@ def stats():
               f"{sum(waits) / len(waits):.0f}s")
 
 
+def _gate_hooked(config, script, agent):
+    """True when both hook events in config run script for agent."""
+    try:
+        hooks = json.loads(config.read_text())["hooks"]
+        commands = [[str(h.get("command")) for g in hooks.get(event) or []
+                     for h in g.get("hooks") or []]
+                    for event in ("UserPromptSubmit", "Stop")]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+    return all(any(str(script) in c and f"--agent {agent}" in c for c in cs)
+               for cs in commands)
+
+
+def doctor():
+    """Print one line per check; return 1 if a required check fails."""
+    home = Path.home()
+    script = home / ".agents" / "hooks" / "verify-gate.py"
+    roots = {
+        "claude": (Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude"),
+                   "settings.json"),
+        "codex": (Path(os.environ.get("CODEX_HOME") or home / ".codex"),
+                  "hooks.json"),
+    }
+    review = cross_review_enabled()
+    failed = False
+
+    def report(ok, text, required=True):
+        nonlocal failed
+        failed |= required and not ok
+        print(("ok:  " if ok else "FAIL:" if required else "warn:"), text)
+
+    report(script.is_file(), f"gate script {script} -> {script.resolve()}")
+    for agent, (root, name) in roots.items():
+        if not root.is_dir():
+            report(False, f"{NAMES[agent]}: {root} not found", required=False)
+            continue
+        report(_gate_hooked(root / name, script, agent),
+               f"{NAMES[agent]}: gate hooks in {root / name}")
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    report(os.access(STATE_DIR, os.W_OK),
+           f"state directory {STATE_DIR} is writable")
+    print("info: cross-review is", "on" if review else "off")
+    for agent in NAMES:
+        binary = os.environ.get(f"CROSS_REVIEW_{agent.upper()}_BIN") or agent
+        found = shutil.which(binary)
+        report(bool(found), f"{NAMES[agent]} reviewer: "
+               f"{found or binary + ' not on PATH'}", required=review)
+    codex = os.environ.get("CROSS_REVIEW_CODEX_BIN") or "codex"
+    if review and shutil.which(codex):
+        env = dict(os.environ, VERIFY_GATE="0", CROSS_REVIEW="0")
+        _, err = codex_tools_off(codex, os.getcwd(), env)
+        report(not err, err or "Codex reviewer MCP servers can be disabled")
+    return 1 if failed else 0
+
+
 def main():
     args = sys.argv[1:]
     mode = args[0] if args else "stop"
@@ -940,6 +999,8 @@ def main():
     if mode == "stats":
         stats()
         return
+    if mode == "doctor":
+        sys.exit(doctor())
     if mode == "review-worker" and len(args) == 4:
         review_worker(*args[1:])
         return
