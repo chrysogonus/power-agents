@@ -203,7 +203,7 @@ def _git(cwd, *args, stdin=None):
 
 
 def snapshot(cwd):
-    """Return {"head", "top", "files": {path: "XY:blob"}}, or None.
+    """Return {"head", "top", "files": {path: "XY:blob:mode"}}, or None.
 
     Covers every dirty and untracked path, so edits to untracked files
     and commits made during the turn both change the snapshot.
@@ -233,8 +233,54 @@ def snapshot(cwd):
         hashes = (out or "").split()
         if len(hashes) == len(paths):
             for p, h in zip(paths, hashes):
-                files[p] += ":" + h
+                try:  # follows links, as hash-object does
+                    x = os.stat(os.path.join(top, p)).st_mode & 0o100
+                except OSError:
+                    continue
+                files[p] += f":{h}:{'100755' if x else '100644'}"
     return {"head": head, "top": top, "files": files}
+
+
+def only_committed(checked, now):
+    """True if every file is as the gate last checked it.
+
+    Lets a turn that only commits checked work (or amends a message)
+    pass unchecked; any commit must hold exactly the checked content.
+    """
+    if not checked or checked["top"] != now["top"]:
+        return False
+    trees = []
+    for head in (checked["head"], now["head"]):
+        # shortcut: lists whole trees, fast enough until repos get huge;
+        # then list only paths from `git diff --name-only` and the snapshots.
+        out = _git(now["top"], "ls-tree", "-r", "-z", head) if head else ""
+        if out is None:
+            return False
+        tree = {}
+        for line in filter(None, out.split("\0")):
+            info, _, path = line.partition("\t")
+            mode, _, blob = info.split(" ")
+            tree[path] = (mode, blob)
+        trees.append(tree)
+    old, new = trees
+
+    def content(snap, tree, path):  # what the working tree holds
+        if path not in snap["files"]:
+            return tree.get(path)  # clean: as committed
+        xy, _, rest = snap["files"][path].partition(":")
+        blob, _, mode = rest.partition(":")
+        if blob and mode:
+            return (mode, blob)
+        return None if "D" in xy and not blob else "unknown"
+
+    paths = set(checked["files"]) | set(now["files"]) | set(old) | set(new)
+    for path in paths:
+        want = content(checked, old, path)
+        if want == "unknown" or content(now, new, path) != want:
+            return False
+        if new.get(path) != old.get(path) and new.get(path) != want:
+            return False  # committed content that was never checked
+    return True
 
 
 def turn_changes(before, now):
@@ -886,7 +932,8 @@ def qualifies(event, state, now, min_chars=MIN_CHARS):
         # No snapshot (installed mid-session): fall back to "dirty".
         changed = bool(now["files"])
     else:
-        changed = before != now
+        changed = before != now and not only_committed(
+            state.get("checked"), now)
     if changed:
         return "changed"
     if len(msg) >= min_chars and not msg.endswith("?"):
@@ -910,8 +957,16 @@ def mark(event):
         kill_review(old.get("review"))  # a new prompt supersedes it
     prune_state()
     cwd = event.get("cwd") or os.getcwd()
-    save_state(event, new_state(snapshot(cwd), _clip(prompt, 4000)))
+    save_state(event, {**new_state(snapshot(cwd), _clip(prompt, 4000)),
+                       "checked": (old or {}).get("checked")})
     sys.exit(0)  # print nothing: stdout would become model context
+
+
+def finish(event, state, cwd, notice=None):
+    """End a turn the gate checked, remembering its files as checked."""
+    state["checked"] = snapshot(cwd)
+    save_state(event, state)
+    allow(notice)
 
 
 def stop(event, agent):
@@ -920,14 +975,13 @@ def stop(event, agent):
         if event.get("stop_hook_active"):
             allow()  # can't track phases: never risk a loop
         state = new_state()
+    cwd = event.get("cwd") or os.getcwd()
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
-        save_state(event, state)
         log(event, agent, step="responded", result=first_line(event))
-        allow()
+        finish(event, state, cwd)
     if state.get("blocks", 0) >= MAX_BLOCKS:
         allow()
-    cwd = event.get("cwd") or os.getcwd()
     phase = state.get("phase", "new")
 
     if phase == "new":
@@ -971,9 +1025,8 @@ def stop(event, agent):
         review = state.get("review")
         state.update(phase="reviewed")
         if not review:
-            save_state(event, state)
             log(event, agent, step="verified", result=result, checks=checks)
-            allow()
+            finish(event, state, cwd)
         state["blocks"] = state.get("blocks", 0) + 1
         save_state(event, state)  # before the wait: no double runs
         waited = time.time()
@@ -986,9 +1039,10 @@ def stop(event, agent):
             verdict=found, waited=round(time.time() - waited, 1))
         name = NAMES[review["reviewer"]]
         if err:
-            allow(f"cross-review skipped: {err}")
+            finish(event, state, cwd, f"cross-review skipped: {err}")
         if found == "clean":
-            allow(f"cross-review ({name}): no material issues")
+            finish(event, state, cwd,
+                   f"cross-review ({name}): no material issues")
         stale = snapshot(cwd) != review.get("snap")
         state["fed_back"] = True
         save_state(event, state)

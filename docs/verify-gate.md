@@ -6,6 +6,9 @@ Both agents run [`hooks/verify-gate.py`](../hooks/verify-gate.py) on
 `UserPromptSubmit` and `Stop`. A turn qualifies when it changed files, or when
 the final answer is at least 600 characters and does not end in a question.
 Changes include edits to untracked files and commits made during the turn.
+A turn that only commits work the gate already checked, or amends a commit
+message, does not count: every file must still be as it was when a checked turn
+ended in this session, and new commits must hold exactly that content.
 
 - **Self-verification** (on by default): the first `Stop` of a qualifying turn
   sends the agent back once to check its answer against files, tests, or docs.

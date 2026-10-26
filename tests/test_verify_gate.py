@@ -521,6 +521,74 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn("-print('v1')", bundle)
         self.assertIn("+print('v2')", bundle)
 
+    def checked_turn(self, work) -> None:
+        """Run a turn that does work and ends after its verification."""
+        self.mark()
+        work()
+        self.assert_verification_block(self.stop())
+        self.assertEqual(self.stop(), {})
+
+    def commit_turn(self, *args: str) -> dict:
+        self.mark(prompt="Commit it")
+        git(self.repo, *args)
+        return self.stop()
+
+    def test_committing_checked_work_is_not_checked_again(self) -> None:
+        (self.repo / "gone.txt").write_text("old\n", encoding="utf-8")
+        git(self.repo, "add", "gone.txt")
+        git(self.repo, "commit", "-qm", "add gone.txt")
+
+        def work() -> None:  # an edit, a new file, and a deletion
+            self.change_file()
+            (self.repo / "new.py").write_text("x = 1\n", encoding="utf-8")
+            (self.repo / "gone.txt").unlink()
+
+        self.checked_turn(work)
+        self.assertEqual(self.commit_turn("add", "-A"), {})  # staging only
+        self.assertEqual(self.commit_turn("commit", "-qm", "work"), {})
+        self.assertEqual(
+            self.commit_turn("commit", "-q", "--amend", "-m", "better"), {})
+        self.assert_verification_block(
+            self.commit_turn("reset", "-q", "--hard", "HEAD~2"))
+
+    def test_committing_unchecked_work_is_checked(self) -> None:
+        # No checked turn in this session yet.
+        self.change_file()
+        self.assert_verification_block(self.commit_turn("commit", "-qam", "x"))
+
+        # An edit made after the checked turn, by hand.
+        self.session += 1
+        self.checked_turn(lambda: (self.repo / "app.py").write_text(
+            "print('A')\n", encoding="utf-8"))
+        (self.repo / "app.py").write_text("print('by hand')\n", encoding="utf-8")
+        self.assert_verification_block(self.commit_turn("commit", "-qam", "x"))
+
+        # A staged version that differs from the checked working tree.
+        self.session += 1
+
+        def stage_then_edit() -> None:
+            (self.repo / "app.py").write_text("print('B')\n", encoding="utf-8")
+            git(self.repo, "add", "app.py")
+            (self.repo / "app.py").write_text("print('C')\n", encoding="utf-8")
+
+        self.checked_turn(stage_then_edit)
+        self.assert_verification_block(self.commit_turn("commit", "-qm", "B"))
+
+        # A permission change on a file that already had checked edits.
+        self.session += 1
+        self.checked_turn(lambda: (self.repo / "app.py").write_text(
+            "print('D')\n", encoding="utf-8"))
+        self.mark()
+        (self.repo / "app.py").chmod(0o755)
+        self.assert_verification_block(self.stop())
+        self.session += 1
+        self.checked_turn(lambda: (self.repo / "app.py").write_text(
+            "print('E')\n", encoding="utf-8"))
+        self.mark()
+        (self.repo / "app.py").chmod(0o644)
+        git(self.repo, "commit", "-qam", "not executable")
+        self.assert_verification_block(self.stop())
+
     def test_review_covers_only_this_turns_changes(self) -> None:
         (self.repo / "notes.txt").write_text("user draft\n", encoding="utf-8")
         (self.repo / "new.py").write_text("x = 1\n", encoding="utf-8")
