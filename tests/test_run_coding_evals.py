@@ -79,7 +79,16 @@ class CodingRunnerTests(unittest.TestCase):
         self.assertEqual((trial['status'], trial['gate']), ('PASS', 'on'))
         steps = [(r['step'], r.get('why'), r.get('result')) for r in trial['gate_log']]
         self.assertEqual(steps, [('check', 'changed', None), ('verified', None, 'Verification: no issues')])
-        self.assertIn('| on | 1 | 1 |', (output / 'summary.md').read_text())
+        self.assertIn('| on | 1 | 0 | 0 |', (output / 'summary.md').read_text())
+        # Pending manual reviews are not counted as passes.
+        result, report, output, _ = self.run_cli(extra=('--gate', 'on', '--task', 'parser-refactor'))
+        self.assertEqual(report['trials'][0]['status'], 'REVIEW', result.stderr)
+        self.assertIn('| on | 0 | 0 | 1 |', (output / 'summary.md').read_text())
+        # A gate-on trial in which the gate never verified is an error, not a pass.
+        result, report, _, _ = self.run_cli(mode='gate-skipped', extra=('--gate', 'on'))
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(report['trials'][0]['status'], 'ERROR')
+        self.assertIn('did not run its verification pass', report['trials'][0]['error'])
         for task in ('pagination-bounds', 'csv-export'):
             with self.subTest(task=task):
                 result, report, _, _ = self.run_cli(extra=('--gate', 'on', '--task', task))

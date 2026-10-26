@@ -55,11 +55,12 @@ next to the workspace and stages its hooks in the trial's `settings.json`
 instead of `disableAllHooks`. The gate's state stays in the trial's home, so
 there is no cross-review, project check, or experiment: only the self-check
 runs. Each trial saves the gate's log records as `gate_log`, the report keeps
-the script's hash as `gate_sha256`, and `summary.md` counts passes per gate
-setting. Only Claude is supported, because Codex skips hooks until they are
-trusted interactively. Whether Claude runs Stop hooks in `--print` mode must be
-confirmed by the first live trial: a `gate_log` without a `verified` record
-means it did not.
+the script's hash as `gate_sha256`, and `summary.md` counts passed, failed,
+and pending-review trials per gate setting. A gate-on trial whose log lacks
+the gate's verification is an ERROR, so it never enters the comparison as a
+pass. Only Claude is supported, because Codex skips hooks until they are
+trusted interactively. The first live trial must confirm that Claude runs
+Stop hooks in `--print` mode.
 
 ## Isolation and execution
 

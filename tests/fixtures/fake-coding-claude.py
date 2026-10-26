@@ -106,7 +106,7 @@ def simulate(agent, mode, counter):
         time.sleep(60)
         return
     counter.write_text('started')
-    gate = agent == 'claude' and 'hooks' in settings
+    gate = agent == 'claude' and 'hooks' in settings and mode != 'gate-skipped'
     event = {'session_id': 'fake-session', 'cwd': str(work)}
     if gate:
         run_hooks(settings, 'UserPromptSubmit', {**event, 'prompt': prompt})

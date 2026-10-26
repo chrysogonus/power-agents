@@ -1039,6 +1039,18 @@ class VerifyGateTests(unittest.TestCase):
         (self.repo / "app.py").write_text("print('v5')\n", encoding="utf-8")
         self.assertEqual(self.stop(), {})
         self.assertIs(self.wait_for("final-check", 3)[2]["reused"], False)
+        self.assertIs(audits[0]["moved"], False)
+
+        # A failed audit has unknown, not zero, findings.
+        self.write_experiment({"arms": {"none": 1}, "audit": 1})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v6')\n", encoding="utf-8")
+        self.assertEqual(self.stop(STUB_MODE="fail"), {})
+        failed = self.wait_for("audit", 2)[1]
+        self.assertIn("exited 3", failed["error"])
+        self.assertEqual((failed["verdict"], failed["high"], failed["low"]),
+                         (None, None, None))
 
     def test_follow_up_prompts_and_rework_are_logged(self) -> None:
         self.mark()
@@ -1142,6 +1154,14 @@ class VerifyGateTests(unittest.TestCase):
             *turn("s2", "t3", "self", "clean", "passed",
                   result="Verification: fixed the edge case", tokens_in=100,
                   tokens_out=10),
+            {"ts": now + 50, "v": 2, "session": "s2", "turn": "t3",
+             "step": "responded", "result": "Review: accepted 1, rejected 0",
+             "tokens_in": 150, "tokens_out": 16},
+            {"ts": now + 95, "v": 2, "session": "s2", "turn": "t5", "step": "check",
+             "why": "changed", "arm": "self"},
+            {"ts": now + 99, "v": 2, "session": "s2", "turn": "t5", "step": "audit",
+             "auditor": "claude", "verdict": None, "high": None, "med": None,
+             "low": None, "error": "claude timed out"},
             *turn("s3", "t4", "self", "issues", "passed",
                   result="Verification: no issues", tokens_in=300, tokens_out=30),
         ]
@@ -1149,8 +1169,8 @@ class VerifyGateTests(unittest.TestCase):
 
         import csv
         rows = list(csv.DictReader(self.run_gate(["export"], "").stdout.splitlines()))
-        self.assertEqual([r["turn"] for r in rows], ["", "t1", "t3", "t4"])
-        old, t1, t3, _ = rows
+        self.assertEqual([r["turn"] for r in rows], ["", "t1", "t3", "t5", "t4"])
+        old, t1, t3, _, t4 = rows
         self.assertEqual((old["verification"], old["accepted"], old["verdict"]),
                          ("no issues", "2", "issues"))
         self.assertEqual((t1["arm"], t1["audit_verdict"], t1["final_check"],
@@ -1159,6 +1179,9 @@ class VerifyGateTests(unittest.TestCase):
                           "True", "12", "True"))
         self.assertEqual((t3["verification"], t3["tokens_in"], t3["verify_seconds"]),
                          ("fixed", "100", "30"))
+        # The whole gate: self-check plus the response to the review.
+        self.assertEqual((t3["gate_tokens_out"], t3["gate_seconds"]), ("16", "50"))
+        self.assertEqual((t4["gate_tokens_out"], t4["gate_seconds"]), ("30", "30"))
         self.assertEqual(t1["project"], "/secret/repo")
         anonymous = self.run_gate(["export", "--anonymize"], "").stdout
         self.assertNotIn("/secret/repo", anonymous)
@@ -1168,8 +1191,9 @@ class VerifyGateTests(unittest.TestCase):
             "by arm (rates with 95% CI):",
             "  none: 1 turns; audit issues 1/1 (100%, CI 21%-100%); "
             "final check passed 0/1 (0%, CI 0%-79%); corrected next 1/1",
-            "  self: 2 turns; fixed 1/2 (50%, CI 9%-91%); audit issues 1/2",
-            "high findings per audit 0.50",
+            "  self: 3 turns; fixed 1/2 (50%, CI 9%-91%); audit issues 1/2",
+            "high findings per audit 0.50; audits failed 1; "
+            "mean gate cost 23 tokens out, 40s",
             "verification mean tokens: 200 in, 20 out",
             "self-check no issues, review issues accepted: 1/1 (100%)",
         ):

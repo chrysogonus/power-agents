@@ -395,6 +395,12 @@ def gate_log(trial_root: Path) -> list[dict] | None:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def gate_ran(records: list[dict] | None) -> bool:
+    """True if the gate sent the agent to verify and logged its reply."""
+    steps = [r.get('step') for r in records or [] if r.get('step') != 'check' or r.get('why')]
+    return 'check' in steps and 'verified' in steps
+
+
 def write_results(output: Path, report: dict) -> None:
     statuses = {trial['status'] for trial in report['trials']}
     report['status'] = next((status for status in ('ERROR', 'SKIP', 'NOT_RUN', 'FAIL', 'REVIEW')
@@ -415,10 +421,11 @@ def write_results(output: Path, report: dict) -> None:
                      f"{elapsed} | {trial.get('scope_review', 'unknown')} |")
         if trial.get('error'):
             lines.extend(['', f"Trial {trial['index']}: {trial['error']}"])
-    lines.extend(['', '| Gate | Passed | Completed |', '| --- | --- | --- |'])
+    lines.extend(['', '| Gate | Passed | Failed | Pending review |', '| --- | --- | --- | --- |'])
     for gate in sorted({trial.get('gate', 'off') for trial in report['trials']}):
-        done = [t for t in report['trials'] if t.get('gate', 'off') == gate and t['status'] in ('PASS', 'FAIL', 'REVIEW')]
-        lines.append(f"| {gate} | {sum(t['status'] != 'FAIL' for t in done)} | {len(done)} |")
+        counts = [sum(t.get('gate', 'off') == gate and t['status'] == status for t in report['trials'])
+                  for status in ('PASS', 'FAIL', 'REVIEW')]
+        lines.append(f"| {gate} | {' | '.join(map(str, counts))} |")
     (output / 'summary.md').write_text(redact('\n'.join(lines)) + '\n')
 
 
@@ -546,6 +553,8 @@ def main() -> int:
                         trial.update(changes(task, work))
                         if trial['gate'] == 'on':
                             trial['gate_log'] = gate_log(root)
+                    if trial['gate'] == 'on' and not gate_ran(trial['gate_log']):
+                        raise ValueError('The verify gate did not run its verification pass in this trial.')
                     trial['verification'] = verify_trial(task, work, root)
                     trial.update(changes(task, work))
                     statuses = [check['status'] for check in trial['verification'].values()]

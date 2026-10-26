@@ -1142,16 +1142,10 @@ def outcome_worker():
     event, agent, turn = {"session_id": job["session"]}, job["agent"], job["turn"]
     top, pre = job["top"], job.get("pre_check")
     try:
-        if job.get("check") and pre and pre["snap"] == job["after"]:
-            # Nothing changed since the check before the self-check.
-            log(event, agent, turn, step="final-check", result=pre["result"],
-                seconds=pre["seconds"], reused=True)
-        elif job.get("check"):
-            status, seconds, _ = run_check(job["check"], top)
-            # The next turn may have edited files while the check ran.
-            log(event, agent, turn, step="final-check", result=status,
-                seconds=seconds, reused=False,
-                moved=snapshot(top) != job["after"])
+        # The audit goes first: it is shorter, so the next turn has less
+        # time to change the files it reads. `moved` flags when it did.
+        # shortcut: reads the live tree; audit a copy of the turn's files
+        # if moved audits turn out common.
         if job.get("audit"):
             found = [a for a in NAMES if shutil.which(
                 os.environ.get(f"CROSS_REVIEW_{a.upper()}_BIN") or a)]
@@ -1162,11 +1156,22 @@ def outcome_worker():
                          if auditor else (None, "no reviewer CLI on PATH"))
             tags = Counter(t.lower() for t in re.findall(
                 r"^\W*\[(high|med|low)\]", text or "", re.M | re.I))
+            counts = {k: None if err else tags[k] for k in ("high", "med", "low")}
             log(event, agent, turn, step="audit", auditor=auditor,
-                verdict=None if err else verdict(text), high=tags["high"],
-                med=tags["med"], low=tags["low"],
-                seconds=round(time.time() - started, 1), error=err)
+                verdict=None if err else verdict(text), **counts,
+                seconds=round(time.time() - started, 1), error=err,
+                moved=snapshot(top) != job["after"])
             capture(job.get("capture"), audit=text or err)
+        if job.get("check") and pre and pre["snap"] == job["after"]:
+            # Nothing changed since the check before the self-check.
+            log(event, agent, turn, step="final-check", result=pre["result"],
+                seconds=pre["seconds"], reused=True)
+        elif job.get("check"):
+            status, seconds, _ = run_check(job["check"], top)
+            # The next turn may have edited files while the check ran.
+            log(event, agent, turn, step="final-check", result=status,
+                seconds=seconds, reused=False,
+                moved=snapshot(top) != job["after"])
     finally:
         if os.getpgid(0) == os.getpid():  # our own group: clean it up
             os.killpg(0, signal.SIGKILL)
@@ -1249,7 +1254,9 @@ def stop(event, agent):
     answer = (event.get("last_assistant_message") or "").strip()
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
-        log(event, agent, turn, step="responded", result=first_line(event))
+        _, tokens_in, tokens_out = transcript_usage(event, agent)
+        log(event, agent, turn, step="responded", result=first_line(event),
+            tokens_in=tokens_in, tokens_out=tokens_out)
         capture(state.get("capture"), response=answer)
         finish(event, state, snapshot(cwd))
     if state.get("blocks", 0) >= MAX_BLOCKS:
@@ -1423,9 +1430,10 @@ EXPORT_COLUMNS = (
     "why", "arm", "p_arm", "review_eligible", "audit", "verification",
     "checks", "edited", "tokens_in", "tokens_out", "verify_seconds",
     "reviewer", "verdict", "review_error", "accepted", "rejected",
+    "gate_tokens_in", "gate_tokens_out", "gate_seconds",
     "pre_check", "final_check", "final_check_reused", "final_check_moved",
     "auditor", "audit_verdict", "audit_high", "audit_med", "audit_low",
-    "audit_error", "correction", "gap", "rework",
+    "audit_error", "audit_moved", "correction", "gap", "rework",
 )
 
 
@@ -1465,6 +1473,11 @@ def turn_rows(records):
         elif step == "responded":
             row["accepted"], row["rejected"] = (
                 review_points(r.get("result")) or (None, None))
+            # Counted from the verify prompt: self-check plus the response.
+            row.update(gate_tokens_in=r.get("tokens_in"),
+                       gate_tokens_out=r.get("tokens_out"))
+            if isinstance(r.get("ts"), int) and isinstance(row["ts"], int):
+                row["gate_seconds"] = r["ts"] - row["ts"]
         elif step == "project-check":
             row["pre_check"] = r.get("result")
         elif step == "final-check":
@@ -1474,9 +1487,15 @@ def turn_rows(records):
         elif step == "audit":
             row.update(auditor=r.get("auditor"), audit_verdict=r.get("verdict"),
                        audit_high=r.get("high"), audit_med=r.get("med"),
-                       audit_low=r.get("low"), audit_error=r.get("error"))
+                       audit_low=r.get("low"), audit_error=r.get("error"),
+                       audit_moved=r.get("moved"))
         elif step == "next":
             row.update(correction=r.get("correction"), gap=r.get("gap"))
+    for row in rows.values():
+        if row.get("verification") and row.get("gate_seconds") is None:
+            row.update(gate_tokens_in=row.get("tokens_in"),
+                       gate_tokens_out=row.get("tokens_out"),
+                       gate_seconds=row.get("verify_seconds"))
     return list(rows.values())
 
 
@@ -1666,6 +1685,14 @@ def arm_stats(rows):
         high = [r["audit_high"] for r in group if r.get("audit_high") is not None]
         if high:
             parts.append(f"high findings per audit {sum(high) / len(high):.2f}")
+        failed = sum(bool(r.get("audit_error")) for r in group)
+        if failed:
+            parts.append(f"audits failed {failed}")
+        cost = [r for r in group if r.get("gate_tokens_out") is not None]
+        if cost:
+            parts.append(
+                f"mean gate cost {sum(r['gate_tokens_out'] for r in cost) / len(cost):.0f} "
+                f"tokens out, {sum(r['gate_seconds'] or 0 for r in cost) / len(cost):.0f}s")
         print(f"  {arm}: " + "; ".join(parts))
 
 

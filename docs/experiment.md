@@ -36,16 +36,19 @@ every turn as usual, logs the error, and `doctor` reports it.
    either. This keeps later turns alike in all arms.
 3. **Outcome.** When a `changed` turn ends, a background worker measures the
    final state in the same way for every arm:
-   - **Final check.** If the repository has a [check
-     command](verify-gate.md#per-project-settings), it runs again. If nothing
-     changed since it ran before the self-check, that result is reused
-     (`reused`). `moved` flags files that changed while the check ran, for
-     example because the next turn had already started.
    - **Blinded audit.** A reviewer receives only the user's request and the
-     turn's diff. It sees no transcript and no answer, so it cannot tell which
-     arm produced the changes. Claude Code or Codex is chosen at random as the
-     auditor. The log keeps its verdict and its counts of `high`, `med` and
-     `low` findings.
+     turn's diff, taken when the turn ended. It sees no transcript and no
+     answer, so it cannot tell which arm produced the changes. Claude Code or
+     Codex is chosen at random as the auditor. The log keeps its verdict and
+     its counts of `high`, `med` and `low` findings. These are null when the
+     audit failed, so failures don't count as clean.
+   - **Final check.** After the audit, if the repository has a [check
+     command](verify-gate.md#per-project-settings), the check runs again. If
+     nothing changed since it ran before the self-check, that result is
+     reused (`reused`).
+
+   Both may read files the next turn has already changed. `moved` flags this
+   on the audit and on a check that ran again.
 4. **Follow-up.** When the next prompt arrives, a `next` record logs:
    - whether the prompt reads like a correction (`correction`: words such as
      "wrong", "still fails" or "revert")
@@ -57,7 +60,10 @@ every turn as usual, logs the error, and `doctor` reports it.
 Every turn also logs the model, the gate version (`gate`) and the prompt
 version (`prompts`). Every verification also logs the tokens it used
 (`tokens_in`, `tokens_out`). Records share a `turn` id, and the log stays
-free of content.
+free of content. The reply to a review logs the tokens spent since the
+verify prompt, so the gate's whole cost (`gate_tokens_*`, `gate_seconds` in
+the export) includes the response to the review. The auditor's and the
+reviewer's own token use is not recorded; their running time is.
 
 ### Reading the Results
 
@@ -71,6 +77,7 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
   - the audit-issue rate and high-severity findings per audit
   - the final-check pass rate
   - the correction and rework rates
+  - the number of failed audits and the mean cost of the gate
 
   It also shows the mean verification cost. Last, among turns whose
   self-check found no issues and that got a review, it shows how many had
@@ -107,8 +114,9 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
   against a hand-labeled sample.
 - **Proxy outcomes.** The `correction` regex is crude, so validate it against
   hand labels. Rework can also be planned follow-up work.
-- **Overlap.** A background check can run while the next turn edits files;
-  `moved` flags this. A turn the user interrupts may have no outcome records.
+- **Overlap.** The audit and the check read the live working tree, and the
+  next turn may already be editing it. `moved` flags this; exclude or
+  analyze such turns separately. A turn the user interrupts may have no outcome records.
 - **Long answers.** Turns that changed no files are not audited. For them,
   only the correction signal measures the outcome.
 
