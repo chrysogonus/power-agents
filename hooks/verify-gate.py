@@ -125,8 +125,10 @@ again. If it holds, keep it.
 Reply briefly:
 - First line: "Verification: no issues" or "Verification: fixed <what>".
 - One line per check: what you verified and how (command, file).
-- Anything you could not verify, and what would be needed.
-If you changed the answer, restate the corrected final answer."""
+If you changed the answer, restate the corrected final answer. If \
+anything is still open (claims you could not verify and what would be \
+needed, work not finished), end with "Open items:" and one line each; \
+otherwise leave it out."""
 
 REVIEW_PROMPT = """\
 You are a senior engineer reviewing another AI coding agent's work. \
@@ -165,7 +167,10 @@ against the code before acting. Say which points you accept or reject \
 and why, then fix what you accept. Start your reply with one line: \
 "Review: accepted <n>, rejected <m>". End it with your final answer to \
 the user's request, corrected for what you fixed, or "Final answer \
-unchanged." if you changed nothing.{note}
+unchanged." if you changed nothing. If anything is still open (points \
+you rejected and why, claims you could not verify, work not finished, \
+open items from your verification that still hold), add "Open items:" \
+after the final answer, with one line each; otherwise leave it out.{note}
 
 <feedback from="{reviewer}">
 {feedback}
@@ -1221,8 +1226,28 @@ def first_line(event):
     return msg.split("\n", 1)[0][:120]
 
 
-def outcome(state, *parts):
+# "Open items:", "**Open items:**" or "## Open items", not a sentence.
+OPEN_ITEMS = re.compile(r"[-#*_\s]*open items[*_\s]*(?::|$)", re.I)
+
+
+def open_items(answer):
+    """Count the lines under the reply's last "Open items:" heading."""
+    lines = answer.splitlines()
+    heads = [i for i, line in enumerate(lines) if OPEN_ITEMS.match(line)]
+    if not heads:
+        return 0
+    first, *rest = lines[heads[-1]:]
+    inline = first[OPEN_ITEMS.match(first).end():].strip(" *_")
+    items = [line for line in rest if line.strip()]
+    if inline and not re.fullmatch(r"none\W*", inline, re.I):
+        items.append(inline)
+    return len(items)
+
+
+def outcome(state, items, *parts):
     """The one line the user sees when a checked turn ends."""
+    if items:
+        parts += (f"{items} open item" + "s" * (items > 1),)
     return " · ".join(("verify gate", *state.get("outcome", ()), *parts))
 
 
@@ -1297,8 +1322,9 @@ def stop(event, agent):
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
         _, tokens = transcript_usage(event, agent, answer)
+        items = open_items(answer)
         log(event, agent, turn, step="responded", result=first_line(event),
-            **tokens)
+            open_items=items, **tokens)
         capture(state.get("capture"), response=answer)
         points, now = review_points(first_line(event)), snapshot(cwd)
         part = (f"cross-review ({NAMES[state['review']['reviewer']]}): "
@@ -1306,7 +1332,7 @@ def stop(event, agent):
                    else "reply gave no counts"))
         if files_edited(state.get("at_feedback"), now):
             part += ", edited files"
-        finish(event, state, now, outcome(state, part))
+        finish(event, state, now, outcome(state, items, part))
     if state.get("blocks", 0) >= MAX_BLOCKS:
         allow()
     phase = state.get("phase", "new")
@@ -1393,7 +1419,7 @@ def stop(event, agent):
         review = state.get("review")
         state.update(phase="reviewed")
         capture(state.get("capture"), verification=answer)
-        pre = state.get("pre_check")
+        pre, items = state.get("pre_check"), open_items(answer)
         kind = verification_kind(result)
         state["outcome"] = [
             *([f"check {pre['result']} ({pre['seconds']}s)"] if pre else []),
@@ -1402,8 +1428,8 @@ def stop(event, agent):
             + (", edited files" if edited else "")]
         if not review:
             log(event, agent, turn, step="verified", result=result,
-                checks=checks, edited=edited, **tokens)
-            finish(event, state, after, outcome(state))
+                checks=checks, edited=edited, open_items=items, **tokens)
+            finish(event, state, after, outcome(state, items))
         state["blocks"] = state.get("blocks", 0) + 1
         save_state(event, state)  # before the wait: no double runs
         waited = time.time()
@@ -1412,17 +1438,18 @@ def stop(event, agent):
         save_state(event, state)
         found = None if err else verdict(feedback)
         log(event, agent, turn, step="verified", result=result, checks=checks,
-            edited=edited, **tokens,
+            edited=edited, open_items=items, **tokens,
             reviewer=review["reviewer"], seconds=seconds, error=err,
             verdict=found, waited=round(time.time() - waited, 1))
         capture(state.get("capture"), feedback=feedback or err)
         name = NAMES[review["reviewer"]]
         if err:
             finish(event, state, after,
-                   outcome(state, f"cross-review skipped: {err}"))
+                   outcome(state, items, f"cross-review skipped: {err}"))
         if found == "clean":
             finish(event, state, after,
-                   outcome(state, f"cross-review ({name}): no material issues"))
+                   outcome(state, items,
+                           f"cross-review ({name}): no material issues"))
         stale = after != review.get("snap")
         state["fed_back"] = True
         state["at_feedback"] = after
@@ -1487,7 +1514,7 @@ def review_points(result):
 EXPORT_COLUMNS = (
     "ts", "session", "turn", "agent", "model", "gate", "prompts", "project",
     "why", "arm", "p_arm", "review_eligible", "audit", "verification",
-    "checks", "edited", *TOKEN_FIELDS, "verify_seconds",
+    "checks", "edited", "open_items", *TOKEN_FIELDS, "verify_seconds",
     "reviewer", "verdict", "review_error", "accepted", "rejected",
     *("gate_" + f for f in TOKEN_FIELDS), "gate_seconds",
     "pre_check", "final_check", "final_check_reused", "final_check_moved",
@@ -1525,13 +1552,14 @@ def turn_rows(records):
             row.update(verification=verification_kind(r.get("result")),
                        review_error=r.get("error"),
                        **{k: r.get(k) for k in (
-                           "checks", "edited", *TOKEN_FIELDS,
+                           "checks", "edited", "open_items", *TOKEN_FIELDS,
                            "reviewer", "verdict")})
             if isinstance(r.get("ts"), int) and isinstance(row["ts"], int):
                 row["verify_seconds"] = r["ts"] - row["ts"]
         elif step == "responded":
             row["accepted"], row["rejected"] = (
                 review_points(r.get("result")) or (None, None))
+            row["open_items"] = r.get("open_items")  # the last pass counts
             # Counted from the verify prompt: self-check plus the response.
             row.update({"gate_" + f: r.get(f) for f in TOKEN_FIELDS})
             if isinstance(r.get("ts"), int) and isinstance(row["ts"], int):
@@ -1730,6 +1758,16 @@ def arm_stats(rows):
                      for r in passed)
         print(f"self-check no issues, review issues accepted: {missed}/"
               f"{len(passed)} ({missed / len(passed):.0%})")
+    known = [r for r in rows if r.get("open_items") is not None]
+    if known:
+        listed = [r for r in known if r["open_items"]]
+        text = f"turns ending with open items: {len(listed)}/{len(known)}"
+        for label, group in (("with", listed), ("without", [
+                r for r in known if not r["open_items"]])):
+            corrected = rate(group, "correction", True)
+            if corrected:
+                text += f"; corrected next {label} {corrected}"
+        print(text)
     arms = {}
     for r in rows:
         if r.get("arm"):

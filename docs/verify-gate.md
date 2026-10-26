@@ -24,14 +24,18 @@ ended in this session, and new commits must hold exactly that content.
   reports no material issues, the turn ends with a notice. Otherwise the
   feedback is returned as "Here is feedback from another coding agent. What do
   you think about this?" The agent is asked to accept or reject each point
-  and to end with its final answer, or "Final answer unchanged." A missing,
+  and to end with its final answer, or "Final answer unchanged.", followed
+  by "Open items:" when points it rejected, claims it could not verify, or
+  unfinished work remain. A missing,
   failing, or timed-out reviewer is skipped with a notice; it never blocks the
   turn. A new prompt stops a review that is still running.
 - **Summary**: a checked turn ends with one line from the gate itself, for
   example `verify gate · check failed with exit code 1 (14s) · self-check
-  fixed, edited files · cross-review (Codex): accepted 2, rejected 1`. It
-  reports what the passes said and whether they changed files, not whether
-  they were right. The project check in it ran before the self-check.
+  fixed, edited files · cross-review (Codex): accepted 2, rejected 1 · 1 open
+  item`. It reports what the passes said and whether they changed files, not
+  whether they were right. The project check in it ran before the self-check.
+  The open-item count comes from the last pass's "Open items:" section, which
+  the agent is asked to include only when something is left open.
 
 ## Controls
 
@@ -96,7 +100,8 @@ how many tool calls it made after the verification prompt (read from the last 4
 MB of the transcript; empty when the prompt isn't found there), the project
 check's result and run time, the reviewer's verdict or error, the reviewer's run
 time, how long the agent waited for it, and the first line of the agent's reply
-to the feedback (for example `Review: accepted 1, rejected 2`). Since log
+to the feedback (for example `Review: accepted 1, rejected 2`), and how many
+open items each of those replies listed. Since log
 version 2 (`"v": 2`), records of one turn share a `turn` id. A checked turn
 also logs the model, a hash of the gate script (`gate`) and of its prompts
 (`prompts`), and the tokens the verification used, with cache reads and writes
@@ -110,7 +115,9 @@ fixed, corrected, or changed something, the share of review points the agent
 accepted, and fix and review rates by trigger (`changed` or `long`) and by
 repository. Records from before repositories were logged appear as `unknown`.
 It also shows the mean verification cost, how often a review raised points the
-agent accepted after its self-check had found no issues, and, while an
+agent accepted after its self-check had found no issues, how many turns ended
+with open items and how often those, and the turns without, were followed by a
+correction, and, while an
 [experiment](experiment.md) runs, its outcomes per arm.
 Per-session state files in the same directory are deleted after seven days.
 

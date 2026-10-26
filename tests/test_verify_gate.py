@@ -798,13 +798,46 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn('End it with your final answer to the user\'s request',
                       feedback["reason"])
         self.assertIn('or "Final answer unchanged."', feedback["reason"])
+        self.assertIn('add "Open items:" after the final answer', feedback["reason"])
         (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
         self.assertEqual(
-            self.stop(answer="Review: accepted 1, rejected 0\nFixed.",
+            self.stop(answer="Review: accepted 1, rejected 0\nFixed.\n\n"
+                             "Open items:\n- Rejected the null case: guarded.",
                       CROSS_REVIEW="1"),
             {"systemMessage": "verify gate · self-check found no issues · "
                               "cross-review (Codex): accepted 1, rejected 0,"
-                              " edited files"})
+                              " edited files · 1 open item"})
+        self.assertEqual(self.records("responded")[-1]["open_items"], 1)
+
+    def test_open_items_are_counted_from_the_last_heading(self) -> None:
+        self.mark()
+        self.change_file()
+        reason = self.stop()["reason"]
+        self.assertIn('end with "Open items:" and one line each', reason)
+        answer = ("Verification: no issues\nRan the tests.\n\n**Open items:**\n"
+                  "- Could not run the GPU test: needs a GPU.\n- Docs not updated.")
+        self.assertEqual(self.stop(answer=answer), {
+            "systemMessage": ENDED["systemMessage"].replace(
+                "gave no verdict", "found no issues") + " · 2 open items"})
+        self.assertEqual(self.records("verified")[-1]["open_items"], 2)
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.stop()
+        self.stop(answer="Verification: no issues\nOpen items: none")
+        self.assertEqual(self.records("verified")[-1]["open_items"], 0)
+        # A sentence starting with the words is not a heading.
+        self.mark()
+        (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
+        self.stop()
+        self.stop(answer="Verification: no issues\nOpen items are in place.\n"
+                         "All checks passed.")
+        self.assertEqual(self.records("verified")[-1]["open_items"], 0)
+        self.mark()
+        (self.repo / "app.py").write_text("print('v5')\n", encoding="utf-8")
+        self.stop()
+        self.stop(answer="Verification: no issues\n## Open items\n- a\n"
+                         "**Open items:** b")
+        self.assertEqual(self.records("verified")[-1]["open_items"], 1)
 
     def test_reviewer_cannot_close_the_feedback_wrapper(self) -> None:
         self.mark()
@@ -1236,10 +1269,10 @@ class VerifyGateTests(unittest.TestCase):
              "step": "check", "why": None, "prev_turn": "t1", "rework": True},
             *turn("s2", "t3", "self", "clean", "passed",
                   result="Verification: fixed the edge case", tokens_in=100,
-                  tokens_out=10),
+                  tokens_out=10, open_items=2),
             {"ts": now + 50, "v": 2, "session": "s2", "turn": "t3",
              "step": "responded", "result": "Review: accepted 1, rejected 0",
-             "tokens_in": 150, "tokens_out": 16},
+             "tokens_in": 150, "tokens_out": 16, "open_items": 0},
             {"ts": now + 95, "v": 2, "session": "s2", "turn": "t5", "step": "check",
              "why": "changed", "arm": "self"},
             {"ts": now + 99, "v": 2, "session": "s2", "turn": "t5", "step": "audit",
@@ -1247,7 +1280,9 @@ class VerifyGateTests(unittest.TestCase):
              "low": None, "error": "claude timed out"},
             *turn("s3", "t4", "self", "issues", "passed",
                   result="Verification: no issues", tokens_in=300, tokens_out=30,
-                  tokens_cache_read=150, tokens_cache_write=30),
+                  tokens_cache_read=150, tokens_cache_write=30, open_items=1),
+            {"ts": now + 100, "v": 2, "session": "s3", "turn": "t4",
+             "step": "next", "correction": False, "gap": 30},
         ]
         log.write_text("".join(json.dumps(r) + "\n" for r in records))
 
@@ -1266,6 +1301,9 @@ class VerifyGateTests(unittest.TestCase):
         # The whole gate: self-check plus the response to the review.
         self.assertEqual((t3["gate_tokens_out"], t3["gate_seconds"]), ("16", "50"))
         self.assertEqual((t4["gate_tokens_out"], t4["gate_seconds"]), ("30", "30"))
+        # The last pass counts: the response overrides the self-check.
+        self.assertEqual((t1["open_items"], t3["open_items"], t4["open_items"]),
+                         ("", "0", "1"))
         self.assertEqual(t1["project"], "/secret/repo")
         anonymous = self.run_gate(["export", "--anonymize"], "").stdout
         self.assertNotIn("/secret/repo", anonymous)
@@ -1282,6 +1320,8 @@ class VerifyGateTests(unittest.TestCase):
             "verification input from cache: 50% read, 10% written "
             "(of 1 verifications)",
             "self-check no issues, review issues accepted: 1/1 (100%)",
+            "turns ending with open items: 1/2; "
+            "corrected next with 0/1 (0%, CI 0%-79%)\n",
         ):
             self.assertIn(line, stats)
 

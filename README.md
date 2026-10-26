@@ -48,11 +48,12 @@ once with a fixed checklist:
 - Fix real problems, and keep what holds. Being asked to look again is not a
   reason to change anything.
 
-It is asked to end with a short note listing what it checked and how, what it
-fixed, and what it could not verify. In Claude Code you see the first answer,
+It is asked to end with a short note listing what it checked and how and what
+it fixed, plus "Open items:" only when something is left open, such as a claim
+it could not verify. In Claude Code you see the first answer,
 then this note and any corrections. The gate then ends the turn with a
 one-line summary, such as `verify gate · self-check fixed, edited files ·
-cross-review (Codex): accepted 2, rejected 1`.
+cross-review (Codex): accepted 2, rejected 1 · 1 open item`.
 
 **2. Cross-review (off by default).** Claude Code's work is reviewed by Codex,
 and Codex's work by Claude Code. The reviewer gets the session transcript and
