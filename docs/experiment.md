@@ -61,7 +61,10 @@ Every turn also logs the model, the gate version (`gate`) and the prompt
 version (`prompts`). Every verification also logs the tokens it used:
 `tokens_in` counts all input, of which `tokens_cache_read` and
 `tokens_cache_write` were cache reads and writes, and `tokens_out` counts the
-output. Cached input is priced differently, so price the fields separately. Records share a `turn` id, and the log stays
+output. Cached input is priced differently, so price the fields separately.
+Claude Code can write the reply to its transcript after the gate starts
+reading it, so the gate waits up to 3 seconds for the reply; if the reply
+never appears, the token fields are null rather than too low. Records share a `turn` id, and the log stays
 free of content. The reply to a review logs the tokens spent since the
 verify prompt, so the gate's whole cost (`gate_tokens_*`, `gate_seconds` in
 the export) includes the response to the review. The auditor's and the

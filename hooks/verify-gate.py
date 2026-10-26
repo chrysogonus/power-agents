@@ -693,14 +693,31 @@ TOKEN_FIELDS = {
 }
 
 
-def transcript_usage(event, agent):
+def transcript_usage(event, agent, final=""):
     """Return (model, {TOKEN_FIELDS: count}) from the transcript's tail.
 
     Tokens count what was spent after the last verify prompt; None when
-    the prompt or the usage isn't found.
+    the prompt or the usage isn't found. With final, the answer that just
+    ended, they are also None unless the transcript already holds it.
     """
+    # The first line lies within one text block of the message.
+    snippet = final.strip().split("\n", 1)[0][:60]
+    # Claude Code can write the last message after the Stop hook starts.
+    for _ in range(15):
+        model, spent, found = _scan_usage(event, agent, snippet)
+        if found or not snippet or spent is None:
+            break
+        time.sleep(0.2)
+    else:
+        spent = None  # counting without the last message would undercount
+    return model, spent or dict.fromkeys(TOKEN_FIELDS)
+
+
+def _scan_usage(event, agent, snippet):
+    """Return (model, tokens or None, whether snippet follows the prompt)."""
     path = event.get("transcript_path")
     model, spent, base, last, seen = None, None, None, None, set()
+    found = False
     try:
         objs = list(_jsonl(path, CHECKS_TAIL)) if path and Path(path).exists() else []
     except (OSError, subprocess.SubprocessError):
@@ -711,10 +728,13 @@ def transcript_usage(event, agent):
             if obj.get("isSidechain"):
                 continue
             if obj.get("type") == "user" and _verify_prompt(msg.get("content")):
-                spent, seen = dict.fromkeys(TOKEN_FIELDS, 0), set()
+                spent, seen, found = dict.fromkeys(TOKEN_FIELDS, 0), set(), False
             elif obj.get("type") == "assistant":
                 if msg.get("model") and msg["model"] != "<synthetic>":
                     model = msg["model"]
+                content = msg.get("content")
+                found |= bool(spent and snippet and snippet in (
+                    content if isinstance(content, str) else _codex_text(content)))
                 u = msg.get("usage")
                 # One message is recorded once per content block.
                 if spent and isinstance(u, dict) and msg.get("id") not in seen:
@@ -728,14 +748,17 @@ def transcript_usage(event, agent):
                 last = (p.get("info") or {}).get("total_token_usage") or last
             elif (p.get("type") == "message" and p.get("role") == "user"
                   and _verify_prompt(p.get("content"))):
-                base, spent = last, True
+                base, spent, found = last, True, False
+            elif p.get("type") == "message" and p.get("role") == "assistant":
+                found |= bool(spent and snippet
+                              and snippet in _codex_text(p.get("content")))
     if agent == "codex":
         if not (spent and base and last) or last is base:
             spent = None
         else:
             spent = {field: (last.get(k) or 0) - (base.get(k) or 0)
                      for field, (_, k) in TOKEN_FIELDS.items()}
-    return model, spent or dict.fromkeys(TOKEN_FIELDS)
+    return model, spent, found
 
 
 def build_bundle(event, agent, state, now):
@@ -1265,7 +1288,7 @@ def stop(event, agent):
     answer = (event.get("last_assistant_message") or "").strip()
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
-        _, tokens = transcript_usage(event, agent)
+        _, tokens = transcript_usage(event, agent, answer)
         log(event, agent, turn, step="responded", result=first_line(event),
             **tokens)
         capture(state.get("capture"), response=answer)
@@ -1350,7 +1373,7 @@ def stop(event, agent):
     if phase == "verified":
         result = first_line(event)
         checks = checks_after_gate(event, agent)
-        _, tokens = transcript_usage(event, agent)
+        _, tokens = transcript_usage(event, agent, answer)
         after = snapshot(cwd)
         edited = files_edited(state.get("at_verify"), after)
         review = state.get("review")

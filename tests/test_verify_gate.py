@@ -905,14 +905,18 @@ class VerifyGateTests(unittest.TestCase):
         usage = {"input_tokens": 10, "cache_creation_input_tokens": 100,
                  "cache_read_input_tokens": 1000, "output_tokens": 7}
         with claude.open("a", encoding="utf-8") as f:
-            for block in ("text", "tool_use"):  # one message, two lines
+            for block in ("tool_use", "text"):  # one message, two lines
                 f.write(json.dumps({"type": "assistant", "message": {
                     "id": "msg-1", "model": "claude-test-1", "usage": usage,
-                    "content": [{"type": block, "text": "x"}]}}) + "\n")
+                    "content": [{"type": block, "text": "Verification: no issues"}]}})
+                    + "\n")
         codex = self.write_codex_rollout()
         with codex.open("a", encoding="utf-8") as f:
             for line in (
                 {"type": "turn_context", "payload": {"model": "gpt-test-2"}},
+                {"type": "response_item", "payload": {
+                    "type": "message", "role": "assistant", "content": [
+                        {"type": "output_text", "text": "Verification: no issues"}]}},
                 {"type": "event_msg", "payload": {"type": "token_count", "info": {
                     "total_token_usage": {"input_tokens": 500, "cached_input_tokens": 230,
                                           "output_tokens": 30}}}},
@@ -946,6 +950,31 @@ class VerifyGateTests(unittest.TestCase):
         fields = ("tokens_in", "tokens_cache_read", "tokens_cache_write", "tokens_out")
         self.assertEqual([tuple(v[f] for f in fields) for v in verified],
                          [(1110, 1000, 100, 7), (300, 180, 0, 20)])
+
+        # The reply can reach the transcript after the Stop hook starts: the
+        # gate waits for it, and logs unknown tokens if it never arrives.
+        def late_reply(text: str) -> None:
+            time.sleep(0.6)
+            with claude.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "assistant", "message": {
+                    "id": "msg-late", "usage": {"output_tokens": 50},
+                    "content": [{"type": "text", "text": text}]}}) + "\n")
+
+        import threading
+        for answer, expected in (("Verification: fixed the late case", 57),
+                                 ("Verification: never written", None)):
+            self.session += 1
+            fields = {"transcript_path": str(claude)}
+            self.mark()
+            self.change_file()
+            self.stop(fields=fields)
+            writer = threading.Thread(target=late_reply, args=(
+                answer if expected else "something else",))
+            writer.start()
+            self.stop(answer=answer + "\nChecked app.py.", fields=fields)
+            writer.join()
+            git(self.repo, "checkout", "--", "app.py")
+            self.assertEqual(self.records("verified")[-1]["tokens_out"], expected)
 
     def test_experiment_arms_decide_the_checks(self) -> None:
         self.write_experiment({"arms": {"none": 1, "self": 0}})
