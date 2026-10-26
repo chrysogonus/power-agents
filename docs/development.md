@@ -97,15 +97,13 @@ API calls; run only with an authorized budget):
 
 ```bash
 make eval EVAL_ARGS='--instructions baseline --skill security-best-practices'
-make eval EVAL_ARGS='--instructions candidate --skill security-best-practices'
 make eval EVAL_ARGS='--instructions none --skill security-best-practices'
 # Or use --instruction-file /absolute/path/to/experimental.md
 ```
 
 The default is **baseline**; use `--instructions none` to reproduce the old
-runner's absence of global instructions. The candidate is experimental and is
-not installed by `make install`. These are routing/response evaluations with
-only the Skill tool: they do not establish coding quality or prove runtime
+runner's absence of global instructions. These are routing/response evaluations
+with only the Skill tool: they do not establish coding quality or prove runtime
 instruction loading through fake-runtime tests. See the
 [first-phase change report and comparison protocol](modernization.md).
 
@@ -157,11 +155,11 @@ supported as an evaluation runtime yet.
 A separate [coding runner](coding-evaluations.md) evaluates retry idempotence,
 settings preservation, and a parser refactor using independent acceptance and
 regression checks. It supports isolated Claude Code and Codex adapters and
-baseline/candidate/no-instruction comparisons. By default it only describes the
+baseline/no-instruction comparisons. By default it only describes the
 planned trials:
 
 ```bash
-make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline candidate none --repeats 2'
+make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline none --repeats 2'
 ```
 
 Replace the model placeholder before execution. Offline fake-runtime tests run
@@ -169,4 +167,4 @@ in ordinary checks; live calls require separate model/budget authorization and
 `--execute`. Codex execution is limited to one supervised trial at a time because
 this adapter has no dollar cap. No paid calibration has run and no new global
 default has been selected. See the
-[12-trial protocol](coding-evaluations.md#authorized-12-trial-calibration).
+[calibration protocol](coding-evaluations.md#authorized-calibration).

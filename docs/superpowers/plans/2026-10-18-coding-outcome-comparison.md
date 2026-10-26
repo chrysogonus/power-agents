@@ -1,5 +1,10 @@
 # Coding Outcome Comparison Implementation Plan
 
+> **Status: closed on 2026-10-26.** Tasks 1–3 were implemented. The live
+> calibration in Task 4 was not run: the instruction candidate it compared was
+> retired (see [modernization](../../modernization.md)). This plan is kept as a
+> historical record; its references to the candidate no longer apply.
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax. Default to inline execution; delegation requires separate authorization. The user authorized offline implementation on 2026-10-18; live evaluations still require separate authorization.
 
 **Starting point:** Signed commit `8728874` on `modernization/eval-first`. The first-phase runner and instruction candidate are committed; this plan is a separate, uncommitted deliverable.

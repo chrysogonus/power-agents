@@ -408,7 +408,7 @@ def main() -> int:
     parser.add_argument('--model', required=True)
     parser.add_argument('--task')
     parser.add_argument('--manifest', type=Path, default=ROOT / 'evals/coding/tasks.json')
-    parser.add_argument('--instructions', nargs='+', choices=('baseline', 'candidate', 'none'), default=['baseline'])
+    parser.add_argument('--instructions', nargs='+', choices=('baseline', 'none'), default=['baseline'])
     parser.add_argument('--repeats', type=int, default=2)
     parser.add_argument('--timeout', type=float, help='Override subject timeout seconds.')
     parser.add_argument('--max-budget-usd', type=float, default=1, help='Claude per-session cap; not a total-run cap.')
@@ -429,8 +429,7 @@ def main() -> int:
         tasks = load_tasks(args.manifest.resolve(), args.task)
         if args.timeout:
             tasks = [{**task, 'timeout_seconds': args.timeout} for task in tasks]
-        sources = {'baseline': ROOT / 'instructions/general-global.md',
-                   'candidate': ROOT / 'instructions/general-global.candidate.md', 'none': None}
+        sources = {'baseline': ROOT / 'instructions/general-global.md', 'none': None}
         trials = []
         for task in tasks:
             for repeat in range(args.repeats):

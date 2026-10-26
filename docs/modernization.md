@@ -2,14 +2,17 @@
 
 ## Status and scope
 
-This phase repairs routing measurements and provides a shorter instruction
-candidate. The installed baseline and every `SKILL.md` entrypoint are unchanged.
-The installer continues to select `instructions/general-global.md`.
+Closed on 2026-10-26. This phase repaired routing measurements and proposed a
+shorter instruction candidate. The candidate was retired without live runs:
+`instructions/general-global.md` was itself trimmed to non-default preferences,
+leaving the candidate longer and out of date. The routing runner still accepts
+any instruction file through `--instruction-file`; the coding runner compares
+only baseline and none.
 
 Implemented:
 
-- Claude routing-runner instruction modes: baseline (default), candidate, none,
-  and a custom file. Files load through the isolated user-wide `CLAUDE.md` path.
+- Claude routing-runner instruction modes: baseline (default), none, and a
+  custom file. Files load through the isolated user-wide `CLAUDE.md` path.
 - Deterministic required/allowed/forbidden skill expectations alongside response
   judging, including successful handling without a skill.
 - Natural prompts and explicit routing expectations for review, handoff/prompt,
@@ -20,9 +23,7 @@ Implemented:
   in schema-version-2 results. Existing per-trial response grades and skill
   hashes remain. Missing runtime/credentials still produce SKIP.
 
-Experimental: `instructions/general-global.candidate.md`. Offline tests establish
-orchestration and file placement, not superior behavior or actual runtime
-adherence. No paid runs or performance claims are part of this change.
+No paid runs or performance claims are part of this change.
 
 Deferred: a coding-task benchmark, Codex evaluation adapter, project-scoped skill
 installation, review-skill consolidation, changes to active skill descriptions,
@@ -32,24 +33,6 @@ validation; none is necessary to correct the current routing measurements.
 Follow-up: the [coding-outcome runner](coding-evaluations.md) now implements the
 offline harness and both adapters. Live results remain unmeasured. The deferred
 list above records the original first-phase scope.
-
-## Candidate changes
-
-| Baseline material | Candidate treatment |
-| --- | --- |
-| Simplicity, focused changes, existing conventions, preservation of user work | Retained and condensed |
-| Authorization, credentials, Git restrictions, review-only scope | Retained |
-| Goal-driven execution and accurate verification reports | Retained, with a concise completion criterion |
-| Routine decisions and consequential ambiguity | Clarified: investigate facts, decide routine matters, ask about consequential uncertainty |
-| Mandatory full Ponytail loading | Experimental replacement with condensed implementation principles; the full skill and its discovery description remain available |
-| Detailed primary/supporting skill routing table | Relocated to existing skill descriptions and `skills/README.md` |
-| Repeated explanations and task-to-test examples | Removed; meaningful verification and project-required checks remain |
-| Mandatory brief plan for every multi-step task | Replaced with workflow selection based on uncertainty and size |
-
-The candidate is a combined experiment, not an isolated test of Ponytail alone.
-Removing the mandatory global instruction also does not prevent implicit
-Ponytail selection through its unchanged description. Forced, condensed, and
-strictly explicit-only Ponytail comparisons are not yet independently measured.
 
 ## Effective instruction environment
 
@@ -62,9 +45,10 @@ Before comparing live results, account for the entire instruction stack:
 
 A concrete conflict observed during the 2026-10-18 review: external Superpowers
 instructions require brainstorming before creative implementation and promote
-skill loading even at marginal relevance. That can override the candidate's
-intent that clear, small tasks proceed directly. These instructions are outside
-this repository's managed inventory; this change does not alter them.
+skill loading even at marginal relevance. That can override an instruction
+variant's intent that clear, small tasks proceed directly. These instructions
+are outside this repository's managed inventory; this change does not alter
+them.
 
 In isolated routing runs, the environment is allowlisted, hooks are disabled,
 MCP servers are empty, and the host's user configuration is not copied. Record
@@ -84,8 +68,8 @@ complete reproduction of an interactive session.
    Existing per-session caps do not bound the cost of a whole fixture matrix.
 4. Select an explicit installed runtime, subject model, and judge model. Hold
    skill contents, fixtures, runtime version, and settings constant. Compare
-   baseline, candidate, and no-instruction runs using repeated trials; vary run
-   order to reduce time/order effects. Keep all structured results and hashes.
+   baseline, experimental, and no-instruction runs using repeated trials; vary
+   run order to reduce time/order effects. Keep all structured results and hashes.
 5. Inspect routing results separately from judge grades. Review individual
    failures and report sample sizes; a small difference is not proof of a win.
    A native instruction file on disk is not proof of model adherence: inspect
@@ -101,7 +85,6 @@ Opt-in commands, after budget authorization and environment-key setup:
 
 ```bash
 make eval EVAL_ARGS='--instructions baseline --skill security-best-practices --model SUBJECT_MODEL --judge-model JUDGE_MODEL'
-make eval EVAL_ARGS='--instructions candidate --skill security-best-practices --model SUBJECT_MODEL --judge-model JUDGE_MODEL'
 make eval EVAL_ARGS='--instructions none --skill security-best-practices --model SUBJECT_MODEL --judge-model JUDGE_MODEL'
 ```
 
@@ -143,5 +126,5 @@ constraints, observable completion criteria, and decisions needing approval:
 - [Claude instruction documentation](https://code.claude.com/docs/en/memory):
   native user instructions and concise, consistent guidance.
 
-These sources support the approach; they do not establish that this particular
-candidate is better than the baseline for any model.
+These sources support the approach; they do not establish that any instruction
+variant is better than the baseline for any model.

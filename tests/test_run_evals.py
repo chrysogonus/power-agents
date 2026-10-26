@@ -160,7 +160,7 @@ class RunEvalsTests(unittest.TestCase):
     def test_instruction_variants_are_native_files_and_judge_is_clean(self):
         custom = self.directory / "custom.md"
         custom.write_text("Custom global instructions.\n")
-        for variant in ("baseline", "candidate", "none", "custom"):
+        for variant in ("baseline", "none", "custom"):
             with self.subTest(variant=variant):
                 option = (("--instruction-file", str(custom)) if variant == "custom"
                           else ("--instructions", variant))
@@ -169,7 +169,6 @@ class RunEvalsTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
                 report = self.document(output)
                 source = {"baseline": ROOT / "instructions/general-global.md",
-                          "candidate": ROOT / "instructions/general-global.candidate.md",
                           "custom": custom}.get(variant)
                 self.assertEqual(report["instructions"]["variant"], variant)
                 self.assertEqual(report["instructions"]["sha256"],

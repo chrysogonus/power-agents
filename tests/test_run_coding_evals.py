@@ -54,17 +54,17 @@ class CodingRunnerTests(unittest.TestCase):
 
     def test_describe_never_starts_runtime_and_balances_matrix(self):
         cmd, env, output, counter = self.prepare(execute=False,
-            extra=('--instructions', 'baseline', 'candidate', 'none', '--repeats', '2'))
+            extra=('--instructions', 'baseline', 'none', '--repeats', '2'))
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual([t['variant'] for t in report['trials']], ['baseline', 'candidate', 'none', 'none', 'candidate', 'baseline'])
+        self.assertEqual([t['variant'] for t in report['trials']], ['baseline', 'none', 'none', 'baseline'])
         self.assertFalse(counter.exists())
         self.assertFalse(output.exists())
 
     def test_both_adapters_and_all_instruction_variants(self):
         for agent in ('claude', 'codex'):
-            for variant in ('baseline', 'candidate', 'none'):
+            for variant in ('baseline', 'none'):
                 with self.subTest(agent=agent, variant=variant):
                     result, report, output, _ = self.run_cli(agent=agent, extra=('--instructions', variant))
                     self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

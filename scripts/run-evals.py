@@ -353,7 +353,7 @@ def main() -> int:
     parser.add_argument("--skills-root", type=Path, default=ROOT / "skills")
     parser.add_argument("--output-dir", type=Path, help="New result directory; defaults to eval-results/<run-id>.")
     instruction_options = parser.add_mutually_exclusive_group()
-    instruction_options.add_argument("--instructions", choices=("baseline", "candidate", "none"),
+    instruction_options.add_argument("--instructions", choices=("baseline", "none"),
                                      default="baseline", help="Global instruction variant (default: baseline).")
     instruction_options.add_argument("--instruction-file", type=Path,
                                      help="Custom global instructions instead of a built-in variant.")
@@ -366,7 +366,6 @@ def main() -> int:
     try:
         variant = "custom" if args.instruction_file else args.instructions
         sources = {"baseline": ROOT / "instructions/general-global.md",
-                   "candidate": ROOT / "instructions/general-global.candidate.md",
                    "custom": args.instruction_file, "none": None}
         source = sources[variant]
         instruction_bytes = source.read_bytes() if source else None

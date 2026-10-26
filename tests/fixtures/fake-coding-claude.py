@@ -78,9 +78,7 @@ def simulate(agent, mode, counter):
     instruction = config / ('CLAUDE.md' if agent == 'claude' else 'AGENTS.md')
     if instruction.exists():
         actual = hashlib.sha256(instruction.read_bytes()).hexdigest()
-        allowed = [hashlib.sha256((ROOT / 'instructions' / name).read_bytes()).hexdigest()
-                   for name in ('general-global.md', 'general-global.candidate.md')]
-        assert actual in allowed
+        assert actual == hashlib.sha256((ROOT / 'instructions/general-global.md').read_bytes()).hexdigest()
     if agent == 'claude':
         with open(sys.argv[sys.argv.index('--debug-file') + 1], 'w') as log:
             if instruction.exists():

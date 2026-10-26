@@ -137,7 +137,7 @@ opinion. Reports include missing required skills and unexpected activations.
 Keep prompts natural, and test explicit invocation separately. Review routing
 fixtures use distinct prompts; other legacy fixture sets are retained.
 
-Compare global instruction variants with `--instructions baseline|candidate|none`
+Compare global instruction variants with `--instructions baseline|none`
 or `--instruction-file PATH`. See the [comparison protocol](../docs/modernization.md)
 for isolation, interpretation, and external instruction conflicts.
 

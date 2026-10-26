@@ -31,16 +31,16 @@ These commands validate fixtures and print a planned matrix without starting a
 runtime, checking credentials, creating result directories, or making API calls:
 
 ```bash
-make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline candidate none --repeats 2'
-make coding-eval CODING_EVAL_ARGS='--agent codex --model SUBJECT_MODEL --task retry-idempotence --instructions baseline candidate none --repeats 2'
+make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline none --repeats 2'
+make coding-eval CODING_EVAL_ARGS='--agent codex --model SUBJECT_MODEL --task retry-idempotence --instructions baseline none --repeats 2'
 ```
 
 Replace `SUBJECT_MODEL` with an installed-runtime-supported model ID. Use
 `--runtime /absolute/path/to/executable` to pin the executable. Omit `--task` to
 select all three fixtures. The default is baseline instructions, two repeats.
-Repeat two reverses variant order, giving baseline/candidate/none then
-none/candidate/baseline. Do not compare different models as if only instructions
-changed. The CLI does not set reasoning-effort options or estimate API prices.
+Repeat two reverses variant order, giving baseline/none then none/baseline.
+Do not compare different models as if only instructions changed. The CLI does
+not set reasoning-effort options or estimate API prices.
 
 ## Isolation and execution
 
@@ -67,7 +67,7 @@ login syncs account plugins and apps, so the staged configuration disables the
 `plugins`, `remote_plugin`, and `apps` features in every Codex trial.
 
 Each trial gets a temporary Git repository, home, configuration roots, and copy
-of the same skill inventory. Baseline/candidate instruction bytes are placed in
+of the same skill inventory. Baseline instruction bytes are placed in
 Claude's native user `CLAUDE.md` or Codex's native user `AGENTS.md`; none omits
 that file. The task prompt stays unchanged. The runner does not install into
 or modify the real home directory or this repository's active instruction file.
@@ -142,17 +142,17 @@ record in this adapter; it is unknown, not an empty successful load list. No LLM
 judge is called. Exit codes: 0 for PASS/REVIEW, 1 for objective failures, and 2
 for errors, skips, invalid input, or a matrix stopped before all trials ran.
 
-## Authorized 12-trial calibration
+## Authorized calibration
 
-Use retry-idempotence, three instruction variants, two repeats, and two runtimes:
-12 subject trials total. The first trial in each runtime doubles as its smoke
+Use retry-idempotence, both instruction variants, two repeats, and two runtimes:
+8 subject trials total. The first trial in each runtime doubles as its smoke
 test; no additional billable probes or automatic retries are allocated. Keep
 model/runtime/settings/skills/fixture constant within each runtime comparison.
-Codex's six trials require six individually supervised invocations; retain the
+Codex's four trials require four individually supervised invocations; retain the
 planned order and results for each. Check failures count toward the allocation.
 Abort if isolation, protocol, or spend controls fail. Additional trials need a
 new budget decision. Report correctness/regressions before timing and costs;
-12 calibration trials do not justify changing global defaults.
+8 calibration trials do not justify changing global defaults.
 
 Offline verification:
 
