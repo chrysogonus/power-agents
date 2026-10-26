@@ -23,9 +23,15 @@ ended in this session, and new commits must hold exactly that content.
   reviewed. At the next `Stop`, the gate waits for the review. If the reviewer
   reports no material issues, the turn ends with a notice. Otherwise the
   feedback is returned as "Here is feedback from another coding agent. What do
-  you think about this?" A missing, failing, or timed-out reviewer is skipped
-  with a notice; it never blocks the turn. A new prompt stops a review that is
-  still running.
+  you think about this?" The agent is asked to accept or reject each point
+  and to end with its final answer, or "Final answer unchanged." A missing,
+  failing, or timed-out reviewer is skipped with a notice; it never blocks the
+  turn. A new prompt stops a review that is still running.
+- **Summary**: a checked turn ends with one line from the gate itself, for
+  example `verify gate · check failed with exit code 1 (14s) · self-check
+  fixed, edited files · cross-review (Codex): accepted 2, rejected 1`. It
+  reports what the passes said and whether they changed files, not whether
+  they were right. The project check in it ran before the self-check.
 
 ## Controls
 

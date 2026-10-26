@@ -50,7 +50,9 @@ once with a fixed checklist:
 
 It is asked to end with a short note listing what it checked and how, what it
 fixed, and what it could not verify. In Claude Code you see the first answer,
-then this note and any corrections.
+then this note and any corrections. The gate then ends the turn with a
+one-line summary, such as `verify gate · self-check fixed, edited files ·
+cross-review (Codex): accepted 2, rejected 1`.
 
 **2. Cross-review (off by default).** Claude Code's work is reviewed by Codex,
 and Codex's work by Claude Code. The reviewer gets the session transcript and

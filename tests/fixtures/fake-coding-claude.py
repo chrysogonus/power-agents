@@ -135,7 +135,7 @@ def simulate(agent, mode, counter):
         assert first['decision'] == 'block' and first['reason'].startswith('Automated verification pass')
         second = run_hooks(settings, 'Stop', {**event, 'last_assistant_message': 'Verification: no issues',
                                               'stop_hook_active': True})
-        assert second == {}, second
+        assert second == {'systemMessage': 'verify gate · self-check found no issues'}, second
     emit = lambda value: print(json.dumps(value), flush=True)
     if mode == 'truncated':
         emit({'type': 'turn.started'})

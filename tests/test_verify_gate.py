@@ -19,6 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "hooks" / "verify-gate.py"
 LONG_ANSWER = "The change is complete. " * 40
 SECRET = "api_key=supersecret123"
+# How the gate ends a turn after a "Done." self-check, and after a "Done."
+# reply to review feedback.
+ENDED = {"systemMessage": "verify gate · self-check gave no verdict"}
+REPLIED = {"systemMessage": ENDED["systemMessage"]
+           + " · cross-review (Codex): reply gave no counts"}
 
 # The stub records its argv, selected environment variables and stdin, then
 # prints (claude) or writes to the -o file (codex) a fixed review.
@@ -186,7 +191,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         self.change_file()
         self.assert_verification_block(self.stop())
-        self.assertEqual(self.stop(fields={"stop_hook_active": True}), {})
+        self.assertEqual(self.stop(fields={"stop_hook_active": True}), ENDED)
 
     def test_dirty_repo_unchanged_this_turn_is_allowed(self) -> None:
         self.change_file()
@@ -217,7 +222,8 @@ class VerifyGateTests(unittest.TestCase):
         self.change_file()
         self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
         self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
-        for _ in range(3):
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), REPLIED)
+        for _ in range(2):
             self.assertEqual(self.stop(CROSS_REVIEW="1"), {})
 
         # Only the cap stops a state that would otherwise verify again.
@@ -237,7 +243,7 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_verification_block(verification)
         # A reset would re-verify this long answer.
         self.mark(agent="codex", prompt=verification["reason"])
-        self.assertEqual(self.stop(agent="codex", answer=LONG_ANSWER), {})
+        self.assertEqual(self.stop(agent="codex", answer=LONG_ANSWER), ENDED)
 
         self.session += 1
         self.mark(agent="codex")
@@ -247,7 +253,9 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_feedback_block(feedback, "claude")
         self.mark(agent="codex", prompt=feedback["reason"])
         self.assertEqual(
-            self.stop(agent="codex", answer=LONG_ANSWER, CROSS_REVIEW="1"), {}
+            self.stop(agent="codex", answer=LONG_ANSWER, CROSS_REVIEW="1"),
+            {"systemMessage": ENDED["systemMessage"]
+             + " · cross-review (Claude Code): reply gave no counts"}
         )
 
     # ------------------------------------------------------ cross-review
@@ -294,7 +302,7 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_feedback_block(
             self.stop(CROSS_REVIEW="1", fields=fields), "codex"
         )
-        self.assertEqual(self.stop(CROSS_REVIEW="1", fields=fields), {})
+        self.assertEqual(self.stop(CROSS_REVIEW="1", fields=fields), REPLIED)
 
         record = self.reviewer_record("codex")
         argv = record["argv"]
@@ -426,7 +434,7 @@ class VerifyGateTests(unittest.TestCase):
                 output = self.stop(CROSS_REVIEW="1", **env)
                 self.assertNotIn("decision", output)
                 self.assertTrue(
-                    output["systemMessage"].startswith("cross-review skipped:"),
+                    output["systemMessage"].startswith(ENDED["systemMessage"] + " · cross-review skipped:"),
                     output,
                 )
 
@@ -459,7 +467,7 @@ class VerifyGateTests(unittest.TestCase):
                 output = self.stop(CROSS_REVIEW="1")
                 self.assertNotIn("decision", output)
                 self.assertTrue(
-                    output["systemMessage"].startswith("cross-review skipped:"),
+                    output["systemMessage"].startswith(ENDED["systemMessage"] + " · cross-review skipped:"),
                     output,
                 )
                 self.assertFalse((self.logs / "codex.json").exists())
@@ -526,7 +534,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         work()
         self.assert_verification_block(self.stop())
-        self.assertEqual(self.stop(), {})
+        self.assertEqual(self.stop(), ENDED)
 
     def commit_turn(self, *args: str) -> dict:
         self.mark(prompt="Commit it")
@@ -641,7 +649,7 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_verification_block(
             self.stop(answer=LONG_ANSWER, CROSS_REVIEW="1")
         )
-        self.assertEqual(self.stop(CROSS_REVIEW="1"), {})
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), ENDED)
         self.assertFalse((self.logs / "codex.json").exists())
 
         self.session += 1
@@ -674,6 +682,10 @@ class VerifyGateTests(unittest.TestCase):
         self.assertEqual(reason.count("</check_output>"), 1)
         ran = self.base / "check-ran"
         self.assertEqual(ran.read_text().strip(), str(self.repo))
+        self.assertEqual(
+            self.stop(answer="Verification: no issues", fields=subdir),
+            {"systemMessage": "verify gate · check failed with exit code 3 (0s)"
+                              " · self-check found no issues"})
 
         ran.unlink()
         self.session += 1
@@ -723,7 +735,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         self.change_file()
         self.assert_verification_block(self.stop())
-        self.assertEqual(self.stop(), {})
+        self.assertEqual(self.stop(), ENDED)
         self.assertFalse((self.logs / "codex.json").exists())
 
         self.session += 1
@@ -746,7 +758,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
         self.assert_verification_block(self.stop())
-        self.assertEqual(self.stop(), {})
+        self.assertEqual(self.stop(), ENDED)
         self.assertFalse((self.logs / "codex.json").exists())
         log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
         self.assertIn(f"invalid entry for {self.repo}", log)
@@ -774,8 +786,25 @@ class VerifyGateTests(unittest.TestCase):
         ))
         self.assertEqual(
             self.stop(CROSS_REVIEW="1"),
-            {"systemMessage": "cross-review (Codex): no material issues"},
+            {"systemMessage": ENDED["systemMessage"]
+             + " · cross-review (Codex): no material issues"},
         )
+
+    def test_reply_to_feedback_ends_with_a_summary(self) -> None:
+        self.mark()
+        self.change_file()
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        feedback = self.stop(answer="Verification: no issues", CROSS_REVIEW="1")
+        self.assertIn('End it with your final answer to the user\'s request',
+                      feedback["reason"])
+        self.assertIn('or "Final answer unchanged."', feedback["reason"])
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assertEqual(
+            self.stop(answer="Review: accepted 1, rejected 0\nFixed.",
+                      CROSS_REVIEW="1"),
+            {"systemMessage": "verify gate · self-check found no issues · "
+                              "cross-review (Codex): accepted 1, rejected 0,"
+                              " edited files"})
 
     def test_reviewer_cannot_close_the_feedback_wrapper(self) -> None:
         self.mark()
@@ -807,7 +836,8 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn('"Review: accepted <n>, rejected <m>"', feedback["reason"])
         self.assertEqual(self.stop(
             answer="Review: accepted 1, rejected 2\nThe null case was real."
-        ), {})
+        ), {"systemMessage": "verify gate · self-check fixed, edited files"
+                             " · cross-review (Codex): accepted 1, rejected 2"})
 
         log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
         records = [json.loads(line) for line in log.splitlines()]
@@ -862,18 +892,20 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn("  long: 1 checked, 1 fixed (100%)", recent)
 
     def test_edited_flag_counts_only_file_changes(self) -> None:
-        def verified_turn(during_verification) -> None:
+        def verified_turn(during_verification, notice="") -> None:
             self.mark()
             (self.repo / "app.py").write_text(
                 f"print({random.random()})\n", encoding="utf-8")
             self.assert_verification_block(self.stop())
             during_verification()
-            self.assertEqual(self.stop(), {})
+            self.assertEqual(self.stop()["systemMessage"],
+                             ENDED["systemMessage"] + notice)
 
         verified_turn(lambda: git(self.repo, "add", "app.py"))
         verified_turn(lambda: git(self.repo, "commit", "-qam", "x"))
-        verified_turn(lambda: (self.repo / "app.py").chmod(0o755))
-        verified_turn(lambda: (self.repo / "app.py").write_text("fixed\n"))
+        verified_turn(lambda: (self.repo / "app.py").chmod(0o755), ", edited files")
+        verified_turn(lambda: (self.repo / "app.py").write_text("fixed\n"),
+                      ", edited files")
         log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
         edited = [r["edited"] for r in map(json.loads, log.splitlines())
                   if r["step"] == "verified"]
@@ -995,7 +1027,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
         self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
-        self.assertEqual(self.stop(CROSS_REVIEW="1"), {})
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), ENDED)
         self.assertFalse((self.logs / "codex.json").exists())
 
         self.write_experiment({"arms": {"full": 1}})
@@ -1033,7 +1065,8 @@ class VerifyGateTests(unittest.TestCase):
         self.mark(prompt="Make app.py print v2")
         self.change_file()
         self.assert_verification_block(self.stop(STUB_REVIEW=audit))
-        self.assertEqual(self.stop(STUB_REVIEW=audit), {})
+        self.assertRegex(self.stop(STUB_REVIEW=audit)["systemMessage"],
+                         r"^verify gate · check passed \(\d+s\) · self-check")
         # A new prompt does not stop the measurement of the previous turn.
         self.mark(prompt="Next task")
         final, audits = self.wait_for("final-check"), self.wait_for("audit")
@@ -1072,7 +1105,7 @@ class VerifyGateTests(unittest.TestCase):
         (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
         self.assert_verification_block(self.stop())
         (self.repo / "app.py").write_text("print('v5')\n", encoding="utf-8")
-        self.assertEqual(self.stop(), {})
+        self.assertTrue(self.stop()["systemMessage"].endswith(", edited files"))
         self.assertIs(self.wait_for("final-check", 3)[2]["reused"], False)
         self.assertIs(audits[0]["moved"], False)
 
@@ -1106,7 +1139,7 @@ class VerifyGateTests(unittest.TestCase):
         self.mark()
         self.change_file()
         self.assert_verification_block(self.stop())
-        self.assertEqual(self.stop(), {})
+        self.assertEqual(self.stop(), ENDED)
         first = self.records("check")[0]["turn"]
         self.mark(prompt="That's wrong, the test still fails")
         (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
@@ -1337,7 +1370,7 @@ class VerifyGateTests(unittest.TestCase):
                       self.run_gate(["cancel"], "").stdout)
         self.assert_process_gone(pattern)
         output = self.stop(CROSS_REVIEW="1")
-        self.assertEqual(output["systemMessage"], "cross-review skipped: cancelled")
+        self.assertEqual(output["systemMessage"], ENDED["systemMessage"] + " · cross-review skipped: cancelled")
 
     def test_reviews_past_their_deadline_are_not_running(self) -> None:
         leader = subprocess.Popen(["sleep", "30"], start_new_session=True)
