@@ -19,7 +19,7 @@ Hook commands (installed by install.sh as ~/.agents/hooks/verify-gate.py):
 CLI:
   verify-gate.py cross-review on|off|status
   (toggle file: ~/.config/power-agents/cross-review-on)
-  verify-gate.py stats       summarize the decision log
+  verify-gate.py stats [--since DAYS]  summarize the decision log
   verify-gate.py doctor      check the installed hooks and reviewers
   verify-gate.py review [--reviewer claude|codex | --agent claude|codex]
                  [--base REF] [--focus TEXT]
@@ -241,6 +241,57 @@ def snapshot(cwd):
     return {"head": head, "top": top, "files": files}
 
 
+def _trees(snaps):
+    """Return each snapshot's HEAD as {path: (mode, blob)}, or None."""
+    trees = []
+    for snap in snaps:
+        # shortcut: lists whole trees, fast enough until repos get huge;
+        # then list only paths from `git diff --name-only` and the snapshots.
+        out = (_git(snap["top"], "ls-tree", "-r", "-z", snap["head"])
+               if snap["head"] else "")
+        if out is None:
+            return None
+        tree = {}
+        for line in filter(None, out.split("\0")):
+            info, _, path = line.partition("\t")
+            mode, _, blob = info.split(" ")
+            tree[path] = (mode, blob)
+        trees.append(tree)
+    return trees
+
+
+def _content(snap, tree, path):
+    """What the working tree holds at path: (mode, blob), None, "unknown"."""
+    if path not in snap["files"]:
+        return tree.get(path)  # clean: as committed
+    xy, _, rest = snap["files"][path].partition(":")
+    blob, _, mode = rest.partition(":")
+    if blob and mode:
+        return (mode, blob)
+    return None if "D" in xy and not blob else "unknown"
+
+
+def files_edited(before, after):
+    """True/False if file contents or modes changed between snapshots.
+
+    Staging and commits alone don't count. None when it can't tell.
+    """
+    if before is None or after is None or before["top"] != after["top"]:
+        return None
+    if before == after:
+        return False
+    trees = _trees((before, after))
+    if trees is None:
+        return None
+    old, new = trees
+    paths = set(before["files"]) | set(after["files"]) | set(old) | set(new)
+    for path in paths:
+        a, b = _content(before, old, path), _content(after, new, path)
+        if a != b:
+            return None if "unknown" in (a, b) else True
+    return False
+
+
 def only_committed(checked, now):
     """True if every file is as the gate last checked it.
 
@@ -249,34 +300,14 @@ def only_committed(checked, now):
     """
     if not checked or checked["top"] != now["top"]:
         return False
-    trees = []
-    for head in (checked["head"], now["head"]):
-        # shortcut: lists whole trees, fast enough until repos get huge;
-        # then list only paths from `git diff --name-only` and the snapshots.
-        out = _git(now["top"], "ls-tree", "-r", "-z", head) if head else ""
-        if out is None:
-            return False
-        tree = {}
-        for line in filter(None, out.split("\0")):
-            info, _, path = line.partition("\t")
-            mode, _, blob = info.split(" ")
-            tree[path] = (mode, blob)
-        trees.append(tree)
+    trees = _trees((checked, now))
+    if trees is None:
+        return False
     old, new = trees
-
-    def content(snap, tree, path):  # what the working tree holds
-        if path not in snap["files"]:
-            return tree.get(path)  # clean: as committed
-        xy, _, rest = snap["files"][path].partition(":")
-        blob, _, mode = rest.partition(":")
-        if blob and mode:
-            return (mode, blob)
-        return None if "D" in xy and not blob else "unknown"
-
     paths = set(checked["files"]) | set(now["files"]) | set(old) | set(new)
     for path in paths:
-        want = content(checked, old, path)
-        if want == "unknown" or content(now, new, path) != want:
+        want = _content(checked, old, path)
+        if want == "unknown" or _content(now, new, path) != want:
             return False
         if new.get(path) != old.get(path) and new.get(path) != want:
             return False  # committed content that was never checked
@@ -962,9 +993,9 @@ def mark(event):
     sys.exit(0)  # print nothing: stdout would become model context
 
 
-def finish(event, state, cwd, notice=None):
+def finish(event, state, snap, notice=None):
     """End a turn the gate checked, remembering its files as checked."""
-    state["checked"] = snapshot(cwd)
+    state["checked"] = snap
     save_state(event, state)
     allow(notice)
 
@@ -979,7 +1010,7 @@ def stop(event, agent):
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
         log(event, agent, step="responded", result=first_line(event))
-        finish(event, state, cwd)
+        finish(event, state, snapshot(cwd))
     if state.get("blocks", 0) >= MAX_BLOCKS:
         allow()
     phase = state.get("phase", "new")
@@ -995,10 +1026,11 @@ def stop(event, agent):
         scope = (os.environ.get("CROSS_REVIEW_SCOPE")
                  or project.get("cross_review_scope", "changes"))
         why = qualifies(event, state, now, min_chars)
-        log(event, agent, step="check", why=why)
+        log(event, agent, step="check", why=why, project=top)
         if not why:
             allow()
-        state.update(phase="verified", blocks=state.get("blocks", 0) + 1)
+        state.update(phase="verified", blocks=state.get("blocks", 0) + 1,
+                     at_verify=now)
         if cross_review_enabled(project) and (
             why == "changed" or scope == "all"
         ):
@@ -1022,11 +1054,14 @@ def stop(event, agent):
     if phase == "verified":
         result = first_line(event)
         checks = checks_after_gate(event, agent)
+        after = snapshot(cwd)
+        edited = files_edited(state.get("at_verify"), after)
         review = state.get("review")
         state.update(phase="reviewed")
         if not review:
-            log(event, agent, step="verified", result=result, checks=checks)
-            finish(event, state, cwd)
+            log(event, agent, step="verified", result=result, checks=checks,
+                edited=edited)
+            finish(event, state, after)
         state["blocks"] = state.get("blocks", 0) + 1
         save_state(event, state)  # before the wait: no double runs
         waited = time.time()
@@ -1035,15 +1070,15 @@ def stop(event, agent):
         save_state(event, state)
         found = None if err else verdict(feedback)
         log(event, agent, step="verified", result=result, checks=checks,
-            reviewer=review["reviewer"], seconds=seconds, error=err,
-            verdict=found, waited=round(time.time() - waited, 1))
+            edited=edited, reviewer=review["reviewer"], seconds=seconds,
+            error=err, verdict=found, waited=round(time.time() - waited, 1))
         name = NAMES[review["reviewer"]]
         if err:
-            finish(event, state, cwd, f"cross-review skipped: {err}")
+            finish(event, state, after, f"cross-review skipped: {err}")
         if found == "clean":
-            finish(event, state, cwd,
+            finish(event, state, after,
                    f"cross-review ({name}): no material issues")
-        stale = snapshot(cwd) != review.get("snap")
+        stale = after != review.get("snap")
         state["fed_back"] = True
         save_state(event, state)
         block(FEEDBACK_TEMPLATE.format(
@@ -1066,9 +1101,16 @@ def toggle(arg):
           "(CROSS_REVIEW env overrides per session)")
 
 
-def stats():
+def stats(args):
+    parser = argparse.ArgumentParser(prog="verify-gate.py stats")
+    parser.add_argument("--since", type=float, metavar="DAYS",
+                        help="only decisions from the last DAYS days")
+    opts = parser.parse_args(args)
+    cutoff = time.time() - opts.since * 86400 if opts.since else 0
     counts, seconds, waits = Counter(), [], []
     points = Counter()
+    turn = {}  # session -> (why, project) of its latest check
+    groups = {"trigger": {}, "project": {}}
     try:
         lines = LOG.read_text().splitlines()
     except OSError:
@@ -1080,17 +1122,46 @@ def stats():
             continue
         if not isinstance(r, dict):
             continue
+        if r.get("step") == "check":  # context even from before the cutoff
+            turn[r.get("session")] = (r.get("why"), r.get("project"))
+        if cutoff and not (
+            isinstance(r.get("ts"), (int, float)) and r["ts"] >= cutoff
+        ):
+            continue
         if r.get("step") == "check":
             counts["turns " + (r.get("why") or "skipped")] += 1
         elif r.get("step") == "verified":
-            m = re.match(r"\W*verification:\W*(no issues|fixed)",
+            # The prompt asks for "no issues" or "fixed <what>"; replies
+            # word fixes many ways ("I corrected ...").
+            m = re.match(r"\W*verification:\W*(no issues)?(.*)",
                          r.get("result") or "", re.I)
-            counts["verification " + (m.group(1).lower() if m else "other")] += 1
-            if r.get("checks") == 0 and m and m.group(1).lower() == "no issues":
+            if not m:
+                kind = "other"
+            elif m.group(1):
+                kind = "no issues"
+            elif re.search(r"\b(fix|correct|changed)", m.group(2), re.I):
+                kind = "fixed"
+            else:
+                kind = "other"  # e.g. "unable to verify"
+            counts["verification " + kind] += 1
+            if r.get("checks") == 0 and kind == "no issues":
                 counts["verification no issues with 0 tool calls"] += 1
-            if r.get("reviewer"):
-                outcome = "error" if r.get("error") else r.get("verdict")
-                counts[f"cross-review {outcome or 'no verdict'}"] += 1
+            if r.get("edited"):
+                counts["verification edited files"] += 1
+            outcome = r.get("reviewer") and (
+                "error" if r.get("error") else r.get("verdict") or "no verdict")
+            why, project = turn.get(r.get("session"), (None, None))
+            home = str(Path.home())
+            if project and (project + "/").startswith(home + "/"):
+                project = "~" + project[len(home):]
+            for name, key in (("trigger", why), ("project", project)):
+                group = groups[name].setdefault(key or "unknown", Counter())
+                group["checked"] += 1
+                group["fixed"] += kind == "fixed"
+                group["reviewed"] += outcome in ("clean", "issues")
+                group["issues"] += outcome == "issues"
+            if outcome:
+                counts[f"cross-review {outcome}"] += 1
                 if r.get("seconds") is not None:
                     seconds.append(r["seconds"])
                 if r.get("waited") is not None:
@@ -1126,6 +1197,16 @@ def stats():
     if waits:
         print(f"cross-review mean wait after verification: "
               f"{sum(waits) / len(waits):.0f}s")
+    for name, group in groups.items():
+        if group:
+            print(f"by {name}:")
+        for key, c in sorted(group.items()):
+            text = (f"  {key}: {c['checked']} checked, {c['fixed']} fixed "
+                    f"({c['fixed'] / c['checked']:.0%})")
+            if c["reviewed"]:
+                text += (f", {c['reviewed']} reviewed, {c['issues']} with "
+                         f"issues ({c['issues'] / c['reviewed']:.0%})")
+            print(text)
 
 
 def _gate_hooked(config, script, agent):
@@ -1313,7 +1394,7 @@ def main():
         toggle(args[1] if len(args) > 1 else "status")
         return
     if mode == "stats":
-        stats()
+        stats(args[1:])
         return
     if mode == "doctor":
         sys.exit(doctor())

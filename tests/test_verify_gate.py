@@ -801,6 +801,7 @@ class VerifyGateTests(unittest.TestCase):
         (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
         issues = "VERDICT: issues\nSTUB REVIEW from codex: check the null case."
         self.stop(CROSS_REVIEW="1", STUB_REVIEW=issues)
+        (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
         feedback = self.stop(answer="Verification: fixed the test", CROSS_REVIEW="1")
         self.assert_feedback_block(feedback, "codex")
         self.assertIn('"Review: accepted <n>, rejected <m>"', feedback["reason"])
@@ -819,6 +820,9 @@ class VerifyGateTests(unittest.TestCase):
         self.assertEqual(records[1]["reviewer"], "codex")
         self.assertEqual(records[4]["verdict"], "issues")
         self.assertEqual(records[5]["result"], "Review: accepted 1, rejected 2")
+        self.assertEqual(records[0]["project"], str(self.repo.resolve()))
+        self.assertEqual([records[1]["edited"], records[4]["edited"]],
+                         [False, True])
         for text in ("Fix the bug", "Thanks", "print(", "null case"):
             self.assertNotIn(text, log)
 
@@ -827,8 +831,52 @@ class VerifyGateTests(unittest.TestCase):
                      "verification no issues: 1", "verification fixed: 1",
                      "verification fixed rate: 50%", "cross-review clean: 1",
                      "cross-review issues: 1", "cross-review responses parsed: 1",
-                     "cross-review points accepted: 1, rejected: 2 (33% accepted)"):
+                     "cross-review points accepted: 1, rejected: 2 (33% accepted)",
+                     "verification edited files: 1", "by trigger:",
+                     "  changed: 2 checked, 1 fixed (50%), 2 reviewed, "
+                     "1 with issues (50%)",
+                     f"  {self.repo.resolve()}: 2 checked, 1 fixed (50%)"):
             self.assertIn(line, stats)
+
+        # Fixes are worded many ways; other replies stay unclassified.
+        # --since counts recent records but matches them to older checks.
+        now = time.time()
+        with (self.cache / "verify-gate" / "log.jsonl").open("a") as f:
+            for record in (
+                {"ts": now - 2 * 86400, "session": "x", "step": "check",
+                 "why": "long"},
+                {"ts": now, "session": "x", "step": "verified",
+                 "result": "Verification: I corrected one claim."},
+                {"ts": now, "session": "y", "step": "verified",
+                 "result": "Verification: unable to verify; no tools available."},
+            ):
+                f.write(json.dumps(record) + "\n")
+        stats = self.run_gate(["stats"], "").stdout
+        for line in ("verification fixed: 2", "verification other: 1",
+                     "turns long: 1", "  long: 1 checked, 1 fixed (100%)"):
+            self.assertIn(line, stats)
+        recent = self.run_gate(["stats", "--since", "1"], "").stdout
+        self.assertNotIn("turns long", recent)
+        self.assertIn("turns changed: 2", recent)
+        self.assertIn("  long: 1 checked, 1 fixed (100%)", recent)
+
+    def test_edited_flag_counts_only_file_changes(self) -> None:
+        def verified_turn(during_verification) -> None:
+            self.mark()
+            (self.repo / "app.py").write_text(
+                f"print({random.random()})\n", encoding="utf-8")
+            self.assert_verification_block(self.stop())
+            during_verification()
+            self.assertEqual(self.stop(), {})
+
+        verified_turn(lambda: git(self.repo, "add", "app.py"))
+        verified_turn(lambda: git(self.repo, "commit", "-qam", "x"))
+        verified_turn(lambda: (self.repo / "app.py").chmod(0o755))
+        verified_turn(lambda: (self.repo / "app.py").write_text("fixed\n"))
+        log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
+        edited = [r["edited"] for r in map(json.loads, log.splitlines())
+                  if r["step"] == "verified"]
+        self.assertEqual(edited, [False, False, True, True])
 
     # ------------------------------------------------------------ toggle
 
