@@ -93,7 +93,8 @@ time, how long the agent waited for it, and the first line of the agent's reply
 to the feedback (for example `Review: accepted 1, rejected 2`). Since log
 version 2 (`"v": 2`), records of one turn share a `turn` id. A checked turn
 also logs the model, a hash of the gate script (`gate`) and of its prompts
-(`prompts`), and the tokens the verification used; the reply to a review
+(`prompts`), and the tokens the verification used, with cache reads and writes
+counted separately; the reply to a review
 logs the tokens used since the verification prompt. The next prompt logs
 whether it reads like a correction, and the next turn logs whether it changed
 the same files again. No transcript or diff content is logged. To summarize the log, run

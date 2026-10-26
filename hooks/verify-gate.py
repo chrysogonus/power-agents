@@ -681,8 +681,20 @@ def _verify_prompt(content):
     return VERIFY_PREFIX in text and text.lstrip().startswith(_GATE_MARKERS)
 
 
+# Log field: (Claude usage keys, Codex total_token_usage key). tokens_in
+# is all input, cached or not; the cache fields say how much of it was.
+TOKEN_FIELDS = {
+    "tokens_in": (("input_tokens", "cache_creation_input_tokens",
+                   "cache_read_input_tokens"), "input_tokens"),
+    "tokens_cache_read": (("cache_read_input_tokens",), "cached_input_tokens"),
+    "tokens_cache_write": (("cache_creation_input_tokens",),
+                           "cache_write_input_tokens"),
+    "tokens_out": (("output_tokens",), "output_tokens"),
+}
+
+
 def transcript_usage(event, agent):
-    """Return (model, tokens in, tokens out) from the transcript's tail.
+    """Return (model, {TOKEN_FIELDS: count}) from the transcript's tail.
 
     Tokens count what was spent after the last verify prompt; None when
     the prompt or the usage isn't found.
@@ -699,7 +711,7 @@ def transcript_usage(event, agent):
             if obj.get("isSidechain"):
                 continue
             if obj.get("type") == "user" and _verify_prompt(msg.get("content")):
-                spent, seen = [0, 0], set()
+                spent, seen = dict.fromkeys(TOKEN_FIELDS, 0), set()
             elif obj.get("type") == "assistant":
                 if msg.get("model") and msg["model"] != "<synthetic>":
                     model = msg["model"]
@@ -707,10 +719,8 @@ def transcript_usage(event, agent):
                 # One message is recorded once per content block.
                 if spent and isinstance(u, dict) and msg.get("id") not in seen:
                     seen.add(msg.get("id"))
-                    spent[0] += sum(u.get(k) or 0 for k in (
-                        "input_tokens", "cache_creation_input_tokens",
-                        "cache_read_input_tokens"))
-                    spent[1] += u.get("output_tokens") or 0
+                    for field, (keys, _) in TOKEN_FIELDS.items():
+                        spent[field] += sum(u.get(k) or 0 for k in keys)
         elif agent == "codex" and isinstance(p, dict):
             if obj.get("type") == "turn_context" and p.get("model"):
                 model = p["model"]
@@ -721,10 +731,11 @@ def transcript_usage(event, agent):
                 base, spent = last, True
     if agent == "codex":
         if not (spent and base and last) or last is base:
-            return model, None, None
-        spent = [last.get(k, 0) - base.get(k, 0)
-                 for k in ("input_tokens", "output_tokens")]
-    return (model, *(spent or (None, None)))
+            spent = None
+        else:
+            spent = {field: (last.get(k) or 0) - (base.get(k) or 0)
+                     for field, (_, k) in TOKEN_FIELDS.items()}
+    return model, spent or dict.fromkeys(TOKEN_FIELDS)
 
 
 def build_bundle(event, agent, state, now):
@@ -1254,9 +1265,9 @@ def stop(event, agent):
     answer = (event.get("last_assistant_message") or "").strip()
     if state.get("fed_back"):  # the agent's answer to the review feedback
         state["fed_back"] = False
-        _, tokens_in, tokens_out = transcript_usage(event, agent)
+        _, tokens = transcript_usage(event, agent)
         log(event, agent, turn, step="responded", result=first_line(event),
-            tokens_in=tokens_in, tokens_out=tokens_out)
+            **tokens)
         capture(state.get("capture"), response=answer)
         finish(event, state, snapshot(cwd))
     if state.get("blocks", 0) >= MAX_BLOCKS:
@@ -1285,7 +1296,7 @@ def stop(event, agent):
             fields.update(prev_turn=prev["turn"], rework=bool(
                 set(prev["paths"]) & turn_paths(state["snap"], now)[0]))
         if why:
-            model, _, _ = transcript_usage(event, agent)
+            model, _ = transcript_usage(event, agent)
             source = Path(__file__).read_bytes()
             prompts = "\0".join((VERIFY_PROMPT, REVIEW_PROMPT,
                                  FEEDBACK_TEMPLATE, AUDIT_PROMPT)).encode()
@@ -1339,7 +1350,7 @@ def stop(event, agent):
     if phase == "verified":
         result = first_line(event)
         checks = checks_after_gate(event, agent)
-        _, tokens_in, tokens_out = transcript_usage(event, agent)
+        _, tokens = transcript_usage(event, agent)
         after = snapshot(cwd)
         edited = files_edited(state.get("at_verify"), after)
         review = state.get("review")
@@ -1347,8 +1358,7 @@ def stop(event, agent):
         capture(state.get("capture"), verification=answer)
         if not review:
             log(event, agent, turn, step="verified", result=result,
-                checks=checks, edited=edited, tokens_in=tokens_in,
-                tokens_out=tokens_out)
+                checks=checks, edited=edited, **tokens)
             finish(event, state, after)
         state["blocks"] = state.get("blocks", 0) + 1
         save_state(event, state)  # before the wait: no double runs
@@ -1358,7 +1368,7 @@ def stop(event, agent):
         save_state(event, state)
         found = None if err else verdict(feedback)
         log(event, agent, turn, step="verified", result=result, checks=checks,
-            edited=edited, tokens_in=tokens_in, tokens_out=tokens_out,
+            edited=edited, **tokens,
             reviewer=review["reviewer"], seconds=seconds, error=err,
             verdict=found, waited=round(time.time() - waited, 1))
         capture(state.get("capture"), feedback=feedback or err)
@@ -1431,9 +1441,9 @@ def review_points(result):
 EXPORT_COLUMNS = (
     "ts", "session", "turn", "agent", "model", "gate", "prompts", "project",
     "why", "arm", "p_arm", "review_eligible", "audit", "verification",
-    "checks", "edited", "tokens_in", "tokens_out", "verify_seconds",
+    "checks", "edited", *TOKEN_FIELDS, "verify_seconds",
     "reviewer", "verdict", "review_error", "accepted", "rejected",
-    "gate_tokens_in", "gate_tokens_out", "gate_seconds",
+    *("gate_" + f for f in TOKEN_FIELDS), "gate_seconds",
     "pre_check", "final_check", "final_check_reused", "final_check_moved",
     "auditor", "audit_verdict", "audit_high", "audit_med", "audit_low",
     "audit_error", "audit_moved", "correction", "gap", "rework",
@@ -1469,7 +1479,7 @@ def turn_rows(records):
             row.update(verification=verification_kind(r.get("result")),
                        review_error=r.get("error"),
                        **{k: r.get(k) for k in (
-                           "checks", "edited", "tokens_in", "tokens_out",
+                           "checks", "edited", *TOKEN_FIELDS,
                            "reviewer", "verdict")})
             if isinstance(r.get("ts"), int) and isinstance(row["ts"], int):
                 row["verify_seconds"] = r["ts"] - row["ts"]
@@ -1477,8 +1487,7 @@ def turn_rows(records):
             row["accepted"], row["rejected"] = (
                 review_points(r.get("result")) or (None, None))
             # Counted from the verify prompt: self-check plus the response.
-            row.update(gate_tokens_in=r.get("tokens_in"),
-                       gate_tokens_out=r.get("tokens_out"))
+            row.update({"gate_" + f: r.get(f) for f in TOKEN_FIELDS})
             if isinstance(r.get("ts"), int) and isinstance(row["ts"], int):
                 row["gate_seconds"] = r["ts"] - row["ts"]
         elif step == "project-check":
@@ -1496,8 +1505,7 @@ def turn_rows(records):
             row.update(correction=r.get("correction"), gap=r.get("gap"))
     for row in rows.values():
         if row.get("verification") and row.get("gate_seconds") is None:
-            row.update(gate_tokens_in=row.get("tokens_in"),
-                       gate_tokens_out=row.get("tokens_out"),
+            row.update({"gate_" + f: row.get(f) for f in TOKEN_FIELDS},
                        gate_seconds=row.get("verify_seconds"))
     return list(rows.values())
 
@@ -1655,6 +1663,15 @@ def arm_stats(rows):
         print(f"verification mean tokens: "
               f"{sum(r['tokens_in'] for r in tokens) / len(tokens):.0f} in, "
               f"{sum(r['tokens_out'] for r in tokens) / len(tokens):.0f} out")
+    # Older records have no cache fields: share over those that do.
+    cached = [r for r in tokens if r.get("tokens_cache_read") is not None
+              and r.get("tokens_in")]
+    if cached:
+        total = sum(r["tokens_in"] for r in cached)
+        print(f"verification input from cache: "
+              f"{sum(r['tokens_cache_read'] for r in cached) / total:.0%} read, "
+              f"{sum(r['tokens_cache_write'] or 0 for r in cached) / total:.0%} "
+              f"written (of {len(cached)} verifications)")
     timed = [r["verify_seconds"] for r in rows
              if r.get("verify_seconds") is not None]
     if timed:

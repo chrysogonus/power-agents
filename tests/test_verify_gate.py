@@ -914,14 +914,16 @@ class VerifyGateTests(unittest.TestCase):
             for line in (
                 {"type": "turn_context", "payload": {"model": "gpt-test-2"}},
                 {"type": "event_msg", "payload": {"type": "token_count", "info": {
-                    "total_token_usage": {"input_tokens": 500, "output_tokens": 30}}}},
+                    "total_token_usage": {"input_tokens": 500, "cached_input_tokens": 230,
+                                          "output_tokens": 30}}}},
             ):
                 f.write(json.dumps(line) + "\n")
         # The verify prompt in the rollout comes before any token count.
         lines = codex.read_text().splitlines()
         lines.insert(0, json.dumps({"type": "event_msg", "payload": {
             "type": "token_count", "info": {"total_token_usage": {
-                "input_tokens": 200, "output_tokens": 10}}}}))
+                "input_tokens": 200, "cached_input_tokens": 50,
+                "output_tokens": 10}}}}))
         codex.write_text("\n".join(lines) + "\n")
 
         for agent, path in (("claude", claude), ("codex", codex)):
@@ -941,8 +943,9 @@ class VerifyGateTests(unittest.TestCase):
         self.assertNotEqual(checks[0]["turn"], checks[1]["turn"])
         self.assertRegex(checks[0]["gate"], r"^[0-9a-f]{12}$")
         self.assertRegex(checks[0]["prompts"], r"^[0-9a-f]{12}$")
-        self.assertEqual([(v["tokens_in"], v["tokens_out"]) for v in verified],
-                         [(1110, 7), (300, 20)])
+        fields = ("tokens_in", "tokens_cache_read", "tokens_cache_write", "tokens_out")
+        self.assertEqual([tuple(v[f] for f in fields) for v in verified],
+                         [(1110, 1000, 100, 7), (300, 180, 0, 20)])
 
     def test_experiment_arms_decide_the_checks(self) -> None:
         self.write_experiment({"arms": {"none": 1, "self": 0}})
@@ -1181,7 +1184,8 @@ class VerifyGateTests(unittest.TestCase):
              "auditor": "claude", "verdict": None, "high": None, "med": None,
              "low": None, "error": "claude timed out"},
             *turn("s3", "t4", "self", "issues", "passed",
-                  result="Verification: no issues", tokens_in=300, tokens_out=30),
+                  result="Verification: no issues", tokens_in=300, tokens_out=30,
+                  tokens_cache_read=150, tokens_cache_write=30),
         ]
         log.write_text("".join(json.dumps(r) + "\n" for r in records))
 
@@ -1213,6 +1217,8 @@ class VerifyGateTests(unittest.TestCase):
             "high findings per audit 0.50; audits failed 1; "
             "mean gate cost 23 tokens out, 40s",
             "verification mean tokens: 200 in, 20 out",
+            "verification input from cache: 50% read, 10% written "
+            "(of 1 verifications)",
             "self-check no issues, review issues accepted: 1/1 (100%)",
         ):
             self.assertIn(line, stats)
