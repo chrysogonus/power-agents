@@ -233,6 +233,7 @@ Always edit files **in this repository**, never the installed copies. Then run
 | To change… | Edit… |
 | --- | --- |
 | The self-check and cross-review behavior | [`hooks/verify-gate.py`](hooks/verify-gate.py) ([guide](docs/verify-gate.md)) |
+| Gate settings or a check command for one repository | `~/.config/power-agents/projects.json` ([format](docs/verify-gate.md#per-project-settings)) |
 | Which optional components are installed | Run `./install.sh --components LIST` |
 | Your coding preferences for all projects | [`instructions/general-global.md`](instructions/general-global.md) |
 | A skill, or add a new one | `skills/<name>/SKILL.md` ([skill format](skills/README.md#skill-format)) |
@@ -252,6 +253,10 @@ extra model run per qualifying turn.
 ```bash
 python3 ~/.agents/hooks/verify-gate.py cross-review on    # or: off, status
 ```
+
+To set cross-review, or a check command the gate runs for you, for one
+repository only, use [per-project
+settings](docs/verify-gate.md#per-project-settings).
 
 To turn off the whole self-check for a session, start the agent with
 `VERIFY_GATE=0`. See the [verify gate guide](docs/verify-gate.md) for all

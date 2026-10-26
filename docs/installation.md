@@ -240,9 +240,10 @@ checkout; run it from that checkout instead. When the saved selection in
 only these roots' hook entries and links, and keeps the shared gate link and
 that saved state, which the other install still uses.
 
-It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`) and
-the gate's decision log and state in `~/.cache/verify-gate`; delete those by
-hand if you want them gone. It does not restore a status-line setting you had
+It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`),
+your [per-project settings](verify-gate.md#per-project-settings)
+(`~/.config/power-agents/projects.json`), and the gate's decision log and state
+in `~/.cache/verify-gate`; delete those by hand if you want them gone. It does not restore a status-line setting you had
 before installing `statusline`, because the installer keeps no backup of
 earlier managed values. It creates no files, and running it again changes
 nothing. Like an install, it rolls back if it fails partway. Once it is done,

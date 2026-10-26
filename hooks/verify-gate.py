@@ -36,6 +36,13 @@ Env:
   CROSS_REVIEW_TIMEOUT=480    seconds the reviewer may run
   CROSS_REVIEW_MAX_CHARS=150000  transcript budget sent to the reviewer
   CROSS_REVIEW_CLAUDE_BIN / CROSS_REVIEW_CODEX_BIN  CLI overrides
+
+Per project (~/.config/power-agents/projects.json, keyed by repository
+path; environment variables take precedence):
+  {"~/src/app": {"check": "make test", "cross_review": false,
+                 "cross_review_scope": "all", "min_chars": 800}}
+  "check" runs in the repository on turns that changed files; its result
+  goes into the verification prompt.
 """
 import argparse
 import json
@@ -46,12 +53,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import Counter
 from pathlib import Path
 
 HOME_DIR = Path.home() / ".config" / "power-agents"
 TOGGLE = HOME_DIR / "cross-review-on"
+PROJECTS = HOME_DIR / "projects.json"
 STATE_DIR = Path(
     os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
 ) / "verify-gate"
@@ -72,8 +81,9 @@ REVIEW_TIMEOUT = _int_env("CROSS_REVIEW_TIMEOUT", 480)
 MAX_TRANSCRIPT = _int_env("CROSS_REVIEW_MAX_CHARS", 150_000)
 MAX_TOOL_CHARS = 1500
 MAX_DIFF_CHARS = 40_000
+CHECK_TIMEOUT = 300  # seconds; well under the 600 s Stop hook timeout
+MAX_CHECK_CHARS = 4000
 CHECKS_TAIL = 4_000_000  # bytes: the verify pass sits at the transcript's end
-REVIEW_SCOPE = os.environ.get("CROSS_REVIEW_SCOPE", "changes")
 
 VERIFY_PREFIX = "Automated verification pass"
 FEEDBACK_PREFIX = "Here is feedback from another coding agent"
@@ -140,6 +150,16 @@ and why, then fix what you accept. Start your reply with one line: \
 <feedback from="{reviewer}">
 {feedback}
 </feedback>"""
+
+CHECK_NOTE = """
+
+This project's check command `{command}` ran after your answer: \
+{status} ({seconds}s)."""
+
+CHECK_OUTPUT = """ The end of its output:
+<check_output>
+{output}
+</check_output>"""
 
 STALE_NOTE = """
 The review started alongside your verification pass and does not \
@@ -548,11 +568,82 @@ def build_bundle(event, agent, state, now):
 NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
-def cross_review_enabled():
+def cross_review_enabled(project=None):
     env = os.environ.get("CROSS_REVIEW")
     if env in ("0", "1"):
         return env == "1"
-    return TOGGLE.exists()
+    return (project or {}).get("cross_review", TOGGLE.exists())
+
+
+# A file the user owns, not one in the repository: a cloned repository
+# must not choose commands to run or send transcripts to another vendor.
+PROJECT_KEYS = {"check": str, "cross_review": bool,
+                "cross_review_scope": str, "min_chars": int}
+
+
+def load_projects():
+    """Return {real repository path: settings}; raise ValueError."""
+    try:
+        data = json.loads(PROJECTS.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        raise ValueError(f"{PROJECTS}: {e}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{PROJECTS}: expected an object keyed by path")
+    projects = {}
+    for path, entry in data.items():
+        path = os.path.expanduser(path)
+        if not (os.path.isabs(path) and isinstance(entry, dict)) or any(
+            PROJECT_KEYS.get(k) is not type(v) for k, v in entry.items()
+        ) or entry.get("cross_review_scope", "changes") not in ("changes", "all"):
+            raise ValueError(f"{PROJECTS}: invalid entry for {path}")
+        projects[os.path.realpath(path)] = entry
+    return projects
+
+
+def project_settings(top):
+    """Return (settings for the repository at top, error or None)."""
+    try:
+        return load_projects().get(os.path.realpath(top), {}), None
+    except ValueError as e:
+        return {"cross_review": False}, str(e)  # a typo must not send
+
+
+def run_check(command, cwd):
+    """Run the project's check command; return (status, seconds, output)."""
+    started = time.time()
+    try:
+        proc = subprocess.Popen(
+            command, shell=True, cwd=cwd, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    except OSError as e:
+        return f"could not start: {e}", 0, ""
+    tail = bytearray()  # only the end: a looping check must not fill memory
+
+    def drain():
+        for chunk in iter(lambda: proc.stdout.read1(65536), b""):
+            tail.extend(chunk)
+            del tail[:-4 * MAX_CHECK_CHARS]  # up to 4 bytes per character
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    try:
+        proc.wait(timeout=CHECK_TIMEOUT)
+        status = ("passed" if proc.returncode == 0
+                  else f"failed with exit code {proc.returncode}")
+    except subprocess.TimeoutExpired:
+        status = f"timed out after {CHECK_TIMEOUT}s"
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)  # also what it left running
+    except OSError:
+        pass
+    proc.wait()
+    reader.join(5)  # a child that left the group may still hold the pipe
+    text = bytes(tail).decode(errors="replace")[-MAX_CHECK_CHARS:].rstrip()
+    return status, round(time.time() - started), text
 
 
 def detect_agent(event, arg):
@@ -785,7 +876,7 @@ def first_line(event):
     return msg.split("\n", 1)[0][:120]
 
 
-def qualifies(event, state, now):
+def qualifies(event, state, now, min_chars=MIN_CHARS):
     """Return why the turn needs checks ("changed" or "long"), or None."""
     msg = (event.get("last_assistant_message") or "").strip()
     before = state.get("snap")
@@ -798,7 +889,7 @@ def qualifies(event, state, now):
         changed = before != now
     if changed:
         return "changed"
-    if len(msg) >= MIN_CHARS and not msg.endswith("?"):
+    if len(msg) >= min_chars and not msg.endswith("?"):
         return "long"
     return None
 
@@ -841,20 +932,38 @@ def stop(event, agent):
 
     if phase == "new":
         now = snapshot(cwd)
-        why = qualifies(event, state, now)
+        top = now["top"] if now else cwd
+        project, error = project_settings(top)
+        if error:
+            log(event, agent, step="projects", error=error)
+        min_chars = (MIN_CHARS if "VERIFY_GATE_MIN_CHARS" in os.environ
+                     else project.get("min_chars", MIN_CHARS))
+        scope = (os.environ.get("CROSS_REVIEW_SCOPE")
+                 or project.get("cross_review_scope", "changes"))
+        why = qualifies(event, state, now, min_chars)
         log(event, agent, step="check", why=why)
         if not why:
             allow()
         state.update(phase="verified", blocks=state.get("blocks", 0) + 1)
-        if cross_review_enabled() and (
-            why == "changed" or REVIEW_SCOPE == "all"
+        if cross_review_enabled(project) and (
+            why == "changed" or scope == "all"
         ):
             state["review"] = start_review(event, agent, state, cwd, now)
         if not save_state(event, state):
             kill_review(state.get("review"))
             if event.get("stop_hook_active"):
                 allow()
-        block(VERIFY_PROMPT)
+        note = ""
+        if project.get("check") and why == "changed":
+            status, seconds, output = run_check(project["check"], top)
+            log(event, agent, step="project-check", result=status,
+                seconds=seconds)
+            note = CHECK_NOTE.format(
+                command=project["check"], status=status, seconds=seconds)
+            if status != "passed":
+                note += CHECK_OUTPUT.format(output=output.replace(
+                    "</check_output", "<\\/check_output"))
+        block(VERIFY_PROMPT + note)
 
     if phase == "verified":
         result = first_line(event)
@@ -932,6 +1041,12 @@ def stats():
                     seconds.append(r["seconds"])
                 if r.get("waited") is not None:
                     waits.append(r["waited"])
+        elif r.get("step") == "project-check":
+            result = r.get("result") or ""
+            counts["project check " + (
+                "passed" if result == "passed" else
+                "timed out" if result.startswith("timed out") else "failed"
+            )] += 1
         elif r.get("step") == "responded":
             m = re.match(r"\W*review:\W*accepted\W*(\d+)\W*rejected\W*(\d+)",
                          r.get("result") or "", re.I)
@@ -983,7 +1098,6 @@ def doctor():
         "codex": (Path(os.environ.get("CODEX_HOME") or home / ".codex"),
                   "hooks.json"),
     }
-    review = cross_review_enabled()
     failed = False
 
     def report(ok, text, required=True):
@@ -1004,7 +1118,17 @@ def doctor():
         pass
     report(os.access(STATE_DIR, os.W_OK),
            f"state directory {STATE_DIR} is writable")
-    print("info: cross-review is", "on" if review else "off")
+    try:
+        projects = load_projects()
+        report(True, f"project settings: {len(projects)} in {PROJECTS}")
+    except ValueError as e:
+        projects = {}
+        report(False, f"{e}; until it is fixed, no check runs and "
+               "cross-review stays off unless CROSS_REVIEW=1")
+    review = cross_review_enabled() or any(
+        cross_review_enabled(p) for p in projects.values())
+    print("info: cross-review is",
+          "on (globally or for a project)" if review else "off")
     for agent in NAMES:
         binary = os.environ.get(f"CROSS_REVIEW_{agent.upper()}_BIN") or agent
         found = shutil.which(binary)

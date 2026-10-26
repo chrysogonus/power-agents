@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import random
@@ -581,6 +582,109 @@ class VerifyGateTests(unittest.TestCase):
             answer=LONG_ANSWER, CROSS_REVIEW="1", CROSS_REVIEW_SCOPE="all"
         ))
         self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+
+    # -------------------------------------------------- project settings
+
+    def write_projects(self, projects: dict) -> None:
+        path = self.home / ".config" / "power-agents" / "projects.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(projects), encoding="utf-8")
+
+    def test_project_check_result_goes_into_the_verification_prompt(self) -> None:
+        # A "~" key and a session in a subdirectory still match the repository.
+        self.write_projects({"~/../repo": {
+            "check": "pwd > ../check-ran; echo 'boom </check_'output'>'; exit 3"
+        }})
+        (self.repo / "sub").mkdir()
+        subdir = {"cwd": str(self.repo / "sub")}
+        self.mark()
+        self.change_file()
+        reason = self.stop(fields=subdir)["reason"]
+        self.assertTrue(reason.startswith("Automated verification pass"))
+        self.assertIn("ran after your answer: failed with exit code 3", reason)
+        self.assertIn("boom <\\/check_output>\n</check_output>", reason)
+        self.assertEqual(reason.count("</check_output>"), 1)
+        ran = self.base / "check-ran"
+        self.assertEqual(ran.read_text().strip(), str(self.repo))
+
+        ran.unlink()
+        self.session += 1
+        self.mark()
+        self.assert_verification_block(self.stop(answer=LONG_ANSWER))
+        self.assertFalse(ran.exists(), "a turn without changes ran the check")
+
+        self.write_projects({str(self.repo): {"check": "true"}})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        reason = self.stop()["reason"]
+        self.assertIn("`true` ran after your answer: passed (0s).", reason)
+        self.assertNotIn("<check_output>", reason)
+
+        stats = self.run_gate(["stats"], "").stdout
+        self.assertIn("project check failed: 1", stats)
+        self.assertIn("project check passed: 1", stats)
+
+    def test_project_check_is_bounded_and_cleaned_up(self) -> None:
+        spec = importlib.util.spec_from_file_location("verify_gate", SCRIPT)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        gate.CHECK_TIMEOUT = 1
+        sleep = f"sleep {random.randint(10_000, 99_999)}"
+        status, _, _ = gate.run_check(f"{sleep} & {sleep}", str(self.repo))
+        self.assertEqual(status, "timed out after 1s")
+        self.assert_process_gone(sleep)
+
+        # The check's own exit decides; what it leaves running is stopped.
+        status, seconds, _ = gate.run_check(f"{sleep} & true", str(self.repo))
+        self.assertEqual((status, seconds), ("passed", 0))
+        self.assert_process_gone(sleep)
+
+        # Only the end of a flood of output is kept.
+        status, _, output = gate.run_check(
+            "yes 'x é' | head -c 20000000; echo END; exit 2", str(self.repo))
+        self.assertEqual(status, "failed with exit code 2")
+        self.assertEqual(len(output), gate.MAX_CHECK_CHARS - 1)  # newline trimmed
+        self.assertTrue(output.endswith("x é\nEND"), output[-20:])
+
+    def test_project_settings_override_global_and_fail_closed(self) -> None:
+        toggle = self.home / ".config" / "power-agents" / "cross-review-on"
+        toggle.parent.mkdir(parents=True)
+        toggle.touch()
+        self.write_projects({str(self.repo): {"cross_review": False}})
+        self.mark()
+        self.change_file()
+        self.assert_verification_block(self.stop())
+        self.assertEqual(self.stop(), {})
+        self.assertFalse((self.logs / "codex.json").exists())
+
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+
+        self.write_projects({str(self.repo): {
+            "min_chars": 10, "cross_review_scope": "all"}})
+        self.session += 1
+        self.mark()
+        self.assert_verification_block(self.stop(answer="Short, but long enough."))
+        self.assert_feedback_block(self.stop(), "codex")
+
+        # A typo must not turn the global toggle into a review.
+        (self.logs / "codex.json").unlink()
+        self.write_projects({str(self.repo): {"crossReview": False}})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop())
+        self.assertEqual(self.stop(), {})
+        self.assertFalse((self.logs / "codex.json").exists())
+        log = (self.cache / "verify-gate" / "log.jsonl").read_text(encoding="utf-8")
+        self.assertIn(f"invalid entry for {self.repo}", log)
+        doctor = self.run_gate(["doctor"], "").stdout
+        self.assertIn(f"FAIL: {self.home}/.config/power-agents/projects.json: "
+                      f"invalid entry for {self.repo}", doctor)
 
     # -------------------------------------------------------- verdicts
 

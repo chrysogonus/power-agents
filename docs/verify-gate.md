@@ -9,6 +9,8 @@ Changes include edits to untracked files and commits made during the turn.
 
 - **Self-verification** (on by default): the first `Stop` of a qualifying turn
   sends the agent back once to check its answer against files, tests, or docs.
+  If the repository has a [check command](#per-project-settings), the gate runs
+  it first and adds the result to that prompt.
 - **Cross-review** (off by default): at that same `Stop`, the *other* agent
   starts in the background, runs read-only, and reviews while the agent
   verifies. It receives the latest user request, the session transcript, and
@@ -39,6 +41,37 @@ Changes include edits to untracked files and commits made during the turn.
 | `CROSS_REVIEW_MAX_CHARS=150000` | Sets how much transcript is sent to the reviewer. |
 | `CROSS_REVIEW_CLAUDE_BIN`, `CROSS_REVIEW_CODEX_BIN` | Override the reviewer CLI paths. |
 
+## Per-Project Settings
+
+Settings for one repository go in `~/.config/power-agents/projects.json`, keyed
+by the repository's path. A key may start with `~`, and a session in a
+subdirectory uses its repository's entry:
+
+```json
+{
+  "~/power-agents": {"check": "./scripts/check.sh"},
+  "~/work/client-app": {"cross_review": false}
+}
+```
+
+| Key | Effect |
+| --- | --- |
+| `check` | A shell command the gate runs in the repository on turns that changed files, before it sends the self-check. The prompt says whether it passed, failed, or timed out, and includes the last 4,000 characters of output unless it passed. It is stopped after 300 seconds. |
+| `cross_review` | `true` or `false`, in place of the global toggle. |
+| `cross_review_scope` | `"changes"` or `"all"`, like `CROSS_REVIEW_SCOPE`. |
+| `min_chars` | Like `VERIFY_GATE_MIN_CHARS`. |
+
+Environment variables take precedence over this file, and the file over the
+global toggle. The file belongs to you, not to the repository, so a repository
+you clone cannot choose a command for the gate to run or turn cross-review on.
+If the file is invalid (malformed JSON, an unknown key, a wrong type, or a
+relative path), the gate runs no check and keeps cross-review off unless
+`CROSS_REVIEW=1` is set, and `doctor` reports the error.
+
+The agent waits while the check runs, and the check runs once per turn: edits
+the agent makes during its self-check are not checked again. When the command
+exits, the gate stops any processes it left running.
+
 The full self-check and review prompts are at the top of
 [`hooks/verify-gate.py`](../hooks/verify-gate.py). The self-check is a prompt:
 the gate cannot confirm that the agent ran the checks it was asked to run.
@@ -46,15 +79,15 @@ the gate cannot confirm that the agent ran the checks it was asked to run.
 ## Decision Log
 
 Each decision is appended to `~/.cache/verify-gate/log.jsonl`. A record holds
-why a turn qualified or was skipped, the first line of the agent's
-verification reply (for example `Verification: no issues`), how many tool
-calls the agent made after the verification prompt (read from the last 4 MB of
-the transcript; empty when the prompt isn't found there), the reviewer's
-verdict or error, the reviewer's run time, how long the agent waited for it,
-and the first line of the agent's reply to the feedback (for example
-`Review: accepted 1, rejected 2`). No transcript or diff content is logged. To
-summarize the log, including the share of self-checks that fixed something and
-the share of review points the agent accepted, run
+why a turn qualified or was skipped, the first line of the agent's verification
+reply (for example `Verification: no issues`), how many tool calls the agent
+made after the verification prompt (read from the last 4 MB of the transcript;
+empty when the prompt isn't found there), the project check's result and run
+time, the reviewer's verdict or error, the reviewer's run time, how long the
+agent waited for it, and the first line of the agent's reply to the feedback
+(for example `Review: accepted 1, rejected 2`). No transcript or diff content is
+logged. To summarize the log, including the share of self-checks that fixed
+something and the share of review points the agent accepted, run
 `python3 ~/.agents/hooks/verify-gate.py stats`. Per-session state files in the
 same directory are deleted after seven days.
 
