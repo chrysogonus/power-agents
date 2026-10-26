@@ -71,6 +71,54 @@
       "verification_timeout_seconds": 10,
       "baseline_acceptance": true,
       "manual_review": true
+    },
+    {
+      "id": "pagination-bounds",
+      "snapshot": "pagination-bounds/workspace",
+      "prompt": "Fix paginate(items, page, per_page) in pages.py. Pages are 1-based: page 1 holds the first per_page items. Return a dict with items (a list), page, total_pages and has_next. An empty sequence has one empty page. A page past the end returns no items. page and per_page must be positive integers; raise ValueError otherwise. Do not change the input. Preserve README.md.",
+      "verification": [
+        "python3",
+        "pagination-bounds/checks/acceptance.py"
+      ],
+      "regression_verification": [
+        "python3",
+        "pagination-bounds/checks/regression.py"
+      ],
+      "reference_patch": "pagination-bounds/reference.patch",
+      "implementation_paths": [
+        "pages.py"
+      ],
+      "protected_paths": [
+        "README.md"
+      ],
+      "timeout_seconds": 180,
+      "verification_timeout_seconds": 10,
+      "baseline_acceptance": false,
+      "manual_review": false
+    },
+    {
+      "id": "csv-export",
+      "snapshot": "csv-export/workspace",
+      "prompt": "Make to_csv(rows) in export.py produce CSV that spreadsheets read correctly: quote fields that need it, end every row with CRLF, and write None as an empty field. Guard against formula injection by prefixing text that starts with =, +, -, @, a tab or a carriage return with a single quote; numbers stay as they are. No rows give an empty string. Keep the signature, the standard library only, and README.md.",
+      "verification": [
+        "python3",
+        "csv-export/checks/acceptance.py"
+      ],
+      "regression_verification": [
+        "python3",
+        "csv-export/checks/regression.py"
+      ],
+      "reference_patch": "csv-export/reference.patch",
+      "implementation_paths": [
+        "export.py"
+      ],
+      "protected_paths": [
+        "README.md"
+      ],
+      "timeout_seconds": 180,
+      "verification_timeout_seconds": 10,
+      "baseline_acceptance": false,
+      "manual_review": false
     }
   ]
 }

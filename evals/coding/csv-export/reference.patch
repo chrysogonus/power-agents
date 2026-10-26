@@ -1,0 +1,18 @@
+--- a/export.py
++++ b/export.py
+@@ -1,3 +1,14 @@
++import csv
++import io
++
++FORMULA_START = ('=', '+', '-', '@', '\t', '\r')
++
++
+ def to_csv(rows):
+     """Return rows (lists of values) as CSV text."""
+-    return "\n".join(",".join(str(value) for value in row) for row in rows) + "\n"
++    out = io.StringIO()
++    writer = csv.writer(out)  # quotes as needed, ends rows with \r\n
++    for row in rows:
++        writer.writerow(["'" + value if isinstance(value, str) and value.startswith(FORMULA_START)
++                         else value for value in row])
++    return out.getvalue()

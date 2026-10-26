@@ -16,7 +16,7 @@ MANIFEST = ROOT / 'evals/coding/tasks.json'
 class CodingFixtureTests(unittest.TestCase):
     def test_baselines_and_reference_fixes(self):
         tasks = json.loads(MANIFEST.read_text())['tasks']
-        self.assertEqual(len(tasks), 3)
+        self.assertEqual(len(tasks), 5)
         for task in tasks:
             with self.subTest(task=task['id']), tempfile.TemporaryDirectory() as temporary:
                 work = Path(temporary) / 'work'

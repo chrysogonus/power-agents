@@ -62,6 +62,36 @@ class CodingRunnerTests(unittest.TestCase):
         self.assertFalse(counter.exists())
         self.assertFalse(output.exists())
 
+    def test_gate_variant_runs_the_verify_gate_in_the_trial(self):
+        cmd, env, _, _ = self.prepare(execute=False, extra=('--instructions', 'baseline', 'none',
+                                                             '--gate', 'off', 'on', '--repeats', '2'))
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        order = [(t['variant'], t['gate']) for t in report['trials']]
+        forward = [('baseline', 'off'), ('baseline', 'on'), ('none', 'off'), ('none', 'on')]
+        self.assertEqual(order, forward + forward[::-1])
+        self.assertRegex(report['gate_sha256'], r'^[0-9a-f]{64}$')
+
+        result, report, output, _ = self.run_cli(extra=('--gate', 'on'))
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        trial = report['trials'][0]
+        self.assertEqual((trial['status'], trial['gate']), ('PASS', 'on'))
+        steps = [(r['step'], r.get('why'), r.get('result')) for r in trial['gate_log']]
+        self.assertEqual(steps, [('check', 'changed', None), ('verified', None, 'Verification: no issues')])
+        self.assertIn('| on | 1 | 1 |', (output / 'summary.md').read_text())
+        for task in ('pagination-bounds', 'csv-export'):
+            with self.subTest(task=task):
+                result, report, _, _ = self.run_cli(extra=('--gate', 'on', '--task', task))
+                self.assertEqual(report['trials'][0]['status'], 'PASS', result.stderr + result.stdout)
+
+        result, report, _, _ = self.run_cli()
+        self.assertNotIn('gate_log', report['trials'][0])
+        self.assertIsNone(report['gate_sha256'])
+        result, _, _, _ = self.run_cli(agent='codex', extra=('--gate', 'on'))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('--gate on supports only --agent claude', result.stderr)
+
     def test_both_adapters_and_all_instruction_variants(self):
         for agent in ('claude', 'codex'):
             for variant in ('baseline', 'none'):

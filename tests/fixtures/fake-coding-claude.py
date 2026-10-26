@@ -11,6 +11,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def run_hooks(settings, event, payload):
+    """Run the staged hook commands for event as Claude would; return the last output."""
+    output = {}
+    for group in settings.get('hooks', {}).get(event, []):
+        for hook in group['hooks']:
+            result = subprocess.run(hook['command'], shell=True, input=json.dumps(payload),
+                                    capture_output=True, text=True, timeout=60)
+            assert result.returncode == 0, result.stderr
+            output = json.loads(result.stdout or '{}')
+    return output
+
+
 def simulate(agent, mode, counter):
     flags = {
         'claude': '--print --output-format --verbose --model --tools --allowedTools --permission-mode --setting-sources --settings --strict-mcp-config --mcp-config --no-session-persistence --max-budget-usd --debug-file',
@@ -58,7 +70,7 @@ def simulate(agent, mode, counter):
         allowed = sys.argv[sys.argv.index('--allowedTools') + 1].split(',')
         assert allowed == ['Bash', 'Skill', f'Edit(/{work}/**)']
         settings = json.loads((config / 'settings.json').read_text())
-        assert settings['disableAllHooks']
+        assert settings.get('disableAllHooks') or 'verify-gate.py' in json.dumps(settings['hooks'])
         assert settings['permissions']['blockReadsOutsideWorkingDirectories']
         assert settings['sandbox']['enabled']
         assert not settings['sandbox']['allowUnsandboxedCommands']
@@ -94,6 +106,10 @@ def simulate(agent, mode, counter):
         time.sleep(60)
         return
     counter.write_text('started')
+    gate = agent == 'claude' and 'hooks' in settings
+    event = {'session_id': 'fake-session', 'cwd': str(work)}
+    if gate:
+        run_hooks(settings, 'UserPromptSubmit', {**event, 'prompt': prompt})
     if mode not in ('early-stop', 'test-tamper'):
         result = subprocess.run(['git', 'apply', str(ROOT / 'evals/coding' / task['reference_patch'])], capture_output=True)
         assert result.returncode == 0, result.stderr
@@ -114,6 +130,12 @@ def simulate(agent, mode, counter):
     if mode == 'malformed':
         print('invalid jsonl')
         return
+    if gate:  # the gate sends the agent back once to verify, then lets it stop
+        first = run_hooks(settings, 'Stop', {**event, 'last_assistant_message': 'Done'})
+        assert first['decision'] == 'block' and first['reason'].startswith('Automated verification pass')
+        second = run_hooks(settings, 'Stop', {**event, 'last_assistant_message': 'Verification: no issues',
+                                              'stop_hook_active': True})
+        assert second == {}, second
     emit = lambda value: print(json.dumps(value), flush=True)
     if mode == 'truncated':
         emit({'type': 'turn.started'})

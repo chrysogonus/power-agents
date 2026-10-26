@@ -1,0 +1,14 @@
+--- a/pages.py
++++ b/pages.py
+@@ -1,4 +1,9 @@
+ def paginate(items, page, per_page):
+     """Return the items on a page."""
+-    start = page * per_page
+-    return items[start:start + per_page]
++    for value in (page, per_page):
++        if type(value) is not int or value < 1:
++            raise ValueError('page and per_page must be positive integers')
++    total_pages = max(1, -(-len(items) // per_page))
++    start = (page - 1) * per_page
++    return {'items': list(items[start:start + per_page]), 'page': page,
++            'total_pages': total_pages, 'has_next': page < total_pages}

@@ -11,11 +11,15 @@ No instruction variant has been shown superior by this implementation.
 | `retry-idempotence` | Cache successful operations by ID | No duplicate side effects, falsey results, independent IDs, retry after exceptions |
 | `config-preservation` | Manage `retry_limit` without losing local settings | Nested key preservation, idempotence, unchanged malformed input, existing enabled setting |
 | `parser-refactor` | Remove duplicate validation | Values, exception types/messages, evaluation order; readability requires manual review |
+| `pagination-bounds` | Return 1-based pages with metadata | Last partial and exactly full pages, past the end, empty input, rejected zero, negative, bool, and float arguments |
+| `csv-export` | Spreadsheet-safe CSV | Quoting, CRLF, `None`, formula-injection prefixes for text but not numbers, empty input |
 
 `evals/coding/tasks.json` defines the task prompts, snapshots, protected paths,
 implementation paths, timeouts, and two check commands. All tasks use Python's
-standard library. The first two baselines fail their new acceptance checks; the
-working refactor baseline passes its behavior checks. Each reference patch must
+standard library. Every baseline except the working refactor fails its new
+acceptance checks; the refactor baseline passes its behavior checks. The last
+two tasks hide easy-to-miss edge cases in otherwise simple requests, where a
+verification pass has something to find. Each reference patch must
 pass all checks. This small Python sample does not represent all coding work.
 
 Only `workspace/` is copied to the subject repository. Checks and reference
@@ -37,10 +41,25 @@ make coding-eval CODING_EVAL_ARGS='--agent codex --model SUBJECT_MODEL --task re
 
 Replace `SUBJECT_MODEL` with an installed-runtime-supported model ID. Use
 `--runtime /absolute/path/to/executable` to pin the executable. Omit `--task` to
-select all three fixtures. The default is baseline instructions, two repeats.
+select all five fixtures. The default is baseline instructions, two repeats.
 Repeat two reverses variant order, giving baseline/none then none/baseline.
 Do not compare different models as if only instructions changed. The CLI does
 not set reasoning-effort options or estimate API prices.
+
+## Verify gate on or off
+
+`--gate off on` crosses each instruction variant with and without the
+[verify gate](verify-gate.md), and alternates their order between repeats like
+the instruction variants. With `on`, the trial copies `hooks/verify-gate.py`
+next to the workspace and stages its hooks in the trial's `settings.json`
+instead of `disableAllHooks`. The gate's state stays in the trial's home, so
+there is no cross-review, project check, or experiment: only the self-check
+runs. Each trial saves the gate's log records as `gate_log`, the report keeps
+the script's hash as `gate_sha256`, and `summary.md` counts passes per gate
+setting. Only Claude is supported, because Codex skips hooks until they are
+trusted interactively. Whether Claude runs Stop hooks in `--print` mode must be
+confirmed by the first live trial: a `gate_log` without a `verified` record
+means it did not.
 
 ## Isolation and execution
 

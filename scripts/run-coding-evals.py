@@ -170,7 +170,7 @@ def hashes(root: Path) -> dict[str, str]:
 
 
 def stage_trial(task: dict, trial_root: Path, agent: str, instruction_file: Path | None, skills_root: Path,
-                codex_home: Path | None = None) -> Path:
+                codex_home: Path | None = None, gate: bool = False) -> Path:
     home, workspace = trial_root / 'home', trial_root / 'work'
     home.mkdir()
     shutil.copytree(Path(task['fixture_root']) / task['snapshot'], workspace)
@@ -182,7 +182,14 @@ def stage_trial(task: dict, trial_root: Path, agent: str, instruction_file: Path
     if instruction_file:
         shutil.copyfile(instruction_file, config / ('CLAUDE.md' if agent == 'claude' else 'AGENTS.md'))
     if agent == 'claude':
-        (config / 'settings.json').write_text(json.dumps({'disableAllHooks': True,
+        # The verify gate runs from a copy outside the workspace; its state stays in the trial home.
+        hooks = {'disableAllHooks': True}
+        if gate:
+            script = trial_root / 'verify-gate.py'
+            shutil.copyfile(ROOT / 'hooks/verify-gate.py', script)
+            template = (ROOT / 'settings/claude/hooks.json').read_text()
+            hooks = json.loads(template.replace('@VERIFY_GATE@', str(script)))
+        (config / 'settings.json').write_text(json.dumps({**hooks,
             'permissions': {'blockReadsOutsideWorkingDirectories': True},
             'sandbox': {'enabled': True, 'failIfUnavailable': True, 'autoAllowBashIfSandboxed': True,
                         'allowUnsandboxedCommands': False}}))
@@ -380,6 +387,14 @@ def changes(task: dict, workspace: Path) -> dict:
             'scope_review': 'pending' if any(not matches(name, task['implementation_paths']) for name in changed) else 'not_flagged'}
 
 
+def gate_log(trial_root: Path) -> list[dict] | None:
+    """The verify gate's decision records from the trial home, or None if it logged nothing."""
+    path = trial_root / 'home/.cache/verify-gate/log.jsonl'
+    if not path.is_file():
+        return None
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
 def write_results(output: Path, report: dict) -> None:
     statuses = {trial['status'] for trial in report['trials']}
     report['status'] = next((status for status in ('ERROR', 'SKIP', 'NOT_RUN', 'FAIL', 'REVIEW')
@@ -392,12 +407,18 @@ def write_results(output: Path, report: dict) -> None:
         'not_run': sum(t['status'] == 'NOT_RUN' for t in report['trials'])}
     (output / 'results.json').write_text(redact(json.dumps(report, indent=2)) + '\n')
     lines = ['# Coding evaluations', '', 'Unknown measurements are null. REVIEW requires human assessment.', '',
-             '| Task | Instructions | Status | Subject seconds | Scope review |', '| --- | --- | --- | --- | --- |']
+             '| Task | Instructions | Gate | Status | Subject seconds | Scope review |',
+             '| --- | --- | --- | --- | --- | --- |']
     for trial in report['trials']:
         elapsed = trial.get('runtime', {}).get('elapsed_seconds', 'unknown')
-        lines.append(f"| {trial['task']} | {trial['variant']} | {trial['status']} | {elapsed} | {trial.get('scope_review', 'unknown')} |")
+        lines.append(f"| {trial['task']} | {trial['variant']} | {trial.get('gate', 'off')} | {trial['status']} | "
+                     f"{elapsed} | {trial.get('scope_review', 'unknown')} |")
         if trial.get('error'):
             lines.extend(['', f"Trial {trial['index']}: {trial['error']}"])
+    lines.extend(['', '| Gate | Passed | Completed |', '| --- | --- | --- |'])
+    for gate in sorted({trial.get('gate', 'off') for trial in report['trials']}):
+        done = [t for t in report['trials'] if t.get('gate', 'off') == gate and t['status'] in ('PASS', 'FAIL', 'REVIEW')]
+        lines.append(f"| {gate} | {sum(t['status'] != 'FAIL' for t in done)} | {len(done)} |")
     (output / 'summary.md').write_text(redact('\n'.join(lines)) + '\n')
 
 
@@ -409,6 +430,8 @@ def main() -> int:
     parser.add_argument('--task')
     parser.add_argument('--manifest', type=Path, default=ROOT / 'evals/coding/tasks.json')
     parser.add_argument('--instructions', nargs='+', choices=('baseline', 'none'), default=['baseline'])
+    parser.add_argument('--gate', nargs='+', choices=('off', 'on'), default=['off'],
+                        help='Run the verify gate (self-check only) in the trial; Claude only.')
     parser.add_argument('--repeats', type=int, default=2)
     parser.add_argument('--timeout', type=float, help='Override subject timeout seconds.')
     parser.add_argument('--max-budget-usd', type=float, default=1, help='Claude per-session cap; not a total-run cap.')
@@ -419,8 +442,11 @@ def main() -> int:
                         help='Absolute dedicated CODEX_HOME holding a separate Codex login; trial files are staged and removed.')
     args = parser.parse_args()
     try:
-        if args.repeats < 1 or len(set(args.instructions)) != len(args.instructions):
+        if (args.repeats < 1 or len(set(args.instructions)) != len(args.instructions)
+                or len(set(args.gate)) != len(args.gate)):
             raise ValueError('Repeats must be positive and variants unique.')
+        if args.agent == 'codex' and 'on' in args.gate:
+            raise ValueError('--gate on supports only --agent claude: Codex skips hooks until they are trusted interactively.')
         if args.codex_home and (args.agent != 'codex' or not args.codex_home.is_absolute() or not args.codex_home.is_dir()):
             raise ValueError('--codex-home requires --agent codex and an existing absolute directory.')
         for value in (args.timeout, args.max_budget_usd):
@@ -431,18 +457,21 @@ def main() -> int:
             tasks = [{**task, 'timeout_seconds': args.timeout} for task in tasks]
         sources = {'baseline': ROOT / 'instructions/general-global.md', 'none': None}
         trials = []
+        combos = [(variant, gate) for variant in args.instructions for gate in args.gate]
         for task in tasks:
             for repeat in range(args.repeats):
-                variants = args.instructions if repeat % 2 == 0 else list(reversed(args.instructions))
-                for variant in variants:
+                for variant, gate in combos if repeat % 2 == 0 else list(reversed(combos)):
                     source = sources[variant]
                     trials.append({'index': len(trials) + 1, 'task': task['id'], 'repeat': repeat + 1,
-                        'variant': variant, 'instruction_sha256': hashlib.sha256(source.read_bytes()).hexdigest() if source else None,
+                        'variant': variant, 'gate': gate,
+                        'instruction_sha256': hashlib.sha256(source.read_bytes()).hexdigest() if source else None,
                         'status': 'NOT_RUN', 'started': False})
         names = RUNTIME_CREDENTIALS[args.agent]
         credential = 'CODEX_HOME login' if args.codex_home else next(
             (name for name in names if os.environ.get(name)), ' or '.join(names))
-        report = {'schema_version': 1, 'agent': args.agent, 'requested_model': args.model,
+        report = {'schema_version': 1, 'agent': args.agent,
+                  'gate_sha256': hashlib.sha256((ROOT / 'hooks/verify-gate.py').read_bytes()).hexdigest()
+                  if 'on' in args.gate else None, 'requested_model': args.model,
                   'runtime': args.runtime or args.agent, 'runtime_version': None, 'trials': trials,
                   'manifest_sha256': hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
                   'fixture_sha256': hashes(args.manifest.parent), 'skill_sha256': hashes(ROOT / 'skills'),
@@ -496,7 +525,8 @@ def main() -> int:
                 with (tempfile.TemporaryDirectory(prefix='power-agents-coding-') as temporary,
                       staged_codex_home(args.codex_home)):
                     root = Path(temporary)
-                    work = stage_trial(task, root, args.agent, sources[trial['variant']], ROOT / 'skills', args.codex_home)
+                    work = stage_trial(task, root, args.agent, sources[trial['variant']], ROOT / 'skills', args.codex_home,
+                                       gate=trial['gate'] == 'on')
                     trial['workspace'] = str(work)
                     trial['started'] = True
                     try:
@@ -514,6 +544,8 @@ def main() -> int:
                             raise ValueError(trial['runtime']['error'])
                     finally:
                         trial.update(changes(task, work))
+                        if trial['gate'] == 'on':
+                            trial['gate_log'] = gate_log(root)
                     trial['verification'] = verify_trial(task, work, root)
                     trial.update(changes(task, work))
                     statuses = [check['status'] for check in trial['verification'].values()]
