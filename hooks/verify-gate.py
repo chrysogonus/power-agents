@@ -1297,7 +1297,10 @@ def stop(event, agent):
             arm = rng.choices(list(arms), weights=list(arms.values()))[0]
             fields.update(arm=arm, p_arm=round(arms[arm] / sum(arms.values()), 4))
             if why == "changed":
-                audit = rng.random() < experiment.get("audit", 0)
+                # The audit may send the diff to the other vendor too, so
+                # it needs the same consent as cross-review.
+                audit = (cross_review_enabled(project)
+                         and rng.random() < experiment.get("audit", 0))
                 fields["audit"] = audit
         log(event, agent, turn, step="check", why=why, project=top, **fields)
         if not why:

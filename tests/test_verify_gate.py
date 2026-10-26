@@ -992,6 +992,9 @@ class VerifyGateTests(unittest.TestCase):
 
     def test_outcome_worker_measures_the_end_of_the_turn(self) -> None:
         self.write_projects({str(self.repo): {"check": "sleep 1; true"}})
+        # Audits need the consent cross-review needs; the self arm still
+        # runs without a review.
+        (self.home / ".config" / "power-agents" / "cross-review-on").touch()
         self.write_experiment({"arms": {"self": 1}, "audit": 1})
         audit = ("VERDICT: issues\n- [high] app.py:1 crashes on null\n"
                  "[low] app.py:1 name\n- [HIGH] app.py:1 data loss")
@@ -1051,6 +1054,21 @@ class VerifyGateTests(unittest.TestCase):
         self.assertIn("exited 3", failed["error"])
         self.assertEqual((failed["verdict"], failed["high"], failed["low"]),
                          (None, None, None))
+
+        # No audit where cross-review is off: the diff must not leave.
+        self.write_projects({str(self.repo): {"check": "true", "cross_review": False}})
+        self.write_experiment({"arms": {"none": 1}, "audit": 1})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('private')\n", encoding="utf-8")
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), {})  # env overrides the file
+        self.assertTrue(self.records("check")[-1]["audit"])
+        self.wait_for("audit", 3)
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('private 2')\n", encoding="utf-8")
+        self.assertEqual(self.stop(), {})
+        self.assertFalse(self.records("check")[-1]["audit"])
 
     def test_follow_up_prompts_and_rework_are_logged(self) -> None:
         self.mark()

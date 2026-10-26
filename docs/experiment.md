@@ -19,7 +19,7 @@ Create `~/.config/power-agents/experiment.json`:
 | Key | Meaning |
 | --- | --- |
 | `arms` | Relative weights for the three arms. `none`: the turn ends unchecked. `self`: self-check only, even where cross-review is on. `full`: the usual gate, with cross-review where it is enabled. |
-| `audit` | Share of `changed` turns (0 to 1) that get a blinded audit. |
+| `audit` | Share of `changed` turns (0 to 1) that get a blinded audit. The auditor may be either vendor, so only repositories where cross-review is allowed are audited. |
 | `capture` | `true` keeps the texts of each experiment turn for hand-labeling (see [Capture](#capture-and-labeling)). |
 
 Remove the file to stop the experiment. If the file is invalid, the gate checks
