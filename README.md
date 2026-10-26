@@ -89,8 +89,8 @@ that must stay with one vendor.
 two days):** 94 turns were self-checked, and in 41 of them (44%) the agent
 reported fixing something. Of 43 cross-reviews by Codex, 23 (53%) reported
 issues. These numbers count how often the gate led to a change, not whether
-the final answers were better: the evaluations in this repository run with
-hooks disabled, so the effect on answer quality has not been measured. Run
+the final answers were better. To measure that, run the randomized
+[experiment or the gate-on/off benchmark](docs/experiment.md). Run
 `python3 ~/.agents/hooks/verify-gate.py stats` to see your own numbers.
 
 [Controls, cost, and privacy details →](docs/verify-gate.md)
@@ -314,6 +314,8 @@ repository; it is not installed globally.
   rules, conflicts, sync, and uninstall
 - [Verify gate and cross-review](docs/verify-gate.md): when it runs, controls,
   cost, and privacy
+- [Measuring the verify gate](docs/experiment.md): the randomized experiment,
+  blinded audits, export, and the controlled benchmark
 - [Skills](skills/README.md): the full inventory and how to write a skill
 - [Development and evaluations](docs/development.md): checks, adding skills,
   and paid evaluations
