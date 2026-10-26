@@ -34,6 +34,7 @@ ended in this session, and new commits must hold exactly that content.
 | `python3 ~/.agents/hooks/verify-gate.py cross-review on\|off\|status` | Persistently toggles cross-review through `~/.config/power-agents/cross-review-on`. |
 | `python3 ~/.agents/hooks/verify-gate.py doctor` | Checks that both agents' hook entries run the gate, the state directory is writable, and, when cross-review is on, that both reviewer CLIs are on PATH and the Codex reviewer's MCP servers can be disabled. Exits 1 if a required check fails. |
 | `python3 ~/.agents/hooks/verify-gate.py review --agent claude\|codex [--base REF] [--focus TEXT]` | Runs a review now, outside the gate, and prints it. With `--agent` the *other* agent reviews; name the reviewer directly with `--reviewer`. It reviews uncommitted and untracked changes, or with `--base` also the commits since the merge base with `REF`. `--focus` tells the reviewer what to concentrate on. No transcript is sent; the reviewer runs with the same restrictions as in the gate. |
+| `python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] [--capture]` | Prints one CSV row per checked turn, or with `--capture` the captured texts for labeling. See [Measuring the verify gate](experiment.md). |
 | `python3 ~/.agents/hooks/verify-gate.py status` | Lists background reviews that are still running, per session. |
 | `python3 ~/.agents/hooks/verify-gate.py cancel [SESSION]` | Stops running background reviews, or only that session's. The gate then skips the review with a notice. |
 | `CROSS_REVIEW=1` or `CROSS_REVIEW=0` | Forces cross-review on or off for sessions started with it. |
@@ -89,14 +90,29 @@ how many tool calls it made after the verification prompt (read from the last 4
 MB of the transcript; empty when the prompt isn't found there), the project
 check's result and run time, the reviewer's verdict or error, the reviewer's run
 time, how long the agent waited for it, and the first line of the agent's reply
-to the feedback (for example `Review: accepted 1, rejected 2`). No transcript or
-diff content is logged. To summarize the log, run
+to the feedback (for example `Review: accepted 1, rejected 2`). Since log
+version 2 (`"v": 2`), records of one turn share a `turn` id. A checked turn
+also logs the model, a hash of the gate script (`gate`) and of its prompts
+(`prompts`), and the tokens the verification used. The next prompt logs
+whether it reads like a correction, and the next turn logs whether it changed
+the same files again. No transcript or diff content is logged. To summarize the log, run
 `python3 ~/.agents/hooks/verify-gate.py stats [--since DAYS]`. It shows the share of
 verifications that fixed something, a reply counting as a fix when it says it
 fixed, corrected, or changed something, the share of review points the agent
 accepted, and fix and review rates by trigger (`changed` or `long`) and by
 repository. Records from before repositories were logged appear as `unknown`.
+It also shows the mean verification cost, how often a review raised points the
+agent accepted after its self-check had found no issues, and, while an
+[experiment](experiment.md) runs, its outcomes per arm.
 Per-session state files in the same directory are deleted after seven days.
+
+## Experiment
+
+To measure whether the gate helps, `~/.config/power-agents/experiment.json`
+assigns each qualifying turn at random to no checks, self-check only, or the
+full gate. A blinded audit and the project's check command then measure each
+turn's result in the background. See [Measuring the verify
+gate](experiment.md).
 
 ## How the Reviewer Is Restricted
 

@@ -813,15 +813,16 @@ class VerifyGateTests(unittest.TestCase):
         records = [json.loads(line) for line in log.splitlines()]
         self.assertEqual(
             [(r["step"], r.get("why")) for r in records],
-            [("check", "changed"), ("verified", None), ("check", None),
-             ("check", "changed"), ("verified", None), ("responded", None)],
+            [("check", "changed"), ("verified", None), ("next", None),
+             ("check", None), ("check", "changed"), ("verified", None),
+             ("responded", None)],
         )
         self.assertEqual(records[1]["verdict"], "clean")
         self.assertEqual(records[1]["reviewer"], "codex")
-        self.assertEqual(records[4]["verdict"], "issues")
-        self.assertEqual(records[5]["result"], "Review: accepted 1, rejected 2")
+        self.assertEqual(records[5]["verdict"], "issues")
+        self.assertEqual(records[6]["result"], "Review: accepted 1, rejected 2")
         self.assertEqual(records[0]["project"], str(self.repo.resolve()))
-        self.assertEqual([records[1]["edited"], records[4]["edited"]],
+        self.assertEqual([records[1]["edited"], records[5]["edited"]],
                          [False, True])
         for text in ("Fix the bug", "Thanks", "print(", "null case"):
             self.assertNotIn(text, log)
@@ -877,6 +878,302 @@ class VerifyGateTests(unittest.TestCase):
         edited = [r["edited"] for r in map(json.loads, log.splitlines())
                   if r["step"] == "verified"]
         self.assertEqual(edited, [False, False, True, True])
+
+    # -------------------------------------------------------- experiment
+
+    def records(self, step: str | None = None) -> list[dict]:
+        path = self.cache / "verify-gate" / "log.jsonl"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [r for r in map(json.loads, lines) if step in (None, r["step"])]
+
+    def wait_for(self, step: str, count: int = 1) -> list[dict]:
+        for _ in range(150):
+            found = self.records(step)
+            if len(found) >= count:
+                return found
+            time.sleep(0.1)
+        self.fail(f"no {step} record: {self.records()}")
+
+    def write_experiment(self, settings: dict | str) -> None:
+        path = self.home / ".config" / "power-agents" / "experiment.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(settings if isinstance(settings, str)
+                        else json.dumps(settings), encoding="utf-8")
+
+    def test_records_carry_turn_model_version_and_tokens(self) -> None:
+        claude = self.write_claude_transcript()
+        usage = {"input_tokens": 10, "cache_creation_input_tokens": 100,
+                 "cache_read_input_tokens": 1000, "output_tokens": 7}
+        with claude.open("a", encoding="utf-8") as f:
+            for block in ("text", "tool_use"):  # one message, two lines
+                f.write(json.dumps({"type": "assistant", "message": {
+                    "id": "msg-1", "model": "claude-test-1", "usage": usage,
+                    "content": [{"type": block, "text": "x"}]}}) + "\n")
+        codex = self.write_codex_rollout()
+        with codex.open("a", encoding="utf-8") as f:
+            for line in (
+                {"type": "turn_context", "payload": {"model": "gpt-test-2"}},
+                {"type": "event_msg", "payload": {"type": "token_count", "info": {
+                    "total_token_usage": {"input_tokens": 500, "output_tokens": 30}}}},
+            ):
+                f.write(json.dumps(line) + "\n")
+        # The verify prompt in the rollout comes before any token count.
+        lines = codex.read_text().splitlines()
+        lines.insert(0, json.dumps({"type": "event_msg", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {
+                "input_tokens": 200, "output_tokens": 10}}}}))
+        codex.write_text("\n".join(lines) + "\n")
+
+        for agent, path in (("claude", claude), ("codex", codex)):
+            self.session += 1
+            fields = {"transcript_path": str(path)}
+            self.mark(agent=agent)
+            self.change_file()
+            self.stop(agent=agent, fields=fields)
+            self.stop(agent=agent, answer="Verification: no issues", fields=fields)
+            git(self.repo, "checkout", "--", "app.py")
+
+        checks, verified = self.records("check"), self.records("verified")
+        self.assertEqual([r["model"] for r in checks], ["claude-test-1", "gpt-test-2"])
+        for r in checks + verified:
+            self.assertEqual(r["v"], 2)
+        self.assertEqual([c["turn"] for c in checks], [v["turn"] for v in verified])
+        self.assertNotEqual(checks[0]["turn"], checks[1]["turn"])
+        self.assertRegex(checks[0]["gate"], r"^[0-9a-f]{12}$")
+        self.assertRegex(checks[0]["prompts"], r"^[0-9a-f]{12}$")
+        self.assertEqual([(v["tokens_in"], v["tokens_out"]) for v in verified],
+                         [(1110, 7), (300, 20)])
+
+    def test_experiment_arms_decide_the_checks(self) -> None:
+        self.write_experiment({"arms": {"none": 1, "self": 0}})
+        self.mark()
+        self.change_file()
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), {})  # unchecked
+        check = self.records("check")[-1]
+        self.assertEqual((check["arm"], check["p_arm"], check["audit"]),
+                         ("none", 1.0, False))
+        self.assertIs(check["review_eligible"], True)
+        # Its files count as handled: committing them is not checked.
+        self.mark(prompt="Commit it")
+        git(self.repo, "commit", "-qam", "v2")
+        self.assertEqual(self.stop(), {})
+        self.assertIsNone(self.records("check")[-1]["why"])
+
+        self.write_experiment({"arms": {"self": 2}})
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assertEqual(self.stop(CROSS_REVIEW="1"), {})
+        self.assertFalse((self.logs / "codex.json").exists())
+
+        self.write_experiment({"arms": {"full": 1}})
+        self.mark()
+        (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
+        self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
+        self.assertEqual([r["arm"] for r in self.records("check") if r["why"]],
+                         ["none", "self", "full"])
+
+        # An invalid file falls back to checking every turn as usual.
+        for settings in ('{"arms": {"none": 1}, "audit": 2}', '{"arms": {}}',
+                         '{"arms": {"never": 1}}', "not json",
+                         '{"arms": {"none": true}}'):
+            with self.subTest(settings=settings):
+                self.write_experiment(settings)
+                self.session += 1
+                self.mark()
+                (self.repo / "app.py").write_text(f"print({random.random()})\n")
+                self.assert_verification_block(self.stop())
+                self.assertNotIn("arm", self.records("check")[-1])
+                self.assertIn("experiment.json", self.records("experiment")[-1]["error"])
+                doctor = self.run_gate(["doctor"], "").stdout
+                self.assertIn("experiment.json", doctor)
+                self.assertIn("every turn is checked as usual", doctor)
+
+    def test_outcome_worker_measures_the_end_of_the_turn(self) -> None:
+        self.write_projects({str(self.repo): {"check": "sleep 1; true"}})
+        self.write_experiment({"arms": {"self": 1}, "audit": 1})
+        audit = ("VERDICT: issues\n- [high] app.py:1 crashes on null\n"
+                 "[low] app.py:1 name\n- [HIGH] app.py:1 data loss")
+        self.mark(prompt="Make app.py print v2")
+        self.change_file()
+        self.assert_verification_block(self.stop(STUB_REVIEW=audit))
+        self.assertEqual(self.stop(STUB_REVIEW=audit), {})
+        # A new prompt does not stop the measurement of the previous turn.
+        self.mark(prompt="Next task")
+        final, audits = self.wait_for("final-check"), self.wait_for("audit")
+        turn = self.records("check")[0]["turn"]
+        self.assertEqual(final[0]["turn"], turn)
+        self.assertEqual((final[0]["result"], final[0]["reused"]), ("passed", True))
+        a = audits[0]
+        self.assertEqual((a["turn"], a["verdict"], a["high"], a["med"], a["low"]),
+                         (turn, "issues", 2, 0, 1))
+        self.assertIn(a["auditor"], ("claude", "codex"))
+        record = self.reviewer_record(a["auditor"])
+        self.assertIn("auditing changes", " ".join(record["argv"]))
+        bundle = record["stdin"]
+        self.assertIn("Make app.py print v2", bundle)
+        self.assertIn("+print('v2')", bundle)
+        for hidden in ("GATE", "AGENT", "Verification", "transcript"):
+            self.assertNotIn(hidden, bundle)
+
+        # The control arm: the check runs for the first time afterwards.
+        self.write_experiment({"arms": {"none": 1}, "audit": 0})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assertEqual(self.stop(), {})
+        final = self.wait_for("final-check", 2)[1]
+        self.assertEqual((final["result"], final["reused"], final["moved"]),
+                         ("passed", False, False))
+        self.assertFalse(self.records("check")[-1]["audit"])
+        time.sleep(0.5)
+        self.assertEqual(len(self.records("audit")), 1)
+
+        # Edits during the self-check: the check runs again.
+        self.write_experiment({"arms": {"self": 1}, "audit": 0})
+        self.session += 1
+        self.mark()
+        (self.repo / "app.py").write_text("print('v4')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop())
+        (self.repo / "app.py").write_text("print('v5')\n", encoding="utf-8")
+        self.assertEqual(self.stop(), {})
+        self.assertIs(self.wait_for("final-check", 3)[2]["reused"], False)
+
+    def test_follow_up_prompts_and_rework_are_logged(self) -> None:
+        self.mark()
+        self.change_file()
+        self.assert_verification_block(self.stop())
+        self.assertEqual(self.stop(), {})
+        first = self.records("check")[0]["turn"]
+        self.mark(prompt="That's wrong, the test still fails")
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.assert_verification_block(self.stop())
+        self.stop()
+        self.mark(prompt="Thanks, now add a README")
+        (self.repo / "README.md").write_text("hi\n", encoding="utf-8")
+        self.assert_verification_block(self.stop())
+
+        nexts = self.records("next")
+        self.assertEqual([(n["turn"], n["correction"]) for n in nexts],
+                         [(first, True), (self.records("check")[1]["turn"], False)])
+        self.assertIsInstance(nexts[0]["gap"], int)
+        checks = self.records("check")
+        self.assertEqual([(c.get("prev_turn"), c.get("rework")) for c in checks],
+                         [(None, None), (first, True), (checks[1]["turn"], False)])
+        # No prompt text in the log.
+        log = (self.cache / "verify-gate" / "log.jsonl").read_text()
+        self.assertNotIn("still fails", log)
+
+    def test_capture_keeps_texts_only_when_enabled(self) -> None:
+        self.mark()
+        self.change_file()
+        self.stop()
+        self.stop()
+        self.assertFalse((self.cache / "verify-gate" / "capture").exists())
+
+        self.write_experiment({"arms": {"full": 1}, "audit": 1, "capture": True})
+        self.session += 1
+        self.mark(prompt="REQUEST-1")
+        (self.repo / "app.py").write_text("print('v3')\n", encoding="utf-8")
+        self.stop(answer="ANSWER-2", CROSS_REVIEW="1", STUB_REVIEW="VERDICT: issues\nFEEDBACK-3")
+        self.stop(answer="Verification: no issues VERIFY-4", CROSS_REVIEW="1",
+                  STUB_REVIEW="VERDICT: issues\nFEEDBACK-3")
+        self.stop(answer="Review: accepted 1, rejected 0 RESPONSE-5",
+                  STUB_REVIEW="VERDICT: issues\nFEEDBACK-3")
+        self.wait_for("audit")
+        self.mark(prompt="NEXT-6")
+        captured = self.run_gate(["export", "--capture"], "").stdout.splitlines()
+        self.assertEqual(len(captured), 1)
+        item = json.loads(captured[0])
+        self.assertEqual(item["session"], f"session-{self.session}")
+        self.assertEqual(item["turn"], self.records("check")[-1]["turn"])
+        for key, text in (("request", "REQUEST-1"), ("answer", "ANSWER-2"),
+                          ("feedback", "FEEDBACK-3"), ("verification", "VERIFY-4"),
+                          ("response", "RESPONSE-5"), ("audit", "FEEDBACK-3"),
+                          ("next", "NEXT-6")):
+            self.assertIn(text, item[key])
+        self.assertIsNone(item["label_fix_real"])
+        self.assertEqual(item["arm"], "full")
+
+        # Pruning old state skips the capture directory.
+        capture = self.cache / "verify-gate" / "capture"
+        old = time.time() - 30 * 86400
+        stale = self.cache / "verify-gate" / "old.json"
+        stale.write_text("{}")
+        for path in (stale, capture, *capture.iterdir()):
+            os.utime(path, (old, old))
+        self.mark()
+        self.assertFalse(stale.exists())
+        self.assertEqual(len(list(capture.iterdir())), 1)
+
+    def test_export_and_stats_join_turns_by_arm(self) -> None:
+        log = self.cache / "verify-gate" / "log.jsonl"
+        log.parent.mkdir(parents=True)
+        now = int(time.time())
+
+        def turn(session, turn_id, arm, audit, final, **verified):
+            out = [{"ts": now, "v": 2, "session": session, "turn": turn_id,
+                    "step": "check", "why": "changed", "arm": arm,
+                    "project": "/secret/repo", "model": "m"}]
+            if verified:
+                out.append({"ts": now + 30, "v": 2, "session": session,
+                            "turn": turn_id, "step": "verified", **verified})
+            out += [{"ts": now + 60, "v": 2, "session": session, "turn": turn_id,
+                     "step": "final-check", "result": final, "reused": False},
+                    {"ts": now + 90, "v": 2, "session": session, "turn": turn_id,
+                     "step": "audit", "auditor": "codex", "verdict": audit,
+                     "high": 1 if audit == "issues" else 0, "med": 0, "low": 0}]
+            return out
+
+        records = [
+            # A version 1 turn: no turn id, joined by its session.
+            {"ts": now, "session": "old", "step": "check", "why": "long"},
+            {"ts": now, "session": "old", "step": "verified",
+             "result": "Verification: no issues", "reviewer": "codex",
+             "verdict": "issues"},
+            {"ts": now, "session": "old", "step": "responded",
+             "result": "Review: accepted 2, rejected 0"},
+            *turn("s1", "t1", "none", "issues", "failed with exit code 1"),
+            {"ts": now + 100, "v": 2, "session": "s1", "turn": "t1",
+             "step": "next", "correction": True, "gap": 12},
+            {"ts": now + 120, "v": 2, "session": "s1", "turn": "t2",
+             "step": "check", "why": None, "prev_turn": "t1", "rework": True},
+            *turn("s2", "t3", "self", "clean", "passed",
+                  result="Verification: fixed the edge case", tokens_in=100,
+                  tokens_out=10),
+            *turn("s3", "t4", "self", "issues", "passed",
+                  result="Verification: no issues", tokens_in=300, tokens_out=30),
+        ]
+        log.write_text("".join(json.dumps(r) + "\n" for r in records))
+
+        import csv
+        rows = list(csv.DictReader(self.run_gate(["export"], "").stdout.splitlines()))
+        self.assertEqual([r["turn"] for r in rows], ["", "t1", "t3", "t4"])
+        old, t1, t3, _ = rows
+        self.assertEqual((old["verification"], old["accepted"], old["verdict"]),
+                         ("no issues", "2", "issues"))
+        self.assertEqual((t1["arm"], t1["audit_verdict"], t1["final_check"],
+                          t1["correction"], t1["gap"], t1["rework"]),
+                         ("none", "issues", "failed with exit code 1",
+                          "True", "12", "True"))
+        self.assertEqual((t3["verification"], t3["tokens_in"], t3["verify_seconds"]),
+                         ("fixed", "100", "30"))
+        self.assertEqual(t1["project"], "/secret/repo")
+        anonymous = self.run_gate(["export", "--anonymize"], "").stdout
+        self.assertNotIn("/secret/repo", anonymous)
+
+        stats = self.run_gate(["stats"], "").stdout
+        for line in (
+            "by arm (rates with 95% CI):",
+            "  none: 1 turns; audit issues 1/1 (100%, CI 21%-100%); "
+            "final check passed 0/1 (0%, CI 0%-79%); corrected next 1/1",
+            "  self: 2 turns; fixed 1/2 (50%, CI 9%-91%); audit issues 1/2",
+            "high findings per audit 0.50",
+            "verification mean tokens: 200 in, 20 out",
+            "self-check no issues, review issues accepted: 1/1 (100%)",
+        ):
+            self.assertIn(line, stats)
 
     # ------------------------------------------------------------ toggle
 
