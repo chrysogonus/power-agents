@@ -69,8 +69,9 @@ changes under `references/`:
   on a single line (line 979), removing 52 bytes of whitespace. The URL and
   title text are unchanged.
 
-All other files, including `SKILL.md`, `LICENSE.txt`, and `agents/openai.yaml`,
-remain identical to the pinned upstream content.
+All other imported files, including `SKILL.md`, `LICENSE.txt`, and
+`agents/openai.yaml`, remain identical to the pinned upstream content.
+`evals/evals.json` is a local addition, not part of the upstream skill.
 
 The files under `skills/security-best-practices/` are distributed under the
 Apache License 2.0. The complete license is preserved at
@@ -128,6 +129,8 @@ been run against live models. Specific adaptations:
 
 Trailing whitespace was removed in the imported Vercel compiled guides,
 `rules/_sections.md`, and the affected React rule files so repository checks
-pass; instruction content in those rules is otherwise unchanged. The exact
-file list and adaptation record is preserved in
-[the integration snapshot](research/skill-integration-2026-10-05.json).
+pass; instruction content in those rules is otherwise unchanged. Each skill's
+pinned revision, upstream path, adaptations, and whitespace-normalized files
+are recorded in
+[the integration snapshot](research/skill-integration-2026-10-05.json); it does
+not list every imported file.

@@ -4,16 +4,20 @@
 
 This repository is the canonical source for personal coding-agent
 configuration. Installing it writes symlinks and managed configuration keys into
-the invoking user's home directory, so the security-relevant surface is the code
-and policy that runs or is consumed on that machine:
+the invoking user's home directory and the configured Codex and Claude roots
+(`CODEX_HOME` and `CLAUDE_CONFIG_DIR`, which may point elsewhere), so the
+security-relevant surface is the code and policy that runs or is consumed on
+that machine:
 
-- `install.sh` and `sync.sh`
+- `install.sh`, `sync.sh`, and the `Makefile`
 - `scripts/` and `tests/`
+- `.github/workflows/`, which runs the checks in CI
 - `settings/claude/statusline-command.sh`
 - `hooks/verify-gate.py`, which both agents run as a hook on every prompt and
   stop
 - `policies/codex/shared.rules`
-- `settings/` and `instructions/` content that agents load automatically
+- `settings/`, `instructions/`, and `skills/` content that agents load
+  automatically
 
 See the [installed-paths table](docs/installation.md#installed-paths) to audit exactly what
 the installer creates before running it.

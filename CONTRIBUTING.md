@@ -28,8 +28,10 @@ Keep content where it belongs:
    unmanaged values in the installed Claude and Codex settings files, subject
    to the documented `jq` numeric limitation.
 3. Run `make check` while iterating. It parses and statically analyzes every
-   shell script, validates skill metadata, exercises the installer under
-   isolated temporary home directories, and rejects whitespace errors.
+   shell script, validates skill metadata and eval fixtures, runs the Python
+   unit tests for the gate and helper scripts, exercises the installer, sync,
+   and Make targets under isolated temporary home directories, and rejects
+   whitespace errors.
 4. Run `make ci` before pushing. It runs the same pipeline as GitHub Actions,
    against both the working tree and a source archive of `HEAD`. GitHub also
    requires current Codex and Claude Code compatibility checks; locally, install
@@ -45,6 +47,11 @@ Install the required tooling first; see
   `fix(installer): activate Claude Code status line`.
 - Update `README.md`, `docs/`, or `skills/README.md` when behavior or inventory
   changes.
+- When adding or importing a skill, include `evals/evals.json` routing
+  fixtures, add a pinned entry with its license to
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for imported content, and
+  update the skill counts in `README.md` and `skills/README.md`; no test
+  enforces those counts.
 - Keep diffs surgical: every changed line should trace to the stated purpose.
 
 ## Reporting Problems

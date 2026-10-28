@@ -1,5 +1,10 @@
 # First-phase modernization
 
+> **Historical record.** This page describes a closed phase. The comparison
+> protocol below still applies to routing runs; for coding outcomes, use the
+> [coding-outcome runner](coding-evaluations.md) instead of step 6's interim
+> advice.
+
 ## Status and scope
 
 Closed on 2026-10-26. This phase repaired routing measurements and proposed a
@@ -68,7 +73,8 @@ complete reproduction of an interactive session.
    Existing per-session caps do not bound the cost of a whole fixture matrix.
 4. Select an explicit installed runtime, subject model, and judge model. Hold
    skill contents, fixtures, runtime version, and settings constant. Compare
-   baseline, experimental, and no-instruction runs using repeated trials; vary
+   baseline and no-instruction runs, plus any `--instruction-file` variant
+   under test, using repeated trials; vary
    run order to reduce time/order effects. Keep all structured results and hashes.
 5. Inspect routing results separately from judge grades. Review individual
    failures and report sample sizes; a small difference is not proof of a win.
@@ -77,8 +83,8 @@ complete reproduction of an interactive session.
 6. Before selecting a new default, compare a small representative set of actual
    coding tasks in isolated repositories with objective acceptance checks.
    Routing success alone does not establish correctness, autonomy, or speed.
-   That coding-task harness is deferred; use explicitly supervised trials until
-   it exists. Record outcomes, regressions, unnecessary changes, latency, and
+   That harness now exists as the [coding-outcome runner](coding-evaluations.md),
+   which also compares the verify gate on and off. Record outcomes, regressions, unnecessary changes, latency, and
    available usage separately. Mark missing measurements as unmeasured.
 
 Opt-in commands, after budget authorization and environment-key setup:

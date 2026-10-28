@@ -1,5 +1,12 @@
 # Agent skills and instructions worth collecting
 
+> **Historical snapshot.** This page records the research as of 2026-10-05 and
+> is not current guidance. Since then, `deep-review` was replaced by
+> `review-report` and `coding-agent-brief` was removed, so mentions of those
+> skills are out of date. A repository-editing benchmark now exists: see
+> [coding outcome evaluations](../docs/coding-evaluations.md). The current
+> inventory is in [`skills/README.md`](../skills/README.md).
+
 Research snapshot: **2026-10-05**. Scope: coding workflows, engineering quality,
 and frontend/design for a personal Codex + Claude Code setup.
 

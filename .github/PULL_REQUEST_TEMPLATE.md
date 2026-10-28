@@ -12,7 +12,7 @@
       supported values in the configured Claude and Codex settings files
 - [ ] `make check` passes
 - [ ] `make ci` passes
-- [ ] Documentation updated (`README.md`, `skills/README.md`) where behavior or
-      inventory changed
+- [ ] Documentation updated (`README.md`, `docs/`, `skills/README.md`) where
+      behavior or inventory changed
 - [ ] Commits follow the `type(scope): summary` convention
 - [ ] Every changed line traces to the stated purpose

@@ -15,7 +15,10 @@ No instruction variant has been shown superior by this implementation.
 | `csv-export` | Spreadsheet-safe CSV | Quoting, CRLF, `None`, formula-injection prefixes for text but not numbers, empty input |
 
 `evals/coding/tasks.json` defines the task prompts, snapshots, protected paths,
-implementation paths, timeouts, and two check commands. All tasks use Python's
+implementation paths, timeouts, two check commands, a reference patch, and two
+booleans: `manual_review` (the trial ends as REVIEW instead of PASS) and
+`baseline_acceptance` (whether the unchanged snapshot passes its acceptance
+check, asserted by the fixture tests). All tasks use Python's
 standard library. Every baseline except the working refactor fails its new
 acceptance checks; the refactor baseline passes its behavior checks. The last
 two tasks hide easy-to-miss edge cases in otherwise simple requests, where a
@@ -32,7 +35,8 @@ a security boundary against a hostile process with access to the host.
 ## Describe first
 
 These commands validate fixtures and print a planned matrix without starting a
-runtime, checking credentials, creating result directories, or making API calls:
+runtime, creating result directories, or making API calls. The plan records
+which credential variable is set, by name only; values are never read:
 
 ```bash
 make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline none --repeats 2'
@@ -41,7 +45,9 @@ make coding-eval CODING_EVAL_ARGS='--agent codex --model SUBJECT_MODEL --task re
 
 Replace `SUBJECT_MODEL` with an installed-runtime-supported model ID. Use
 `--runtime /absolute/path/to/executable` to pin the executable. Omit `--task` to
-select all five fixtures. The default is baseline instructions, two repeats.
+select all five fixtures. `--timeout SECONDS` overrides every task's subject
+timeout, and `--manifest PATH` reads a different task manifest.
+`python3 scripts/run-coding-evals.py --help` lists all options. The default is baseline instructions, two repeats.
 Repeat two reverses variant order, giving baseline/none then none/baseline.
 Do not compare different models as if only instructions changed. The CLI does
 not set reasoning-effort options or estimate API prices.
@@ -66,10 +72,11 @@ Stop hooks in `--print` mode.
 
 Execution requires explicit `--execute` after authorization for the model,
 trial count, and spend controls. Do not put credentials in prompts or arguments.
-The runner forwards only `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (from
+The runner forwards only `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` (from
 `claude setup-token`, billed to the subscription) to Claude, or `CODEX_API_KEY` to
-Codex, from an explicitly supplied environment. An API key outranks the token, as
-in Claude itself. With a subscription token, `--max-budget-usd` applies to
+Codex, from an explicitly supplied environment. When both Claude variables are
+set, both are forwarded and the API key outranks the token, as in Claude itself;
+the report names only the first one set. With a subscription token, `--max-budget-usd` applies to
 Claude's estimated cost, not to billing. It never reads saved login files or
 local API-key helpers. `OPENAI_API_KEY` is not used for Codex
 execution; credential provisioning belongs outside this tool.
@@ -128,7 +135,7 @@ make coding-eval CODING_EVAL_ARGS='--agent codex --model SUBJECT_MODEL --task re
 ```
 
 Use a distinct `--output-dir` for every invocation. The default is the ignored
-`coding-eval-results/<timestamp>/`. The runner does not retry failed trials.
+`coding-eval-results/<nanosecond timestamp>/`. The runner does not retry failed trials.
 A runtime/verification error interrupts the remaining matrix; not-run trials
 stay separate from skips and failures. Missing runtime or environment credential
 is SKIP. A subject timeout or interruption kills its process group before
@@ -136,10 +143,12 @@ cleanup. Check timeouts are distinct from subject execution timeouts.
 
 ## Results and interpretation
 
-Private `results.json` and `summary.md` retain the planned order, hashes of the
-manifest/fixtures/skills/instructions, runtime version, requested and observed
-model, transcripts, independent check results, changed paths and diff, protected
-path violations, subject/verification latency, and available runtime usage/cost.
+Private `results.json` (schema version 1) retains the planned order, hashes of
+the manifest/fixtures/skills/instructions, runtime version, requested and
+observed model, transcripts, independent check results, changed paths and diff,
+protected path violations, subject/verification latency, and available runtime
+usage/cost. `summary.md` holds only two tables: each trial's task, instructions,
+gate, status, subject seconds, and scope review, and the per-gate counts.
 Credential values are redacted from saved output; verifier processes receive
 none of the forwarded credentials. Workspaces are deleted after each trial.
 

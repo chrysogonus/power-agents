@@ -18,9 +18,11 @@ Create `~/.config/power-agents/experiment.json`:
 
 | Key | Meaning |
 | --- | --- |
-| `arms` | Relative weights for the three arms. `none`: the turn ends unchecked. `self`: self-check only, even where cross-review is on. `full`: the usual gate, with cross-review where it is enabled. |
-| `audit` | Share of `changed` turns (0 to 1) that get a blinded audit. The auditor may be either vendor, so only repositories where cross-review is allowed are audited. |
-| `capture` | `true` keeps the texts of each experiment turn for hand-labeling (see [Capture](#capture-and-labeling)). |
+| `arms` | Relative weights for the three arms, any subset of them, with weights that sum to more than 0. `none`: the turn ends unchecked. `self`: self-check only, even where cross-review is on. `full`: the usual gate, with cross-review where it is enabled. |
+| `audit` | Share of `changed` turns (0 to 1) that get a blinded audit; 0, no audits, if left out. The auditor may be either vendor, so only repositories where cross-review is allowed are audited. |
+| `capture` | `true` keeps the texts of each experiment turn for hand-labeling (see [Capture](#capture-and-labeling)); `false` if left out. |
+
+No other keys are allowed.
 
 Remove the file to stop the experiment. If the file is invalid, the gate checks
 every turn as usual, logs the error, and `doctor` reports it.
@@ -36,11 +38,13 @@ every turn as usual, logs the error, and `doctor` reports it.
    either. This keeps later turns alike in all arms.
 3. **Outcome.** When a `changed` turn ends, a background worker measures the
    final state in the same way for every arm:
-   - **Blinded audit.** A reviewer receives only the user's request and the
-     turn's diff, taken when the turn ended. It sees no transcript and no
-     answer, so it cannot tell which arm produced the changes. Claude Code or
-     Codex is chosen at random as the auditor. The log keeps its verdict and
-     its counts of `high`, `med` and `low` findings. These are null when the
+   - **Blinded audit.** A reviewer receives only the user's request (up to
+     4,000 characters), the turn's diff, taken when the turn ended, and the
+     list of other uncommitted files. It sees no transcript and no answer, so
+     it cannot tell which arm produced the changes. The auditor is chosen at
+     random among the Claude Code and Codex CLIs found on PATH: with only one
+     installed, it always audits, and with none the audit fails. The log
+     keeps its verdict and its counts of `high`, `med` and `low` findings. These are null when the
      audit failed, so failures don't count as clean.
    - **Final check.** After the audit, if the repository has a [check
      command](verify-gate.md#per-project-settings), the check runs again. If
@@ -57,8 +61,9 @@ every turn as usual, logs the error, and `doctor` reports it.
    The next turn's `check` record logs whether that turn changed the same
    files again (`rework`).
 
-Every turn also logs the model, the gate version (`gate`) and the prompt
-version (`prompts`). Every verification also logs the tokens it used:
+Every qualifying turn, in an experiment or not, also logs the model, the gate
+version (`gate`), the prompt version (`prompts`) and `review_eligible`.
+Every verification also logs the tokens it used:
 `tokens_in` counts all input, of which `tokens_cache_read` and
 `tokens_cache_write` were cache reads and writes, and `tokens_out` counts the
 output. Cached input is priced differently, so price the fields separately.
@@ -84,9 +89,11 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
   - the correction and rework rates
   - the number of failed audits and the mean cost of the gate
 
-  It also shows the mean verification cost. Last, among turns whose
-  self-check found no issues and that got a review, it shows how many had
-  review points the agent accepted: how much cross-review adds.
+  Before the per-arm table, over all turns, it shows the mean verification
+  cost; among turns whose self-check found no issues and that got a review,
+  how many had review points the agent accepted, which is how much
+  cross-review adds; and how many turns ended with open items, with the
+  correction rates of turns with and without them.
 - `export` writes one CSV row per checked turn. `--anonymize` replaces
   repository paths with hashes. Records from before log version 2 have no turn
   id and are matched to their session's latest checked turn.
@@ -114,9 +121,9 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
 - **One user, not blinded.** The user sees which turns were checked. The
   results also may not hold for other people, repositories or models.
 - **An LLM auditor.** An auditor from the same vendor as a reviewer may
-  share that reviewer's blind spots. The auditor's vendor is randomized and
-  logged, so the results can be grouped by auditor. Calibrate the auditor
-  against a hand-labeled sample.
+  share that reviewer's blind spots. The auditor's vendor is randomized when
+  both CLIs are installed, and always logged, so the results can be grouped by
+  auditor. Calibrate the auditor against a hand-labeled sample.
 - **Proxy outcomes.** The `correction` regex is crude, so validate it against
   hand labels. Rework can also be planned follow-up work.
 - **Overlap.** The audit and the check read the live working tree, and the
@@ -128,7 +135,10 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
 ## Capture and Labeling
 
 With `"capture": true`, each experiment turn keeps its texts in
-`~/.cache/verify-gate/capture/<session>.<turn>.jsonl`, readable only by you:
+`capture/<session>.<turn>.jsonl` in the [state
+directory](verify-gate.md#decision-log). The gate creates the `capture`
+directory readable only by you; the files themselves get your default
+permissions. Each file holds:
 - the request and the first answer
 - the verification reply
 - the review feedback and the agent's response to it
@@ -136,7 +146,8 @@ With `"capture": true`, each experiment turn keeps its texts in
 - the first 1,000 characters of the next prompt
 
 These files contain code and conversation. They stay on your machine and are
-never deleted automatically.
+never deleted automatically. `export --capture` does not anonymize: each line
+includes the repository's full path.
 
 ```bash
 python3 ~/.agents/hooks/verify-gate.py export --capture > label.jsonl

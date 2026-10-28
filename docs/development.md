@@ -9,7 +9,9 @@ required workflow is summarized in [Contributing](../CONTRIBUTING.md).
 The core local checks use Make, Bash, Git, `jq`, Python 3 with `tomlkit` and
 PyYAML, and [ShellCheck](https://www.shellcheck.net/). The
 [README](../README.md#quality-checks) lists the install command for Debian or
-Ubuntu.
+Ubuntu. `make test` needs the same tools except ShellCheck: the test runner
+imports `tomlkit` at startup and exercises the installer, which uses `jq` and
+PyYAML.
 
 Run the complete pipeline locally after committing and before pushing:
 
@@ -22,8 +24,10 @@ a source archive of `HEAD`. During development, use `make check` to run only the
 faster working-tree pass.
 
 The checks parse and statically analyze every repository shell script, validate
-skill metadata, exercise settings reconciliation and the installer under
-temporary isolated home directories, check the status-line output, and reject
+skill metadata, run the Python unit tests for the verify gate, settings
+reconciliation, skill validation, upstream pin parsing, and both evaluation
+runners against fake runtimes, exercise the installer, sync, and Make targets
+under temporary isolated home directories, check the status-line output, and reject
 whitespace errors or unresolved conflict markers. If `codex` is installed, the
 tests ask it to parse the managed TUI configuration and evaluate every authored
 command rule. If `claude` is installed, the tests run `claude doctor` against an
@@ -63,9 +67,12 @@ are included in the [imported skill inventory](../skills/README.md#imported-skil
 their live routing and task-effect evaluations remain unmeasured.
 
 Run `make skills-outdated` to check every pinned upstream path recorded in
-[Third-Party Notices](../THIRD_PARTY_NOTICES.md) against GitHub. It needs an
-authenticated `gh` CLI, exits 1 when any imported skill is behind, and is not
-part of `make check` or `make ci`.
+[Third-Party Notices](../THIRD_PARTY_NOTICES.md) against GitHub, including the
+core `security-best-practices` skill adapted from `openai/skills`. It needs an
+authenticated `gh` CLI and is not part of `make check` or `make ci`. It exits 0
+when every pin is current, 1 when any is behind, and 2 when a check fails, for
+example when `gh` is missing or an upstream path no longer exists. It reports
+upstream changes only; it does not compare local files with the pin.
 
 ## Behavioral Skill Evaluations
 
@@ -119,16 +126,22 @@ runner supports the repository's prompt-only fixture sets. File fixtures
 produce an explicit error. The judge has its own empty config and no tools; it
 treats prompts, expected outputs, assertions, and transcripts as untrusted data.
 
-The default is five trials per case and an 80% minimum pass rate. A trial passes
+The default is five trials per case (at least two) and an 80% minimum pass
+rate. A trial passes
 when explicit routing expectations and every assertion pass. A fixture with
 `"routing": {"allowed": []}` can pass without loading a skill. Legacy fixtures
 without routing expectations still require a repository skill load.
 Skill loading is observed through matching Skill calls and successful tool
 results, rather than the agent's statements. Judge evidence must quote the
-observed response or load record. Required, allowed, and forbidden skills are
-checked deterministically, independently of the judge. Failed assertions or
+observed response or load record. In cases with a `routing` object, required,
+allowed, and forbidden skills are checked deterministically, independently of
+the judge; many imported skill sets have one only on their last case (see
+[Skill Format](../skills/README.md#skill-format)). A case without `assertions`
+is graded on its `expected_output` alone. Failed assertions or
 routing mismatches count as failed trials. Runtime, protocol, or judge errors
-invalidate the run even if the remaining trials reach the threshold. A missing
+invalidate the run even if the remaining trials reach the threshold. A trial is
+also an error when the runtime does not report every installed repository skill
+as discovered, or when it denies any tool permission. A missing
 runtime or environment key reports `SKIP`; it never reports `PASS`.
 
 Results go to the gitignored `eval-results/<run-id>/results.json` and `summary.md`,
@@ -146,17 +159,20 @@ The runner also checks required flags before a credentialed run. It uses normal
 headless mode to preserve automatic skill discovery, restricts setting sources
 to its isolated user config, disables hooks, and supplies an empty MCP config.
 Sessions have a 180-second timeout and a $1 API budget cap each. Use `--model`,
-`--judge-model`, `--timeout`, `--runtime`, or `--output-dir` through `EVAL_ARGS`
+`--judge-model`, `--timeout`, `--runtime`, `--skills-root`, or `--output-dir`
+through `EVAL_ARGS`
 when needed; `python3 scripts/run-evals.py --help` lists all options. Codex is not
 supported as an evaluation runtime yet.
 
 ## Coding Outcome Evaluations
 
-A separate [coding runner](coding-evaluations.md) evaluates retry idempotence,
-settings preservation, and a parser refactor using independent acceptance and
-regression checks. It supports isolated Claude Code and Codex adapters and
-baseline/no-instruction comparisons. By default it only describes the
-planned trials:
+A separate [coding runner](coding-evaluations.md) evaluates five small Python
+tasks (retry idempotence, settings preservation, a parser refactor, pagination
+bounds, and CSV export) using independent acceptance and regression checks. It
+supports isolated Claude Code and Codex adapters, baseline/no-instruction
+comparisons, and, for Claude Code, runs with the
+[verify gate](coding-evaluations.md#verify-gate-on-or-off) on or off
+(`--gate off on`). By default it only describes the planned trials:
 
 ```bash
 make coding-eval CODING_EVAL_ARGS='--agent claude --model SUBJECT_MODEL --task retry-idempotence --instructions baseline none --repeats 2'

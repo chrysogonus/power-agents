@@ -38,12 +38,18 @@ paste-ready PR comments, use `review-report`.
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
 | [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
 
+`security-best-practices` is adapted from a pinned
+[openai/skills](../THIRD_PARTY_NOTICES.md) path, so `make skills-outdated`
+checks it together with the imported skills.
+
 ## Imported Skills
 
 These ten skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
-unmeasured. Each package includes its required references, license, and routing
-fixtures. Pinned origins and adaptations are recorded in
+unmeasured. Each package includes its required references, license, and an
+evaluation fixture set; in most of them only the last case carries a `routing`
+object (see [Skill Format](#skill-format)), so the other cases fall back to
+"any repository skill loads". Pinned origins and adaptations are recorded in
 [Third-Party Notices](../THIRD_PARTY_NOTICES.md#skills-integrated-from-the-research-catalog).
 
 | Skill | Purpose and boundary |
@@ -106,10 +112,24 @@ description: Explain what this does and when an agent should use it.
 Follow the workflow described here.
 ```
 
+The validator (`scripts/validate-skills.py`, run by `./install.sh` and
+`make check`) treats every directory under `skills/` as a skill and also
+requires a non-empty Markdown body after the frontmatter.
+
 Supporting scripts, references, or assets belong inside the same skill
 directory. Behavioral evaluation cases use the Agent Skills
 `evals/evals.json` format with realistic prompts, expected outputs, and
-objective assertions where possible.
+objective assertions where possible. The `evals/` directory is optional; when it
+exists, the validator requires:
+
+- `evals/evals.json` with `skill_name` equal to the directory name and a
+  non-empty `evals` array;
+- per case, a unique integer `id` and non-empty `prompt` and `expected_output`
+  strings;
+- optionally, `assertions` as a non-empty array of non-empty strings (without
+  it, `expected_output` is the only graded assertion), a `routing` object as
+  described below, and `files` naming existing files inside the skill
+  directory.
 
 Run `make eval` to execute the fixtures using paid Anthropic API calls, or use
 `make eval EVAL_ARGS='--skill review-report'` to select one fixture set while
@@ -118,8 +138,11 @@ keeping all skills available for routing. See the repository's
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
 All 13 skills now have fixture sets, including security-specific positive and
-negative cases and simple questions that should load no skill. This is coverage,
-not evidence of live routing success.
+negative cases and simple questions that should load no skill. Every case in the
+`grilling`, `ponytail`, `prompt-refiner`, `review-report`, and
+`security-best-practices` sets has a `routing` object; the other eight sets have
+one only on their last case. This is coverage, not evidence of live routing
+success.
 
 Fixtures can add a `routing` object:
 
@@ -130,12 +153,17 @@ Fixtures can add a `routing` object:
 `required` lists skills that must successfully load; `allowed`, when present,
 limits all loads; `forbidden` lists skills that must not load. Lists contain
 unique existing skill names. Required skills must be allowed and cannot be
-forbidden. Use `{"allowed": []}` for a no-skill task. When `routing` is absent,
+forbidden; an empty object `{}` is invalid. Use `{"allowed": []}` for a no-skill
+task. When `routing` is absent,
 the old requirement to load any repository skill remains for compatibility.
 The judge still grades response assertions; routing checks do not depend on its
 opinion. Reports include missing required skills and unexpected activations.
-Keep prompts natural, and test explicit invocation separately. Review routing
-fixtures use distinct prompts; other legacy fixture sets are retained.
+Keep prompts natural, and test explicit invocation separately. The
+`review-report` and `security-best-practices` review fixtures use distinct
+prompts. Ten other sets still share one identical review prompt ("Review this PR
+for correctness and security before merge…") as their routing case, and most of the
+imported sets' remaining cases are legacy prompts that tell the agent to load a
+skill first.
 
 Compare global instruction variants with `--instructions baseline|none`
 or `--instruction-file PATH`. See the [comparison protocol](../docs/modernization.md)
