@@ -188,8 +188,8 @@ To summarize the log, run
 - raw counts of turns, verification replies, review verdicts, and
   project-check results
 - the share of verifications that fixed something; a reply counts as a fix
-  when it starts with `Verification:` and contains "fix", "correct", or
-  "changed", which is a rough heuristic
+  when it starts with `Verification:` and contains "fix", "corrected",
+  "correction", or "changed", which is a rough heuristic
 - the share of review points the agent accepted, the mean review run time, and
   the mean wait for it
 - fix and review rates by trigger (`changed` or `long`) and by repository;

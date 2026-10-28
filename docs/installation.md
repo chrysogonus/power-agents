@@ -67,8 +67,9 @@ An unknown name fails before anything changes.
   matters if a dotfile manager links them; an unreadable selection stops it
   with `Invalid component selection`. Fix or delete the file.
 - **Deselecting a component removes only what the installer added for it.** It
-  unlinks only links that resolve into this checkout; for skills, only links
-  whose target text is exactly this checkout's `skills/<name>`. For `statusline`, it
+  unlinks only links that resolve into this checkout, plus skill links whose
+  target text is exactly this checkout's `skills/<name>` for a skill since
+  removed. For `statusline`, it
   removes Claude Code's `statusLine` while its command still runs this
   checkout's script through the installed link, even if you added fields such as
   `padding`. It removes Codex's `tui.status_line` and
@@ -97,7 +98,7 @@ An unknown name fails before anything changes.
 Run `./install.sh --help` for a usage summary. The installer exits with status
 2 for an unknown argument or component, or for `--uninstall` combined with
 `--components`, and with status 1 for every other failure. Before changing
-anything it requires `jq`, `python3`, and `realpath`.
+anything it requires Bash 4.4 or newer, `jq`, `python3`, and `realpath`.
 
 The installer honors `CODEX_HOME` and `CLAUDE_CONFIG_DIR`; when set, each must
 be an absolute directory other than `/`, and the shared, Codex, and Claude roots
@@ -218,7 +219,7 @@ Use `make sync` to update an installed checkout:
 make -C ~/power-agents sync
 ```
 
-`sync.sh` requires Bash 4 or newer and `git`. It always runs `git fetch`, then
+`sync.sh` requires Bash 4.4 or newer and `git`. It always runs `git fetch`, then
 fast-forwards to the current branch's configured upstream and reruns the
 installer. It does not check commit signatures: anyone who
 can push to the upstream controls the code that sync installs, including the

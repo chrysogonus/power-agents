@@ -913,10 +913,12 @@ class VerifyGateTests(unittest.TestCase):
                  "result": "Verification: I corrected one claim."},
                 {"ts": now, "session": "y", "step": "verified",
                  "result": "Verification: unable to verify; no tools available."},
+                {"ts": now, "session": "z", "step": "verified",
+                 "result": "Verification: all claims correct."},
             ):
                 f.write(json.dumps(record) + "\n")
         stats = self.run_gate(["stats"], "").stdout
-        for line in ("verification fixed: 2", "verification other: 1",
+        for line in ("verification fixed: 2", "verification other: 2",
                      "turns long: 1", "  long: 1 checked, 1 fixed (100%)"):
             self.assertIn(line, stats)
         recent = self.run_gate(["stats", "--since", "1"], "").stdout
@@ -1212,6 +1214,7 @@ class VerifyGateTests(unittest.TestCase):
         self.wait_for("audit")
         self.mark(prompt="NEXT-6")
         captured = self.run_gate(["export", "--capture"], "").stdout.splitlines()
+        capture_dir = self.cache / "verify-gate" / "capture"
         self.assertEqual(len(captured), 1)
         item = json.loads(captured[0])
         self.assertEqual(item["session"], f"session-{self.session}")
@@ -1222,6 +1225,8 @@ class VerifyGateTests(unittest.TestCase):
                           ("next", "NEXT-6")):
             self.assertIn(text, item[key])
         self.assertIsNone(item["label_fix_real"])
+        for path in capture_dir.iterdir():
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(item["arm"], "full")
 
         # Pruning old state skips the capture directory.

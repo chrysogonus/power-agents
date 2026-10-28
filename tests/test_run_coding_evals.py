@@ -124,8 +124,10 @@ class CodingRunnerTests(unittest.TestCase):
                         self.assertEqual(len(loading['memory_files']), 0 if variant == 'none' else 1)
                         self.assertIn('ponytail', loading['user_skills'])
                         self.assertNotIn('simplify', loading['user_skills'])
+                        self.assertTrue(report['isolation']['native_instruction_loading_confirmed'])
                     else:
                         self.assertNotIn('claude_md_debug_lines', trial['runtime'])
+                        self.assertFalse(report['isolation']['native_instruction_loading_confirmed'])
                     self.assertEqual(report['counts']['started'], 1)
                     self.assertEqual(output.stat().st_mode & 0o777, 0o700)
                     self.assertFalse(Path(trial['workspace']).exists())
@@ -239,6 +241,7 @@ class CodingRunnerTests(unittest.TestCase):
         self.assertEqual(trial['status'], 'ERROR')
         self.assertIn('/context', trial['error'])
         self.assertEqual(trial['runtime']['instruction_loading']['memory_files'], ['/elsewhere/CLAUDE.md'])
+        self.assertFalse(report['isolation']['native_instruction_loading_confirmed'])
         self.assertFalse(counter.exists())
 
     def test_claude_subscription_token_is_forwarded_and_redacted(self):

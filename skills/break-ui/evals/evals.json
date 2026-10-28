@@ -9,7 +9,12 @@
         "The first task skill loaded is break-ui.",
         "break-ui successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "break-ui"
+        ]
+      }
     },
     {
       "id": 2,
@@ -19,7 +24,12 @@
         "The first task skill loaded is break-ui.",
         "break-ui successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "break-ui"
+        ]
+      }
     },
     {
       "id": 3,
@@ -29,7 +39,15 @@
         "The first task skill loaded is frontend-design.",
         "break-ui is not loaded.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "frontend-design"
+        ],
+        "forbidden": [
+          "break-ui"
+        ]
+      }
     },
     {
       "id": 4,

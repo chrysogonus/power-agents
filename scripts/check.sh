@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if ((BASH_VERSINFO[0] < 4)); then
-  echo "ERROR: Bash 4 or newer is required." >&2
+if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 404)); then
+  echo "ERROR: Bash 4.4 or newer is required." >&2
   echo "       See README.md#quality-checks for setup instructions." >&2
   exit 1
 fi

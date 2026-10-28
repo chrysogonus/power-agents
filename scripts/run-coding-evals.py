@@ -322,7 +322,9 @@ def run_subject(agent: str, executable: str, model: str, task: dict, workspace: 
                    'user_skills': sorted(row[0] for row in context_table(context['stdout'], 'Skills') if row[1] == 'User')}
         staged = [str(config / 'CLAUDE.md')] if (config / 'CLAUDE.md').exists() else []
         skills = sorted(path.name for path in (config / 'skills').iterdir() if (path / 'SKILL.md').is_file())
-        if context['error'] or context['returncode'] or loading['memory_files'] != staged or loading['user_skills'] != skills:
+        loading['confirmed'] = not (context['error'] or context['returncode']) and (
+            loading['memory_files'] == staged and loading['user_skills'] == skills)
+        if not loading['confirmed']:
             return {**context, 'argv': argv, 'instruction_loading': loading,
                     'error': 'Claude /context did not confirm exactly the staged instructions and skills.'}
     else:
@@ -569,6 +571,9 @@ def main() -> int:
             write_results(output, report)
             if trial['status'] == 'ERROR':
                 break
+        # Confirmed only when /context matched the staged files in every trial.
+        report['isolation']['native_instruction_loading_confirmed'] = all(
+            ((trial.get('runtime') or {}).get('instruction_loading') or {}).get('confirmed') for trial in trials)
         write_results(output, report)
         statuses = {trial['status'] for trial in trials}
         print(f"Results: {output}")

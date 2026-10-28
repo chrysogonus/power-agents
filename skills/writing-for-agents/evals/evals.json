@@ -9,7 +9,12 @@
         "The first task skill loaded is writing-for-agents.",
         "writing-for-agents successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "writing-for-agents"
+        ]
+      }
     },
     {
       "id": 2,
@@ -19,7 +24,12 @@
         "The first task skill loaded is writing-for-agents.",
         "writing-for-agents successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "writing-for-agents"
+        ]
+      }
     },
     {
       "id": 3,
@@ -29,7 +39,15 @@
         "The first task skill loaded is prompt-refiner.",
         "writing-for-agents is not loaded.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "prompt-refiner"
+        ],
+        "forbidden": [
+          "writing-for-agents"
+        ]
+      }
     },
     {
       "id": 4,

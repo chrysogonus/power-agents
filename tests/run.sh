@@ -933,6 +933,10 @@ test_component_selection() {
 
   run_installer_args "$test_home" --components all
   ln -s "$TEST_ROOT/elsewhere" "$test_home/.agents/skills/local-link"
+  # A skill link that reaches this checkout through another path.
+  ln -s "$ROOT" "$TEST_ROOT/checkout-alias"
+  ln -sfn "$TEST_ROOT/checkout-alias/skills/ponytail" \
+    "$test_home/.agents/skills/ponytail"
   jq '.model = "opus" | .statusLine.padding = 2' \
     "$test_home/.claude/settings.json" \
     >"$test_home/settings.json"
@@ -945,6 +949,8 @@ test_component_selection() {
     "$test_home/.codex" -lname "$ROOT/*" -print)"
   [[ "$repository_links" == "$test_home/.agents/hooks/verify-gate.py" ]] ||
     fail "Deselected components left repository links: $repository_links"
+  [[ ! -L "$test_home/.agents/skills/ponytail" ]] ||
+    fail "Removing skills kept a link to this checkout through another path"
   [[ "$(readlink "$test_home/.agents/skills/local-link")" == \
     "$TEST_ROOT/elsewhere" ]] ||
     fail "Removing skills changed an unrelated skill link"
@@ -1593,7 +1599,8 @@ test_make_targets() {
   actual="$(make --no-print-directory -C "$ROOT")"
   assert_contains <(printf '%s\n' "$actual") "Usage: make <target>"
 
-  for target in install uninstall sync test check ci eval coding-eval; do
+  for target in install uninstall sync test check ci eval coding-eval \
+    skills-outdated; do
     actual="$(make --no-print-directory -n -C "$ROOT" "$target")"
     case "$target" in
       install) [[ "$actual" == "./install.sh" ]] ;;
@@ -1604,6 +1611,7 @@ test_make_targets() {
       ci) [[ "$actual" == "./scripts/ci.sh" ]] ;;
       eval) [[ "$actual" == "python3 ./scripts/run-evals.py " ]] ;;
       coding-eval) [[ "$actual" == "python3 ./scripts/run-coding-evals.py " ]] ;;
+      skills-outdated) [[ "$actual" == "python3 ./scripts/check-skill-upstreams.py" ]] ;;
     esac || fail "Unexpected make $target command: $actual"
   done
 }

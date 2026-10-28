@@ -9,7 +9,12 @@
         "The first task skill loaded is code-simplification.",
         "code-simplification successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ]
+      }
     },
     {
       "id": 2,
@@ -19,7 +24,12 @@
         "The first task skill loaded is code-simplification.",
         "code-simplification successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ]
+      }
     },
     {
       "id": 3,
@@ -29,7 +39,15 @@
         "The first task skill loaded is ponytail.",
         "code-simplification is not loaded.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "ponytail"
+        ],
+        "forbidden": [
+          "code-simplification"
+        ]
+      }
     },
     {
       "id": 4,

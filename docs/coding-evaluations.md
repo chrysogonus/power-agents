@@ -163,7 +163,8 @@ its work. Generated `__pycache__` and Git internals are excluded from the diff.
 
 Missing usage, cost, model, skill loads, or native instruction-loading evidence
 is null with an explanation. A staged native instruction file proves placement,
-not model adherence. Claude trials also save a redacted, owner-only
+not model adherence. `isolation.native_instruction_loading_confirmed` is true
+only when Claude's `/context` matched the staged files in every trial. Claude trials also save a redacted, owner-only
 `trial-N-claude-debug.log` and list its `CLAUDE.md` lines as
 `claude_md_debug_lines` for manual review of native loading; other secrets in
 that log are not pattern-matched. Codex JSONL does not provide a confirmed Skill-tool loading

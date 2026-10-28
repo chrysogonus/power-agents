@@ -46,10 +46,9 @@ checks it together with the imported skills.
 
 These ten skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
-unmeasured. Each package includes its required references, license, and an
-evaluation fixture set; in most of them only the last case carries a `routing`
-object (see [Skill Format](#skill-format)), so the other cases fall back to
-"any repository skill loads". Pinned origins and adaptations are recorded in
+unmeasured. Each package includes its required references, license, and
+routing fixtures (see [Skill Format](#skill-format)). Pinned origins and
+adaptations are recorded in
 [Third-Party Notices](../THIRD_PARTY_NOTICES.md#skills-integrated-from-the-research-catalog).
 
 | Skill | Purpose and boundary |
@@ -138,11 +137,8 @@ keeping all skills available for routing. See the repository's
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
 All 13 skills now have fixture sets, including security-specific positive and
-negative cases and simple questions that should load no skill. Every case in the
-`grilling`, `ponytail`, `prompt-refiner`, `review-report`, and
-`security-best-practices` sets has a `routing` object; the other eight sets have
-one only on their last case. This is coverage, not evidence of live routing
-success.
+negative cases and simple questions that should load no skill. Every case has
+a `routing` object. This is coverage, not evidence of live routing success.
 
 Fixtures can add a `routing` object:
 
@@ -161,7 +157,7 @@ opinion. Reports include missing required skills and unexpected activations.
 Keep prompts natural, and test explicit invocation separately. The
 `review-report` and `security-best-practices` review fixtures use distinct
 prompts. Ten other sets still share one identical review prompt ("Review this PR
-for correctness and security before merge…") as their routing case, and most of the
+for correctness and security before merge…") as a shared negative case, and most of the
 imported sets' remaining cases are legacy prompts that tell the agent to load a
 skill first.
 

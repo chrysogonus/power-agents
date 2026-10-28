@@ -137,8 +137,7 @@ python3 ~/.agents/hooks/verify-gate.py export [--since DAYS] [--anonymize] > tur
 With `"capture": true`, each experiment turn keeps its texts in
 `capture/<session>.<turn>.jsonl` in the [state
 directory](verify-gate.md#decision-log). The gate creates the `capture`
-directory readable only by you; the files themselves get your default
-permissions. Each file holds:
+directory and new capture files readable only by you. Each file holds:
 - the request and the first answer
 - the verification reply
 - the review feedback and the agent's response to it

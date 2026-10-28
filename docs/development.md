@@ -6,7 +6,7 @@ required workflow is summarized in [Contributing](../CONTRIBUTING.md).
 
 ## Quality Checks
 
-The core local checks use Make, Bash, Git, `jq`, Python 3 with `tomlkit` and
+The core local checks use Make, Bash 4.4 or newer, Git, `jq`, Python 3 with `tomlkit` and
 PyYAML, and [ShellCheck](https://www.shellcheck.net/). The
 [README](../README.md#quality-checks) lists the install command for Debian or
 Ubuntu. `make test` needs the same tools except ShellCheck: the test runner
@@ -135,7 +135,7 @@ Skill loading is observed through matching Skill calls and successful tool
 results, rather than the agent's statements. Judge evidence must quote the
 observed response or load record. In cases with a `routing` object, required,
 allowed, and forbidden skills are checked deterministically, independently of
-the judge; many imported skill sets have one only on their last case (see
+the judge; every current case has one (see
 [Skill Format](../skills/README.md#skill-format)). A case without `assertions`
 is graded on its `expected_output` alone. Failed assertions or
 routing mismatches count as failed trials. Runtime, protocol, or judge errors

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Bash 4.4 is the first to expand empty arrays under set -u.
+if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 404)); then
+  echo "ERROR: Bash 4.4 or newer is required; see README.md#installation." >&2
+  exit 1
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_INSTRUCTIONS="$ROOT/instructions/general-global.md"
 SKILLS="$ROOT/skills"
@@ -635,7 +641,9 @@ remove_skill_links() {
 
   for skill_link in "$target_root"/*; do
     [[ -L "$skill_link" ]] || continue
-    if [[ "$(readlink "$skill_link")" == "$SKILLS/${skill_link##*/}" ]]; then
+    # The text match also catches links to skills since removed here.
+    if links_to "$SKILLS/${skill_link##*/}" "$skill_link" ||
+      [[ "$(readlink "$skill_link")" == "$SKILLS/${skill_link##*/}" ]]; then
       unlink_owned "$skill_link"
     fi
   done

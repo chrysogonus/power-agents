@@ -482,7 +482,9 @@ def capture(path, **fields):
         CAPTURE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
         # Appends, not rewrites: the outcome worker and the next prompt
         # may write at the same time.
-        with open(path, "a") as f:
+        # The texts may hold code and secrets: readable by the user only.
+        with open(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT,
+                          0o600), "a") as f:
             f.write(json.dumps(fields) + "\n")
     except OSError:
         pass
@@ -1471,7 +1473,7 @@ def toggle(arg):
     elif arg != "status":
         sys.exit("usage: verify-gate.py cross-review on|off|status")
     print("cross-review:", "on" if TOGGLE.exists() else "off",
-          "(CROSS_REVIEW env overrides per session)")
+          "(CROSS_REVIEW and projects.json cross_review override it)")
 
 
 def read_log():
@@ -1499,7 +1501,8 @@ def verification_kind(result):
         return "other"
     if m.group(1):
         return "no issues"
-    if re.search(r"\b(fix|correct|changed)", m.group(2), re.I):
+    # "corrected", not "correct": "claims correct" reports no fix.
+    if re.search(r"\b(fix|corrected|correction|changed)", m.group(2), re.I):
         return "fixed"
     return "other"  # e.g. "unable to verify"
 

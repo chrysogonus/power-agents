@@ -9,7 +9,12 @@
         "The first task skill loaded is vercel-composition-patterns.",
         "vercel-composition-patterns successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "vercel-composition-patterns"
+        ]
+      }
     },
     {
       "id": 2,
@@ -19,7 +24,12 @@
         "The first task skill loaded is vercel-composition-patterns.",
         "vercel-composition-patterns successfully loads.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "vercel-composition-patterns"
+        ]
+      }
     },
     {
       "id": 3,
@@ -29,7 +39,15 @@
         "The first task skill loaded is vercel-react-best-practices.",
         "vercel-composition-patterns is not loaded.",
         "The response does not invent findings or claim to have inspected the promised artifacts."
-      ]
+      ],
+      "routing": {
+        "required": [
+          "vercel-react-best-practices"
+        ],
+        "forbidden": [
+          "vercel-composition-patterns"
+        ]
+      }
     },
     {
       "id": 4,

@@ -10,8 +10,8 @@ fail() {
   exit 1
 }
 
-if ((BASH_VERSINFO[0] < 4)); then
-  fail "Bash 4 or newer is required; see README.md#installation."
+if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 404)); then
+  fail "Bash 4.4 or newer is required; see README.md#installation."
 fi
 
 if ! command -v git >/dev/null 2>&1; then
