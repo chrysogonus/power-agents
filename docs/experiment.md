@@ -163,8 +163,8 @@ hand:
 | `label_audit_valid` | Is the audit verdict right? |
 | `label_correction` | Was the next prompt a correction? |
 
-A labeled sample checks the self-reported numbers, the 96% acceptance rate
-of review points, and the audit and correction signals.
+A labeled sample checks the self-reported numbers, the acceptance rate of
+review points, and the audit and correction signals.
 
 ## Controlled Benchmark
 
