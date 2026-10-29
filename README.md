@@ -344,6 +344,8 @@ repository. It is not installed globally.
 
 ## Further Reading
 
+- [Power Agents in pictures](docs/overview.md): a short visual tour, good for
+  a first read or a talk
 - [Installation reference](docs/installation.md): every installed path, merge
   rules, conflicts, sync, and uninstall
 - [Verify gate and cross-review](docs/verify-gate.md): when it runs, controls,
