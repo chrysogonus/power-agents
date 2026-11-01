@@ -81,7 +81,9 @@ Apache License 2.0. The complete license is preserved at
 
 The following packages were imported from pinned revisions on 2026-10-05;
 `ponytail` was re-synced to Ponytail 5 on 2026-10-24, and
-`test-driven-development` and `systematic-debugging` were added on 2026-11-01.
+`test-driven-development` and `systematic-debugging` were added on 2026-11-01, and
+`grilling`, `code-simplification`, and `performance-optimization` were re-synced
+on 2026-11-01.
 All have normal automatic discovery, as explicitly requested by the owner.
 Live routing and effect evaluations remain unmeasured.
 
@@ -89,13 +91,13 @@ Live routing and effect evaluations remain unmeasured.
 | --- | --- | --- | --- |
 | `ponytail` | [DietrichGebert/ponytail / skills/ponytail](https://github.com/DietrichGebert/ponytail/tree/09c434ab73ca43761c5d8b0c5d341926c2fba710/skills/ponytail) | `09c434ab73ca43761c5d8b0c5d341926c2fba710` | MIT |
 | `writing-for-agents` | [mattpocock/skills / skills/productivity/writing-for-agents](https://github.com/mattpocock/skills/tree/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/writing-for-agents) | `4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d` | MIT |
-| `grilling` | [mattpocock/skills / skills/productivity/grilling](https://github.com/mattpocock/skills/tree/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/grilling) | `4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d` | MIT |
+| `grilling` | [mattpocock/skills / skills/productivity/grilling](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/productivity/grilling) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
 | `vercel-react-best-practices` | [vercel-labs/agent-skills / skills/react-best-practices](https://github.com/vercel-labs/agent-skills/tree/063bee94c3f4df8453406c830b0a7df0f2860278/skills/react-best-practices) | `063bee94c3f4df8453406c830b0a7df0f2860278` | MIT (declared in SKILL.md) |
 | `vercel-composition-patterns` | [vercel-labs/agent-skills / skills/composition-patterns](https://github.com/vercel-labs/agent-skills/tree/063bee94c3f4df8453406c830b0a7df0f2860278/skills/composition-patterns) | `063bee94c3f4df8453406c830b0a7df0f2860278` | MIT (declared in SKILL.md) |
 | `supabase-postgres-best-practices` | [supabase/agent-skills / skills/supabase-postgres-best-practices](https://github.com/supabase/agent-skills/tree/c9be0e931b7930f7d02126d04774d904c381e7d7/skills/supabase-postgres-best-practices) | `c9be0e931b7930f7d02126d04774d904c381e7d7` | MIT |
 | `break-ui` | [emilkowalski/skills / skills/break-ui](https://github.com/emilkowalski/skills/tree/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/skills/break-ui) | `e8a175de22ae1e49370fc144c1f3bb9aeedf988d` | MIT |
-| `code-simplification` | [addyosmani/agent-skills / skills/code-simplification](https://github.com/addyosmani/agent-skills/tree/1401c8b8030e023baeebb31781a6653fe8e93026/skills/code-simplification) | `1401c8b8030e023baeebb31781a6653fe8e93026` | MIT |
-| `performance-optimization` | [addyosmani/agent-skills / skills/performance-optimization](https://github.com/addyosmani/agent-skills/tree/1401c8b8030e023baeebb31781a6653fe8e93026/skills/performance-optimization) | `1401c8b8030e023baeebb31781a6653fe8e93026` | MIT |
+| `code-simplification` | [addyosmani/agent-skills / skills/code-simplification](https://github.com/addyosmani/agent-skills/tree/8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e/skills/code-simplification) | `8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e` | MIT |
+| `performance-optimization` | [addyosmani/agent-skills / skills/performance-optimization](https://github.com/addyosmani/agent-skills/tree/8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e/skills/performance-optimization) | `8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e` | MIT |
 | `test-driven-development` | [obra/superpowers / skills/test-driven-development](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/test-driven-development) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
 | `systematic-debugging` | [obra/superpowers / skills/systematic-debugging](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/systematic-debugging) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
 | `frontend-design` | [anthropics/skills / skills/frontend-design](https://github.com/anthropics/skills/tree/683bc88e56f3e09ba94f7055977f3d3aa499f202/skills/frontend-design) | `683bc88e56f3e09ba94f7055977f3d3aa499f202` | Apache-2.0 |

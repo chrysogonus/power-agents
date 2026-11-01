@@ -23,10 +23,11 @@
     {
       "name": "grilling",
       "repository": "mattpocock/skills",
-      "revision": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
       "upstream_path": "skills/productivity/grilling",
       "local_adaptations": "Limited routing to requested interviews; allowed direct factual lookups when subagents are unavailable or unauthorized; made implementation a separate requested step.",
-      "whitespace_normalized": []
+      "whitespace_normalized": [],
+      "resynced_on": "2026-11-01"
     },
     {
       "name": "vercel-react-best-practices",
@@ -84,18 +85,20 @@
     {
       "name": "code-simplification",
       "repository": "addyosmani/agent-skills",
-      "revision": "1401c8b8030e023baeebb31781a6653fe8e93026",
+      "revision": "8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e",
       "upstream_path": "skills/code-simplification",
       "local_adaptations": "Separated working-code refactoring from new functionality and reviews; removed mandatory PR splitting and automatic commits.",
-      "whitespace_normalized": []
+      "whitespace_normalized": [],
+      "resynced_on": "2026-11-01"
     },
     {
       "name": "performance-optimization",
       "repository": "addyosmani/agent-skills",
-      "revision": "1401c8b8030e023baeebb31781a6653fe8e93026",
+      "revision": "8bfcc1f9916f2eea55494d8c1fa7f4bde867dd9e",
       "upstream_path": "skills/performance-optimization",
       "local_adaptations": "Routed React/Next.js and Postgres-specific work to their owners; removed automatic commits; copied the repo-level performance checklist into local references/ and repaired its link. Repaired both optimization-patterns.md pointers to the relocated performance checklist.",
-      "whitespace_normalized": []
+      "whitespace_normalized": [],
+      "resynced_on": "2026-11-01"
     },
     {
       "name": "frontend-design",

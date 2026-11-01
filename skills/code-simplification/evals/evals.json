@@ -64,6 +64,23 @@
           "review-report"
         ]
       }
+    },
+    {
+      "id": 5,
+      "prompt": "Clean this up, it works but it has grown hard to follow:\n\n```python\ndef label(n):\n    if n is not None:\n        if n > 0:\n            return 'positive'\n        else:\n            if n == 0:\n                return 'zero'\n            else:\n                return 'negative'\n    else:\n        return 'missing'\n```",
+      "expected_output": "Load code-simplification and return a flatter version with identical results for None, positive, zero, and negative inputs.",
+      "assertions": [
+        "code-simplification is loaded.",
+        "The simplified function returns the same label as the original for None, 0, a positive, and a negative input."
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ],
+        "forbidden": [
+          "ponytail"
+        ]
+      }
     }
   ]
 }

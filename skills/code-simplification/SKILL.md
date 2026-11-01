@@ -1,7 +1,8 @@
 ---
 name: code-simplification
 description: Use when refactoring working code for readability and maintainability while preserving
-  behavior, exceptions, ordering, and side effects. For implementing new behavior or fixing
+  behavior, exceptions, ordering, and side effects, including a function pasted inline that should
+  only be simplified, cleaned up, or un-nested. For implementing new behavior or fixing
   a bug with a minimal solution use ponytail. General code reviews belong to the built-in review or
   review-report.
 metadata:
