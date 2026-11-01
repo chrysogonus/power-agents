@@ -43,7 +43,8 @@ class RunEvalsTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def prepare_run(self, mode="success", *, credentials=True, extra=(), missing=False):
+    def prepare_run(self, mode="success", *, credentials=True, credential="ANTHROPIC_API_KEY",
+                    extra=(), missing=False):
         self.invocation += 1
         runtime = self.directory / f"claude-{self.invocation}"
         counter = self.directory / f"count-{self.invocation}"
@@ -56,8 +57,9 @@ class RunEvalsTests(unittest.TestCase):
         output = self.directory / f"results-{self.invocation}"
         env = dict(os.environ)
         env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
         if credentials:
-            env["ANTHROPIC_API_KEY"] = self.secret
+            env[credential] = self.secret
         env["EVAL_UNMANAGED_SECRET"] = "must-not-inherit"
         command = ["python3", str(RUNNER), "--runtime", str(runtime),
                    "--skills-root", str(self.skills), "--output-dir", str(output),
@@ -202,13 +204,15 @@ class RunEvalsTests(unittest.TestCase):
         self.assertEqual(self.document(output)["status"], "ERROR")
 
     def test_credentials_are_redacted_from_every_artifact_and_console(self):
-        result, output = self.run_eval("redact")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn(self.secret, result.stdout + result.stderr)
-        for file in output.rglob("*"):
-            if file.is_file():
-                self.assertNotIn(self.secret, file.read_text(), str(file))
-        self.assertIn("[REDACTED]", (output / "results.json").read_text())
+        for credential in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+            with self.subTest(credential=credential):
+                result, output = self.run_eval("redact", credential=credential)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn(self.secret, result.stdout + result.stderr)
+                for file in output.rglob("*"):
+                    if file.is_file():
+                        self.assertNotIn(self.secret, file.read_text(), str(file))
+                self.assertIn("[REDACTED]", (output / "results.json").read_text())
 
     def test_invalid_options_fixtures_and_selection_are_errors(self):
         for extra in (("--repeats", "1"), ("--threshold", "nan"),

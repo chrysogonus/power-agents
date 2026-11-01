@@ -83,7 +83,10 @@ commands test the runner against a fake runtime with no network or credentials.
 The runner uses Python 3 and the repository's existing PyYAML dependency.
 
 Set `ANTHROPIC_API_KEY` in your environment without putting it in a command or
-file in this repository. For example, in Bash:
+file in this repository. To bill a Claude subscription's usage limits instead,
+create a long-lived token with `claude setup-token` and set
+`CLAUDE_CODE_OAUTH_TOKEN` the same way; when both are set, the API key is used.
+For example, in Bash:
 
 ```bash
 read -rsp 'Anthropic API key: ' ANTHROPIC_API_KEY
@@ -121,7 +124,7 @@ select a different skill. Each trial starts with a temporary home, config root,
 and working directory. By default, the baseline `instructions/general-global.md`
 is copied to the isolated Claude user-wide `CLAUDE.md`; instruction text is never
 inserted into the task prompt. It loads no live user configuration or credentials;
-only `ANTHROPIC_API_KEY` is forwarded. Cases get the Skill tool only; this first
+only the chosen `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is forwarded. Cases get the Skill tool only; this first
 runner supports the repository's prompt-only fixture sets. File fixtures
 produce an explicit error. The judge has its own empty config and no tools; it
 treats prompts, expected outputs, assertions, and transcripts as untrusted data.
@@ -142,7 +145,7 @@ routing mismatches count as failed trials. Runtime, protocol, or judge errors
 invalidate the run even if the remaining trials reach the threshold. A trial is
 also an error when the runtime does not report every installed repository skill
 as discovered, or when it denies any tool permission. A missing
-runtime or environment key reports `SKIP`; it never reports `PASS`.
+runtime or credential reports `SKIP`; it never reports `PASS`.
 
 Results go to the gitignored `eval-results/<run-id>/results.json` and `summary.md`,
 including per-case pass rates, each assertion's grade and evidence, redacted

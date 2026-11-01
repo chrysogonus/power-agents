@@ -34,6 +34,7 @@ def main(mode: str, counter: Path) -> None:
     assert not os.environ.get("ANTHROPIC_AUTH_TOKEN")
     assert not os.environ.get("CLAUDE_CODE_SIMPLE")
     assert not os.environ.get("EVAL_UNMANAGED_SECRET")
+    secret = os.environ.get("ANTHROPIC_API_KEY") or os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
     assert "--bare" not in arguments
     assert "--dangerously-skip-permissions" not in arguments
     assert arguments[arguments.index("--permission-mode") + 1] == "dontAsk"
@@ -63,7 +64,7 @@ def main(mode: str, counter: Path) -> None:
         print("not a JSON event")
         return
     if mode == "nonzero":
-        print(os.environ["ANTHROPIC_API_KEY"], file=sys.stderr)
+        print(secret, file=sys.stderr)
         sys.exit(1)
 
     emit({"type": "system", "subtype": "init", "model": "fake-model",
@@ -106,8 +107,8 @@ def main(mode: str, counter: Path) -> None:
               "sha256": hashlib.sha256((config / "CLAUDE.md").read_bytes()).hexdigest()})
     response = "FAIL" if mode == "one-failure" and count % 5 == 4 else "PASS fixture response"
     if mode == "redact":
-        response += " " + os.environ["ANTHROPIC_API_KEY"]
-        print(os.environ["ANTHROPIC_API_KEY"], file=sys.stderr)
+        response += " " + secret
+        print(secret, file=sys.stderr)
     result = {"type": "result", "subtype": "success", "is_error": False,
               "result": response, "total_cost_usd": 0.0, "permission_denials": []}
     if mode == "error-result":

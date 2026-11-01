@@ -40,11 +40,20 @@ Return the required structured JSON, one grade per assertion in index order.
 Use false when the evidence does not establish the assertion."""
 
 
+# An API key, or a subscription token from `claude setup-token`; the first one set is used.
+CREDENTIALS = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+
+
+def credential() -> str | None:
+    return next((name for name in CREDENTIALS if os.environ.get(name)), None)
+
+
 def redact(text: str) -> str:
-    secret = os.environ.get("ANTHROPIC_API_KEY", "")
-    if secret:
-        text = text.replace(secret, "[REDACTED]")
-        text = text.replace(json.dumps(secret)[1:-1], "[REDACTED]")
+    for name in CREDENTIALS:
+        secret = os.environ.get(name, "")
+        if secret:
+            text = text.replace(secret, "[REDACTED]")
+            text = text.replace(json.dumps(secret)[1:-1], "[REDACTED]")
     return re.sub(r"\bsk-ant-[A-Za-z0-9_-]+", "[REDACTED]", text)
 
 
@@ -153,13 +162,13 @@ def parse_events(stdout: str) -> dict[str, Any]:
 
 
 def session_environment(home: Path) -> dict[str, str]:
-    # Do not inherit host settings, OAuth tokens, helpers, plugin paths, or secrets.
+    # Forward only the chosen credential; never host settings, helpers, plugin paths, or other secrets.
     return {"PATH": os.environ.get("PATH", os.defpath), "LANG": "C.UTF-8",
             "HOME": str(home), "CLAUDE_CONFIG_DIR": str(home / ".claude"),
             "XDG_CONFIG_HOME": str(home / ".config"),
             "XDG_CACHE_HOME": str(home / ".cache"),
             "XDG_DATA_HOME": str(home / ".local" / "share"),
-            "ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"],
+            credential(): os.environ[credential()],
             "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
 
 
@@ -389,8 +398,9 @@ def main() -> int:
     version = None
     if not runtime:
         preflight = ("SKIP", "Claude runtime not found.")
-    elif not os.environ.get("ANTHROPIC_API_KEY"):
-        preflight = ("SKIP", "ANTHROPIC_API_KEY is missing; live credentials are never read.")
+    elif not credential():
+        preflight = ("SKIP", "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is missing; "
+                     "live credentials are never read.")
     else:
         with tempfile.TemporaryDirectory(prefix="power-agents-eval-preflight-") as temporary:
             directory = Path(temporary)
