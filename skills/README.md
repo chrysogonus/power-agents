@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **13 skills**: three core skills and ten
+kind of task. This repository contains **14 skills**: four core skills and ten
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -37,6 +37,7 @@ paste-ready PR comments, use `review-report`.
 | [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with verified, plain-language findings, concrete examples, and paste-ready review comments, starting from the runtime's built-in review. |
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
 | [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
+| [`readme-sync`](readme-sync/SKILL.md) | Creates or updates the root `README.md` from the current codebase, keeping accurate sections and checking commands against project files. |
 
 `security-best-practices` is adapted from a pinned
 [openai/skills](../THIRD_PARTY_NOTICES.md) path, so `make skills-outdated`
@@ -136,7 +137,7 @@ keeping all skills available for routing. See the repository's
 [evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 13 skills now have fixture sets, including security-specific positive and
+All 14 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. Every case has
 a `routing` object. This is coverage, not evidence of live routing success.
 

@@ -1,0 +1,44 @@
+{
+  "skill_name": "readme-sync",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Our README still describes the old Flask setup, but we moved to FastAPI and a Makefile last month. Can you bring the README up to date?",
+      "expected_output": "Load readme-sync, read the existing README and project files, and edit only stale sections so commands and environment variables match the codebase.",
+      "assertions": [
+        "readme-sync is loaded.",
+        "The response does not invent commands that are absent from the Makefile, manifests, or source."
+      ],
+      "routing": {
+        "required": [
+          "readme-sync"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Write an on-call runbook for restarting the payment worker when its queue backs up.",
+      "expected_output": "Do not load readme-sync: a runbook is not the root README.",
+      "assertions": [
+        "readme-sync is not loaded."
+      ],
+      "routing": {
+        "forbidden": [
+          "readme-sync"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "What is the difference between README.md and README.rst on GitHub?",
+      "expected_output": "Answer the question directly without loading a skill or editing files.",
+      "assertions": [
+        "No skill is loaded.",
+        "No files are changed."
+      ],
+      "routing": {
+        "allowed": []
+      }
+    }
+  ]
+}
