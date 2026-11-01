@@ -22,7 +22,7 @@ agent for a second opinion.
 | ✅ | **Self-check** · on | Before it finishes, the agent re-reads what it changed, runs the checks, and fixes what is wrong. |
 | 🔁 | **Cross-review** · opt-in | Codex reviews Claude Code's work and Claude Code reviews Codex's work. The original agent then accepts or rejects each point. |
 | 🧾 | **Summary line** | Every checked turn ends with one line saying what was checked, what was fixed, and what is still open. |
-| 🧩 | **Optional extras** | Shared coding preferences, 14 skills, status lines, and Codex command rules. [Pick only what you want](#optional-components). |
+| 🧩 | **Optional extras** | Shared coding preferences, 16 skills, status lines, and Codex command rules. [Pick only what you want](#optional-components). |
 
 ## Quick Start
 
@@ -148,7 +148,7 @@ until you select it:
 | Component | What it means for you |
 | --- | --- |
 | `instructions` | Both agents follow the same personal coding preferences in every project ([`instructions/general-global.md`](instructions/general-global.md)). |
-| `skills` | 14 ready-made guides for specific jobs, such as minimal bug fixes, code reviews, React, Postgres, security, and UI design. [Browse the skills →](skills/README.md) |
+| `skills` | 16 ready-made guides for specific jobs, such as minimal bug fixes, test-first development, debugging, code reviews, React, Postgres, security, and UI design. [Browse the skills →](skills/README.md) |
 | `statusline` | Both agents show the project, the model, the context used, and usage limits at the bottom of the terminal. |
 | `codex-rules` | Codex asks before running some test commands: `.venv/bin/pytest`, `python -m pytest`, and `.venv/bin/python -m pytest`. |
 

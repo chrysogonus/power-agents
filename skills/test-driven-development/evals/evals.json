@@ -1,0 +1,49 @@
+{
+  "skill_name": "test-driven-development",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a `--dry-run` flag to our Python CLI's `sync` command so it prints what it would copy without copying. The repo uses pytest; I will share the files next.",
+      "expected_output": "Load test-driven-development (alongside ponytail) and plan to write a failing pytest for the dry-run output before changing the command, then run the project's suite.",
+      "assertions": [
+        "test-driven-development is loaded.",
+        "The response puts a failing test before the implementation.",
+        "The response does not invent test results before the files are supplied."
+      ],
+      "routing": {
+        "required": [
+          "test-driven-development"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Simplify this working parser function for readability without changing its behavior. I will paste it next.",
+      "expected_output": "Do not load test-driven-development: this is a behavior-preserving refactor that belongs to code-simplification.",
+      "assertions": [
+        "test-driven-development is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ],
+        "forbidden": [
+          "test-driven-development"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Bump the Node version in our .nvmrc from 20 to 22.",
+      "expected_output": "Do not load test-driven-development: a configuration change does not need a failing test first.",
+      "assertions": [
+        "test-driven-development is not loaded."
+      ],
+      "routing": {
+        "forbidden": [
+          "test-driven-development"
+        ]
+      }
+    }
+  ]
+}

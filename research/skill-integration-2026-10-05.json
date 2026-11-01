@@ -104,6 +104,24 @@
       "upstream_path": "skills/frontend-design",
       "local_adaptations": "Separated visual design from UI edge-case testing, React performance, and general review.",
       "whitespace_normalized": []
+    },
+    {
+      "name": "test-driven-development",
+      "repository": "obra/superpowers",
+      "revision": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "upstream_path": "skills/test-driven-development",
+      "local_adaptations": "Narrowed routing to new behavior and bug fixes with a runnable test setup, alongside ponytail; excluded refactors and configuration; scoped delete-and-restart to code written during the task; limited tests for untested modules to the changed behavior; removed the superpowers:writing-skills pointer.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-01"
+    },
+    {
+      "name": "systematic-debugging",
+      "repository": "obra/superpowers",
+      "revision": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "upstream_path": "skills/systematic-debugging",
+      "local_adaptations": "Routed performance work to performance-optimization; diagnosis-only requests stop after Phase 3 without edits; replaced superpowers skill names with the local TDD skill and project checks; omitted CREATION-LOG.md and test-*.md pressure scenarios.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-01"
     }
   ]
 }

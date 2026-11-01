@@ -4,7 +4,10 @@ Repository instructions take precedence over these preferences.
 
 ## Skills
 
-- New functionality and bug fixes: use ponytail.
+- New functionality and bug fixes: use ponytail, together with
+  test-driven-development when the project has a runnable test setup.
+- Diagnosing a bug, test failure, or unexpected behavior: use
+  systematic-debugging before proposing a fix.
 - Refactoring working code without changing behavior: use code-simplification.
 - Visual design or redesign: use frontend-design.
 

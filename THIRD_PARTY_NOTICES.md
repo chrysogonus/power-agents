@@ -80,7 +80,8 @@ Apache License 2.0. The complete license is preserved at
 ## Skills Integrated from the Research Catalog
 
 The following packages were imported from pinned revisions on 2026-10-05;
-`ponytail` was re-synced to Ponytail 5 on 2026-10-24.
+`ponytail` was re-synced to Ponytail 5 on 2026-10-24, and
+`test-driven-development` and `systematic-debugging` were added on 2026-11-01.
 All have normal automatic discovery, as explicitly requested by the owner.
 Live routing and effect evaluations remain unmeasured.
 
@@ -95,6 +96,8 @@ Live routing and effect evaluations remain unmeasured.
 | `break-ui` | [emilkowalski/skills / skills/break-ui](https://github.com/emilkowalski/skills/tree/e8a175de22ae1e49370fc144c1f3bb9aeedf988d/skills/break-ui) | `e8a175de22ae1e49370fc144c1f3bb9aeedf988d` | MIT |
 | `code-simplification` | [addyosmani/agent-skills / skills/code-simplification](https://github.com/addyosmani/agent-skills/tree/1401c8b8030e023baeebb31781a6653fe8e93026/skills/code-simplification) | `1401c8b8030e023baeebb31781a6653fe8e93026` | MIT |
 | `performance-optimization` | [addyosmani/agent-skills / skills/performance-optimization](https://github.com/addyosmani/agent-skills/tree/1401c8b8030e023baeebb31781a6653fe8e93026/skills/performance-optimization) | `1401c8b8030e023baeebb31781a6653fe8e93026` | MIT |
+| `test-driven-development` | [obra/superpowers / skills/test-driven-development](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/test-driven-development) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
+| `systematic-debugging` | [obra/superpowers / skills/systematic-debugging](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/systematic-debugging) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
 | `frontend-design` | [anthropics/skills / skills/frontend-design](https://github.com/anthropics/skills/tree/683bc88e56f3e09ba94f7055977f3d3aa499f202/skills/frontend-design) | `683bc88e56f3e09ba94f7055977f3d3aa499f202` | Apache-2.0 |
 
 Each local package retains its license at `skills/<name>/LICENSE.txt`.
@@ -106,8 +109,9 @@ license; no other Anthropic skill's license is inferred from it.
 
 Runtime resources are retained, including Vercel's compiled guides and rules,
 Supabase's references, Matt Pocock's skill mechanics, Emil Kowalski's data
-catalog, and Addy Osmani's optimization patterns and performance checklist.
-Authoring-only templates, upstream README/changelog files, and build metadata
+catalog, Addy Osmani's optimization patterns and performance checklist, and
+superpowers' testing and debugging references and `find-polluter.sh`.
+Authoring-only templates, superpowers' creation log and pressure-test scenarios, upstream README/changelog files, and build metadata
 are omitted. No upstream hooks, installers, or plugin runtimes are imported.
 
 All entrypoints retain upstream instruction content with locally narrowed
@@ -125,6 +129,8 @@ been run against live models. Specific adaptations:
 - `break-ui`: Separated worst-case content testing from visual design and general review; removed the canned initial response and references to unimported prototype/emil-design-eng/review-animations skills.
 - `code-simplification`: Separated working-code refactoring from new functionality and reviews; removed mandatory PR splitting and automatic commits.
 - `performance-optimization`: Routed React/Next.js and Postgres-specific work to their owners; removed automatic commits; copied the repo-level performance checklist into local references/ and repaired its entrypoint link and both optimization-patterns.md pointers.
+- `test-driven-development`: Narrowed routing to new behavior and bug fixes in projects with a runnable test setup, alongside ponytail; excluded behavior-preserving refactors (code-simplification) and configuration; scoped "delete and start over" to production code written during the task; limited tests for untested modules to the changed behavior; replaced the superpowers:writing-skills pointer in writing-good-tests.md.
+- `systematic-debugging`: Routed performance bottlenecks to performance-optimization; stops after Phase 3 without editing files when only a diagnosis is requested; pointed to the local test-driven-development skill and the project's required checks instead of superpowers skill names; linked the single fix to ponytail.
 - `frontend-design`: Separated visual design from UI edge-case testing, React performance, and general review.
 
 Trailing whitespace was removed in the imported Vercel compiled guides,

@@ -1,0 +1,50 @@
+{
+  "skill_name": "systematic-debugging",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Our integration test `test_checkout_total` started failing after yesterday's merge with `AssertionError: 107.0 != 100.0`. Figure out why; I will share the repo next.",
+      "expected_output": "Load systematic-debugging and investigate the root cause (read the error, reproduce, check recent changes) before proposing a fix.",
+      "assertions": [
+        "systematic-debugging is loaded.",
+        "The response does not propose a fix before investigating the root cause.",
+        "The response does not invent findings before the repository is supplied."
+      ],
+      "routing": {
+        "required": [
+          "systematic-debugging"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Just tell me why `npm run build` fails with `Cannot find module './config.local'`. Don't change anything. Logs and repo follow.",
+      "expected_output": "Load systematic-debugging, diagnose without editing files, and report the root cause and proposed fix.",
+      "assertions": [
+        "systematic-debugging is loaded.",
+        "No files are changed."
+      ],
+      "routing": {
+        "required": [
+          "systematic-debugging"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Profile our CSV import service; p95 latency went from 2 s to 9 s and we need it under 3 s.",
+      "expected_output": "Do not load systematic-debugging: a measured performance bottleneck belongs to performance-optimization.",
+      "assertions": [
+        "systematic-debugging is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "performance-optimization"
+        ],
+        "forbidden": [
+          "systematic-debugging"
+        ]
+      }
+    }
+  ]
+}

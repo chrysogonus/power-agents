@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **14 skills**: four core skills and ten
+kind of task. This repository contains **16 skills**: four core skills and twelve
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -45,7 +45,7 @@ checks it together with the imported skills.
 
 ## Imported Skills
 
-These ten skills are included in the same installation and use normal automatic
+These twelve skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
 unmeasured. Each package includes its required references, license, and
 routing fixtures (see [Skill Format](#skill-format)). Pinned origins and
@@ -63,6 +63,8 @@ adaptations are recorded in
 | [`break-ui`](break-ui/SKILL.md) | Realistic worst-case UI data and edge cases, preserving visual identity. |
 | [`code-simplification`](code-simplification/SKILL.md) | Readability refactors of working code with unchanged behavior. |
 | [`performance-optimization`](performance-optimization/SKILL.md) | Measured application bottlenecks beyond React/Next.js and Postgres-specific work. |
+| [`test-driven-development`](test-driven-development/SKILL.md) | Failing test first for new behavior and bug fixes, alongside ponytail, where the project can run tests. |
+| [`systematic-debugging`](systematic-debugging/SKILL.md) | Root-cause investigation of bugs, test failures, and unexpected behavior before any fix. |
 | [`frontend-design`](frontend-design/SKILL.md) | New frontend UI and intentional visual design from a product brief. |
 
 `grilling` applies when an interview is requested; routine implementation does
@@ -74,7 +76,10 @@ Ponytail applies to its current task and does not install session hooks.
 General code reviews use the built-in review / `review-report` boundary below.
 Design work belongs to `frontend-design`; content stress-testing to `break-ui`;
 React performance to `vercel-react-best-practices`; component API design to
-`vercel-composition-patterns`. Existing plugin or unmanaged skills remain
+`vercel-composition-patterns`. New behavior and bug fixes use `ponytail`
+together with `test-driven-development` when tests can run; finding a bug's
+root cause belongs to `systematic-debugging`, and measured slowdowns to
+`performance-optimization`. Existing plugin or unmanaged skills remain
 outside this repository's routing inventory.
 
 `review-report` uses a distinct name so it does not shadow the bundled review
@@ -137,7 +142,7 @@ keeping all skills available for routing. See the repository's
 [evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 14 skills now have fixture sets, including security-specific positive and
+All 16 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. Every case has
 a `routing` object. This is coverage, not evidence of live routing success.
 
