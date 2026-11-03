@@ -9,7 +9,8 @@ Repository instructions take precedence over these preferences.
 - Diagnosing a bug, test failure, or unexpected behavior: use
   systematic-debugging before proposing a fix.
 - Refactoring working code without changing behavior: use code-simplification.
-- Visual design or redesign: use frontend-design.
+- Visual design or redesign: use frontend-design; for public-facing web pages
+  (landing, marketing, portfolio), use design-taste-frontend.
 
 Otherwise, choose skills by their descriptions and use the fewest that cover
 the task.

@@ -1,0 +1,51 @@
+{
+  "skill_name": "triage",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Triage our open GitHub issues: show me anything that needs my attention, oldest first.",
+      "expected_output": "Load triage, read the tracker, and present the unlabeled, needs-triage, and updated needs-info buckets; do not post comments, change labels, or close issues without confirmation.",
+      "assertions": [
+        "triage is loaded.",
+        "No comments are posted and no labels or issue states are changed without the maintainer's confirmation."
+      ],
+      "routing": {
+        "required": [
+          "triage"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Our integration test `test_checkout_total` started failing after yesterday's merge with `AssertionError: 107.0 != 100.0`. Figure out why; I will share the repo next.",
+      "expected_output": "Load systematic-debugging, not triage: diagnosing a failing test's root cause is not issue triage.",
+      "assertions": [
+        "systematic-debugging is loaded.",
+        "triage is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "systematic-debugging"
+        ],
+        "forbidden": [
+          "triage"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Review this PR for correctness and security before merge. I will provide the diff next.",
+      "expected_output": "Use the runtime's built-in review; do not load triage.",
+      "assertions": [
+        "triage is not loaded."
+      ],
+      "routing": {
+        "forbidden": [
+          "triage",
+          "review-report"
+        ]
+      }
+    }
+  ]
+}

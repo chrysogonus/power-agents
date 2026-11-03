@@ -1,0 +1,36 @@
+{
+  "skill_name": "codebase-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Our payments module has twelve public functions and every caller has to call three of them in the right order. Help me design a smaller interface and decide where the seam to the Stripe client should go. I will share the code next.",
+      "expected_output": "Load codebase-design and use its module, interface, seam, and depth vocabulary to plan a deeper interface; do not invent the code's structure before seeing it.",
+      "assertions": [
+        "codebase-design is loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "codebase-design"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Refactor working code for clarity while preserving exceptions, ordering, and side effects. I will provide the code next.",
+      "expected_output": "Load code-simplification, not codebase-design: a behavior-preserving readability refactor does not need interface design.",
+      "assertions": [
+        "code-simplification is loaded.",
+        "codebase-design is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ],
+        "forbidden": [
+          "codebase-design"
+        ]
+      }
+    }
+  ]
+}

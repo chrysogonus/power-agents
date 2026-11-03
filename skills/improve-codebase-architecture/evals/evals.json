@@ -1,0 +1,51 @@
+{
+  "skill_name": "improve-codebase-architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Where should this codebase be restructured? Look for shallow modules and areas that are hard to test, and show me the candidates. I will point you at the repo next.",
+      "expected_output": "Load improve-codebase-architecture, scope the scan, and plan an HTML report outside the repository; do not change code or invent candidates before seeing the repo.",
+      "assertions": [
+        "improve-codebase-architecture is loaded.",
+        "No repository files are changed.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "improve-codebase-architecture"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Clean up this working function; it has grown hard to follow, but keep its behavior exactly. I will paste it next.",
+      "expected_output": "Load code-simplification, not improve-codebase-architecture: a readability refactor of working code is not an architecture review.",
+      "assertions": [
+        "code-simplification is loaded.",
+        "improve-codebase-architecture is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "code-simplification"
+        ],
+        "forbidden": [
+          "improve-codebase-architecture"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Review this PR for correctness and security before merge. I will provide the diff next.",
+      "expected_output": "Use the runtime's built-in review; do not load improve-codebase-architecture.",
+      "assertions": [
+        "improve-codebase-architecture is not loaded."
+      ],
+      "routing": {
+        "forbidden": [
+          "improve-codebase-architecture",
+          "review-report"
+        ]
+      }
+    }
+  ]
+}

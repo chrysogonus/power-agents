@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **16 skills**: four core skills and twelve
+kind of task. This repository contains **23 skills**: four core skills and nineteen
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -45,7 +45,7 @@ checks it together with the imported skills.
 
 ## Imported Skills
 
-These twelve skills are included in the same installation and use normal automatic
+These nineteen skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
 unmeasured. Each package includes its required references, license, and
 routing fixtures (see [Skill Format](#skill-format)). Pinned origins and
@@ -65,7 +65,14 @@ adaptations are recorded in
 | [`performance-optimization`](performance-optimization/SKILL.md) | Measured application bottlenecks beyond React/Next.js and Postgres-specific work. |
 | [`test-driven-development`](test-driven-development/SKILL.md) | Failing test first for new behavior and bug fixes, alongside ponytail, where the project can run tests. |
 | [`systematic-debugging`](systematic-debugging/SKILL.md) | Root-cause investigation of bugs, test failures, and unexpected behavior before any fix. |
-| [`frontend-design`](frontend-design/SKILL.md) | New frontend UI and intentional visual design from a product brief. |
+| [`frontend-design`](frontend-design/SKILL.md) | New frontend UI and intentional visual design from a product brief, including app screens, dashboards, and components. |
+| [`design-taste-frontend`](design-taste-frontend/SKILL.md) | Art direction and a real-browser check loop for public-facing web pages, or pages that look generic. Its scripts need Node 22+ and Chromium. |
+| [`agent-browser`](agent-browser/SKILL.md) | Real-browser interaction such as clicking, forms, logins, screenshots, and UI-flow testing. Needs the separately installed `agent-browser` CLI. |
+| [`improve-codebase-architecture`](improve-codebase-architecture/SKILL.md) | Codebase-wide scan for deepening opportunities, reported as HTML outside the repository, then a grilling loop on the chosen candidate. |
+| [`codebase-design`](codebase-design/SKILL.md) | Deep-module vocabulary for designing one module's interface and seams. |
+| [`domain-modeling`](domain-modeling/SKILL.md) | Sharpening domain terms in `GLOSSARY.md` and recording ADRs. |
+| [`triage`](triage/SKILL.md) | Issue-tracker triage states, verification, and agent briefs, with confirmation before tracker writes. |
+| [`handoff`](handoff/SKILL.md) | A handoff document, outside the workspace, for continuing the session in a fresh agent. |
 
 `grilling` applies when an interview is requested; routine implementation does
 not require that interview.
@@ -74,12 +81,18 @@ Ponytail applies to its current task and does not install session hooks.
 ## Choosing Between Related Skills
 
 General code reviews use the built-in review / `review-report` boundary below.
-Design work belongs to `frontend-design`; content stress-testing to `break-ui`;
+Design work belongs to `frontend-design`, except public-facing web pages, which
+belong to `design-taste-frontend`; content stress-testing to `break-ui`; driving a
+real browser to `agent-browser`;
 React performance to `vercel-react-best-practices`; component API design to
 `vercel-composition-patterns`. New behavior and bug fixes use `ponytail`
 together with `test-driven-development` when tests can run; finding a bug's
 root cause belongs to `systematic-debugging`, and measured slowdowns to
-`performance-optimization`. Existing plugin or unmanaged skills remain
+`performance-optimization`. A codebase-wide architecture scan belongs to
+`improve-codebase-architecture`, one module's interface design to
+`codebase-design`, and readability refactors to `code-simplification`; domain
+terms and ADRs belong to `domain-modeling`, issue-tracker work to `triage`, and
+session handoffs to `handoff`. Existing plugin or unmanaged skills remain
 outside this repository's routing inventory.
 
 `review-report` uses a distinct name so it does not shadow the bundled review
@@ -142,7 +155,7 @@ select one fixture set while keeping all skills available for routing. See the r
 [evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 16 skills now have fixture sets, including security-specific positive and
+All 23 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. Every case has
 a `routing` object. This is coverage, not evidence of live routing success.
 

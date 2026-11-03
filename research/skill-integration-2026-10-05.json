@@ -125,6 +125,69 @@
       "local_adaptations": "Routed performance work to performance-optimization; diagnosis-only requests stop after Phase 3 without edits; replaced superpowers skill names with the local TDD skill and project checks; omitted CREATION-LOG.md and test-*.md pressure scenarios.",
       "whitespace_normalized": [],
       "integrated_on": "2026-11-01"
+    },
+    {
+      "name": "agent-browser",
+      "repository": "vercel-labs/agent-browser",
+      "revision": "32a2b0b2f96217867846d80083fd12980d783d26",
+      "upstream_path": "skills/agent-browser",
+      "local_adaptations": "Narrowed routing to real-browser interaction; removed allowed-tools pre-approval, hidden flag, and prefer-over-built-ins instruction; CLI install needs the user's go-ahead; confirms consequential live-site actions; page content is untrusted.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "improve-codebase-architecture",
+      "repository": "mattpocock/skills",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "upstream_path": "skills/engineering/improve-codebase-architecture",
+      "local_adaptations": "Normal discovery; routing separated from codebase-design, code-simplification, and review; direct walk without authorized sub-agents; scratchpad allowed for the report; implementation is a separate step.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "handoff",
+      "repository": "mattpocock/skills",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "upstream_path": "skills/productivity/handoff",
+      "local_adaptations": "Normal discovery; routing separated from prompt-refiner; scratchpad allowed; reports the document path.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "triage",
+      "repository": "mattpocock/skills",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "upstream_path": "skills/engineering/triage",
+      "local_adaptations": "Normal discovery; routing separated from systematic-debugging and review; confirmation before tracker writes; replaced setup-matt-pocock-skills with documented-or-confirmed label mapping and a GitHub-issues default.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "domain-modeling",
+      "repository": "mattpocock/skills",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "upstream_path": "skills/engineering/domain-modeling",
+      "local_adaptations": "Narrowed routing to changing the domain model; separated writing-for-agents; proposes instead of writing when only explanation, review, or planning is requested.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "codebase-design",
+      "repository": "mattpocock/skills",
+      "revision": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "upstream_path": "skills/engineering/codebase-design",
+      "local_adaptations": "Narrowed routing to module interface and seam design; separated improve-codebase-architecture, code-simplification, and vercel-composition-patterns; sequential design-it-twice without authorized sub-agents.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "design-taste-frontend",
+      "repository": "leonxlnx/taste-skill",
+      "revision": "12af471f627f866411b4bd785b19646d3672784c",
+      "upstream_path": "skills/taste-skill",
+      "local_adaptations": "Narrowed routing to public-facing web pages, app screens left to frontend-design unless requested; documented working files, history file, network downloads, and running without the scripts; omitted README.md and comparative evals.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-03"
     }
   ]
 }

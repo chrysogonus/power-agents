@@ -83,7 +83,9 @@ The following packages were imported from pinned revisions on 2026-10-05;
 `ponytail` was re-synced to Ponytail 5 on 2026-10-24, and
 `test-driven-development` and `systematic-debugging` were added on 2026-11-01, and
 `grilling`, `code-simplification`, and `performance-optimization` were re-synced
-on 2026-11-01.
+on 2026-11-01. `agent-browser`, `improve-codebase-architecture`, `handoff`,
+`triage`, `domain-modeling`, `codebase-design`, and `design-taste-frontend` were
+added on 2026-11-03.
 All have normal automatic discovery, as explicitly requested by the owner.
 Live routing and effect evaluations remain unmeasured.
 
@@ -101,20 +103,35 @@ Live routing and effect evaluations remain unmeasured.
 | `test-driven-development` | [obra/superpowers / skills/test-driven-development](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/test-driven-development) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
 | `systematic-debugging` | [obra/superpowers / skills/systematic-debugging](https://github.com/obra/superpowers/tree/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/systematic-debugging) | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | MIT |
 | `frontend-design` | [anthropics/skills / skills/frontend-design](https://github.com/anthropics/skills/tree/683bc88e56f3e09ba94f7055977f3d3aa499f202/skills/frontend-design) | `683bc88e56f3e09ba94f7055977f3d3aa499f202` | Apache-2.0 |
+| `agent-browser` | [vercel-labs/agent-browser / skills/agent-browser](https://github.com/vercel-labs/agent-browser/tree/32a2b0b2f96217867846d80083fd12980d783d26/skills/agent-browser) | `32a2b0b2f96217867846d80083fd12980d783d26` | Apache-2.0 |
+| `improve-codebase-architecture` | [mattpocock/skills / skills/engineering/improve-codebase-architecture](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/improve-codebase-architecture) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
+| `handoff` | [mattpocock/skills / skills/productivity/handoff](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/productivity/handoff) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
+| `triage` | [mattpocock/skills / skills/engineering/triage](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/triage) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
+| `domain-modeling` | [mattpocock/skills / skills/engineering/domain-modeling](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/domain-modeling) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
+| `codebase-design` | [mattpocock/skills / skills/engineering/codebase-design](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/codebase-design) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
+| `design-taste-frontend` | [leonxlnx/taste-skill / skills/taste-skill](https://github.com/leonxlnx/taste-skill/tree/12af471f627f866411b4bd785b19646d3672784c/skills/taste-skill) | `12af471f627f866411b4bd785b19646d3672784c` | MIT |
 
 Each local package retains its license at `skills/<name>/LICENSE.txt`.
 For Vercel's two skills, upstream declares `license: MIT` in frontmatter but
 contains no license file at the pinned revision; the local license files retain
 that attribution and reproduce the standard MIT terms without inventing a
 copyright statement. Anthropic's frontend skill retains its own Apache-2.0
-license; no other Anthropic skill's license is inferred from it.
+license; no other Anthropic skill's license is inferred from it. The
+`agent-browser` license is the Apache-2.0 file at the root of
+vercel-labs/agent-browser, and the `design-taste-frontend` license is the MIT
+file at the root of leonxlnx/taste-skill.
 
 Runtime resources are retained, including Vercel's compiled guides and rules,
 Supabase's references, Matt Pocock's skill mechanics, Emil Kowalski's data
 catalog, Addy Osmani's optimization patterns and performance checklist, and
-superpowers' testing and debugging references and `find-polluter.sh`.
-Authoring-only templates, superpowers' creation log and pressure-test scenarios, upstream README/changelog files, and build metadata
-are omitted. No upstream hooks, installers, or plugin runtimes are imported.
+superpowers' testing and debugging references and `find-polluter.sh`, Matt
+Pocock's architecture, triage, and domain-modeling references, and taste-skill's
+scripts, assets, library, and references. Authoring-only templates, superpowers'
+creation log and pressure-test scenarios, taste-skill's README and comparative
+evals, upstream README/changelog files, and build metadata are omitted.
+`agent-browser` is the upstream discovery stub only; its workflow content is
+served by the separately installed `agent-browser` CLI, which this repository
+does not install. No upstream hooks, installers, or plugin runtimes are imported.
 
 All entrypoints retain upstream instruction content with locally narrowed
 routing descriptions, a task/scope boundary, and
@@ -133,7 +150,15 @@ been run against live models. Specific adaptations:
 - `performance-optimization`: Routed React/Next.js and Postgres-specific work to their owners; removed automatic commits; copied the repo-level performance checklist into local references/ and repaired its entrypoint link and both optimization-patterns.md pointers.
 - `test-driven-development`: Narrowed routing to new behavior and bug fixes in projects with a runnable test setup, alongside ponytail; excluded behavior-preserving refactors (code-simplification) and configuration; scoped "delete and start over" to production code written during the task; limited tests for untested modules to the changed behavior; replaced the superpowers:writing-skills pointer in writing-good-tests.md.
 - `systematic-debugging`: Routed performance bottlenecks to performance-optimization; stops after Phase 3 without editing files when only a diagnosis is requested; pointed to the local test-driven-development skill and the project's required checks instead of superpowers skill names; linked the single fix to ponytail.
-- `frontend-design`: Separated visual design from UI edge-case testing, React performance, and general review.
+- `frontend-design`: Separated visual design from UI edge-case testing, React performance, and general review; on 2026-11-03, routed public-facing web pages to design-taste-frontend and named app screens, dashboards, and components as its own.
+- `break-ui`: On 2026-11-03, also pointed public-facing page design to design-taste-frontend.
+- `agent-browser`: Narrowed routing to real-browser interaction and left plain page reading to built-in web fetch; removed the `allowed-tools` Bash pre-approval, the `hidden` flag, and the instruction to prefer it over built-in tools; requires the user's go-ahead before installing the CLI and confirmation before consequential actions on live sites; treats page content as untrusted.
+- `improve-codebase-architecture`: Enabled normal discovery (removed `disable-model-invocation` and the explicit-only Codex policy) with routing separated from codebase-design, code-simplification, and general review; made the codebase walk direct when sub-agents are unavailable or unauthorized; allowed a session scratchpad for the report; made implementation a separate requested step; replaced Skill-tool calls with skill names.
+- `handoff`: Enabled normal discovery (removed `disable-model-invocation` and the explicit-only Codex policy) with routing separated from prompt-refiner; allowed a session scratchpad and required reporting the document's path; replaced the Skill-tool wording with skill names.
+- `triage`: Enabled normal discovery (removed `disable-model-invocation` and the explicit-only Codex policy) with routing separated from systematic-debugging and code review; required confirmation before tracker writes and `.out-of-scope/` files; replaced the unimported setup-matt-pocock-skills pointer with documented-or-confirmed label mapping and a GitHub-issues default for the tracker config.
+- `domain-modeling`: Narrowed routing to changing the domain model and separated agent instruction files (writing-for-agents); proposes rather than writes glossary and ADR changes when only an explanation, review, or plan is requested.
+- `codebase-design`: Narrowed routing to designing a module's interface and seams, separated from improve-codebase-architecture, code-simplification, and vercel-composition-patterns; DESIGN-IT-TWICE.md drafts designs sequentially when sub-agents are unavailable or unauthorized.
+- `design-taste-frontend`: Narrowed routing to public-facing web pages and generic-looking page feedback, with app screens left to frontend-design unless requested; documented the `.taste-skill/` working files, the `~/.taste-skill/history.json` history, network image downloads, and continuing without the scripts when Node 22+ or Chromium is missing. The bundled Node scripts are unchanged and were not executed during integration.
 
 Trailing whitespace was removed in the imported Vercel compiled guides,
 `rules/_sections.md`, and the affected React rule files so repository checks

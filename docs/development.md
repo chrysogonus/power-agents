@@ -62,7 +62,7 @@ execute agent sessions or measure routing pass rates. Run the opt-in evaluations
 below to measure their behavior.
 
 The [agent skills research catalog](../research/agent-skills-2026-10-05.md)
-records upstream candidates, sources, and integration notes. Ten selected skills
+records upstream candidates, sources, and integration notes. Nineteen selected skills
 are included in the [imported skill inventory](../skills/README.md#imported-skills);
 their live routing and task-effect evaluations remain unmeasured.
 

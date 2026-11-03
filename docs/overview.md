@@ -208,7 +208,7 @@ optional extra you pick yourself.
 flowchart TD
     G(("Verify gate<br/>always installed"))
     G --- I["instructions<br/>shared coding preferences"]
-    G --- S["skills<br/>16 guides for specific jobs"]
+    G --- S["skills<br/>23 guides for specific jobs"]
     G --- T["statusline<br/>project, model, context, limits"]
     G --- R["codex-rules<br/>Codex asks before some test commands"]
 ```
@@ -333,4 +333,4 @@ if you have time: ask an agent to change a file and watch the end of the turn.
 - [Verify gate and cross-review](verify-gate.md): every rule and setting
 - [Installation reference](installation.md): what is installed where
 - [Measuring the verify gate](experiment.md): the experiment and benchmark
-- [Skills](../skills/README.md): all 16 skills
+- [Skills](../skills/README.md): all 23 skills

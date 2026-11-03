@@ -2,7 +2,8 @@
 name: break-ui
 description: Use when the user wants to stress-test a UI component or screen with realistic
   worst-case content, empty lists, long names, missing fields, large counts, or international
-  text. Preserve the visual identity. For building or redesigning a visual identity use frontend-design.
+  text. Preserve the visual identity. For building or redesigning a visual identity use frontend-design, or
+  design-taste-frontend for public-facing web pages.
   General reviews belong to the built-in review or review-report.
 metadata:
   evaluation-status: unmeasured

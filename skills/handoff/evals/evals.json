@@ -1,0 +1,37 @@
+{
+  "skill_name": "handoff",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm about to close this session. Write a handoff so a fresh agent can pick up the migration work tomorrow.",
+      "expected_output": "Load handoff and write the handoff document to a temporary directory outside the workspace, with suggested skills and references to existing artifacts, then report its path.",
+      "assertions": [
+        "handoff is loaded.",
+        "The handoff document is not written inside the repository.",
+        "The response names the path of the handoff document."
+      ],
+      "routing": {
+        "required": [
+          "handoff"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Make this prompt clearer and shorter: 'Summarize the attached sales report for executives. Keep it brief and highlight risks.'",
+      "expected_output": "Load prompt-refiner, not handoff: improving an existing prompt draft is not a session handoff.",
+      "assertions": [
+        "prompt-refiner is loaded.",
+        "handoff is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "prompt-refiner"
+        ],
+        "forbidden": [
+          "handoff"
+        ]
+      }
+    }
+  ]
+}

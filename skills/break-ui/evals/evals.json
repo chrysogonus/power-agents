@@ -33,7 +33,7 @@
     },
     {
       "id": 3,
-      "prompt": "Build a new landing page with a distinctive visual identity. First load the appropriate design skill; I will provide the product brief next.",
+      "prompt": "Build a new settings screen for our app with a distinctive visual identity. First load the appropriate design skill; I will provide the product brief next.",
       "expected_output": "Load frontend-design before task work and wait for the promised artifacts without inventing results.",
       "assertions": [
         "The first task skill loaded is frontend-design.",

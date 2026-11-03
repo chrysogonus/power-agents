@@ -1,0 +1,36 @@
+{
+  "skill_name": "domain-modeling",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We keep mixing up 'account', 'customer', and 'user' in this codebase. Help me pin down what each term means and record it in GLOSSARY.md. I will share the relevant code next.",
+      "expected_output": "Load domain-modeling, challenge the overloaded terms, and plan glossary entries free of implementation detail; do not invent definitions before seeing the code.",
+      "assertions": [
+        "domain-modeling is loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "domain-modeling"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Restructure our AGENTS.md so the agent finds the test commands faster and knows when it is done.",
+      "expected_output": "Load writing-for-agents, not domain-modeling: agent instruction files are not a domain glossary.",
+      "assertions": [
+        "writing-for-agents is loaded.",
+        "domain-modeling is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "writing-for-agents"
+        ],
+        "forbidden": [
+          "domain-modeling"
+        ]
+      }
+    }
+  ]
+}

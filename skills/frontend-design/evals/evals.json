@@ -18,7 +18,7 @@
     },
     {
       "id": 2,
-      "prompt": "Design and build a new product landing page with a deliberate visual identity and typography. First load the appropriate skill; I will provide the product brief next.",
+      "prompt": "Design and build a new analytics dashboard for our product with a deliberate visual identity and typography. First load the appropriate skill; I will provide the product brief next.",
       "expected_output": "Load frontend-design before task work and wait for the promised artifacts without inventing results.",
       "assertions": [
         "The first task skill loaded is frontend-design.",

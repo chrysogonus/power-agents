@@ -1,0 +1,54 @@
+{
+  "skill_name": "design-taste-frontend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Build a landing page for our coffee roastery's new subscription service. It should not look like every other AI-made site. I will send the brief and photos next.",
+      "expected_output": "Load design-taste-frontend before task work and wait for the brief instead of inventing content.",
+      "assertions": [
+        "design-taste-frontend is loaded.",
+        "frontend-design is not loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "design-taste-frontend"
+        ],
+        "forbidden": [
+          "frontend-design"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Our portfolio site looks generic and templated. Restyle it so it feels designed. I will share the repo next.",
+      "expected_output": "Load design-taste-frontend for a public-facing page that looks generic.",
+      "assertions": [
+        "design-taste-frontend is loaded.",
+        "The response does not invent findings or claim to have inspected the promised artifacts."
+      ],
+      "routing": {
+        "required": [
+          "design-taste-frontend"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Design and build a new admin screen for managing user roles with a deliberate visual identity. First load the appropriate skill; I will provide the product brief next.",
+      "expected_output": "Load frontend-design, not design-taste-frontend: app screens belong to frontend-design unless the user asks for the taste skill.",
+      "assertions": [
+        "frontend-design is loaded.",
+        "design-taste-frontend is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "frontend-design"
+        ],
+        "forbidden": [
+          "design-taste-frontend"
+        ]
+      }
+    }
+  ]
+}
