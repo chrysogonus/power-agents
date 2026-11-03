@@ -13,6 +13,8 @@ SKILLS="$ROOT/skills"
 CLAUDE_SETTINGS="$ROOT/settings/claude/settings.json"
 CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
 CLAUDE_HOOKS="$ROOT/settings/claude/hooks.json"
+CLAUDE_GUARD_HOOKS="$ROOT/settings/claude/guards-hooks.json"
+GUARDS="$ROOT/hooks/guards"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_HOOKS="$ROOT/settings/codex/hooks.json"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
@@ -26,8 +28,9 @@ CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
 CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_STATUS_LINE_COMMAND=""
 VERIFY_GATE_COMMAND=""
+GUARDS_LINK=""
 # The verify gate is always installed; these components are optional.
-ALL_COMPONENTS="instructions,skills,statusline,codex-rules"
+ALL_COMPONENTS="instructions,skills,statusline,codex-rules,guards"
 COMPONENTS_FILE=""
 CODEX_TUI_SNAPSHOT=""
 REQUESTED_COMPONENTS=""
@@ -144,8 +147,8 @@ Usage: ./install.sh [--components LIST]
        ./install.sh --uninstall
 
 Installs the verify gate for Codex and Claude Code. LIST selects optional
-components: a comma-separated subset of instructions, skills, statusline, and
-codex-rules, or "all" or "none". Without --components, the selection saved by
+components: a comma-separated subset of instructions, skills, statusline,
+codex-rules, and guards, or "all" or "none". Without --components, the selection saved by
 the previous install is reused.
 
 --uninstall removes the verify gate and every component this checkout
@@ -283,6 +286,9 @@ detect_installed_components() {
   if links_to "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"; then
     detected+=",codex-rules"
   fi
+  if links_to "$GUARDS" "$GUARDS_LINK"; then
+    detected+=",guards"
+  fi
   printf '%s\n' "${detected#,}"
 }
 
@@ -361,6 +367,7 @@ canonicalize_install_root \
   "Shared configuration root" "$AGENTS_ROOT" AGENTS_ROOT
 CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
 VERIFY_GATE_COMMAND="$AGENTS_ROOT/hooks/verify-gate.py"
+GUARDS_LINK="$AGENTS_ROOT/hooks/guards"
 COMPONENTS_FILE="$INSTALL_HOME/.config/power-agents/components"
 # The Codex TUI values the last statusline install wrote, so removal can tell
 # them apart from user values after settings/codex/tui.toml changes.
@@ -419,6 +426,12 @@ if has_component skills && ! python3 -c 'import yaml' >/dev/null 2>&1; then
   exit 1
 fi
 
+if has_component guards && ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: Required command not found: node (needed by the guards component)" >&2
+  echo "       Install Node.js, or omit guards from --components." >&2
+  exit 1
+fi
+
 if [[ ! -f "$GLOBAL_INSTRUCTIONS" ]]; then
   echo "ERROR: Missing $GLOBAL_INSTRUCTIONS" >&2
   exit 1
@@ -460,7 +473,8 @@ if [[ ! -f "$SKILL_VALIDATOR" ]]; then
 fi
 
 for required_file in \
-  "$CLAUDE_HOOKS" "$CODEX_HOOKS" "$HOOKS_RECONCILER" "$VERIFY_GATE"; do
+  "$CLAUDE_HOOKS" "$CLAUDE_GUARD_HOOKS" "$CODEX_HOOKS" "$HOOKS_RECONCILER" \
+  "$VERIFY_GATE" "$GUARDS/protect-tests.js" "$GUARDS/protect-secrets.js"; do
   if [[ ! -f "$required_file" ]]; then
     echo "ERROR: Missing $required_file" >&2
     exit 1
@@ -492,6 +506,11 @@ validate_hook_fragments() {
       return 1
     fi
   done
+  if ! python3 "$HOOKS_RECONCILER" validate-managed "$CLAUDE_GUARD_HOOKS" \
+    --placeholder "@GUARDS@"; then
+    echo "ERROR: Invalid managed hooks fragment: $CLAUDE_GUARD_HOOKS" >&2
+    return 1
+  fi
 }
 
 validate_claude_settings() {
@@ -660,6 +679,18 @@ reconcile_gate_hooks() {
   fi
 }
 
+# Writes INPUT to OUTPUT with the guard hooks added when the guards component
+# is selected, and removed otherwise. The trailing slash keeps the match to
+# commands inside this directory.
+reconcile_guard_hooks() {
+  if has_component guards; then
+    python3 "$HOOKS_RECONCILER" reconcile "$CLAUDE_GUARD_HOOKS" "$1" "$2" \
+      --script "$GUARDS_LINK/" --placeholder "@GUARDS@"
+  else
+    python3 "$HOOKS_RECONCILER" remove "$1" "$2" --script "$GUARDS_LINK/"
+  fi
+}
+
 # True for settings files to reconcile: all of them on install, and only
 # existing ones on uninstall, so that it creates none.
 managed_target() {
@@ -716,6 +747,7 @@ prepare_claude_settings() {
   local target="$CLAUDE_ROOT/settings.json"
   local input="/dev/null"
   local status_line_output="$output.status-line"
+  local gate_output="$output.gate"
   local mode="keep"
   local -a sources
 
@@ -749,8 +781,13 @@ prepare_claude_settings() {
     return 1
   fi
 
-  if ! reconcile_gate_hooks "$CLAUDE_HOOKS" "$status_line_output" "$output"; then
+  if ! reconcile_gate_hooks "$CLAUDE_HOOKS" "$status_line_output" "$gate_output"; then
     echo "ERROR: Could not prepare Claude hooks for $target" >&2
+    return 1
+  fi
+
+  if ! reconcile_guard_hooks "$gate_output" "$output"; then
+    echo "ERROR: Could not prepare Claude guard hooks for $target" >&2
     return 1
   fi
 
@@ -962,6 +999,9 @@ if has_component codex-rules; then
     "$CODEX_SHARED_RULES" \
     "$CODEX_ROOT/rules/shared.rules" || failed=1
 fi
+if has_component guards; then
+  validate_link_target "$GUARDS" "$GUARDS_LINK" || failed=1
+fi
 if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   validate_codex_config_target || failed=1
 fi
@@ -1105,8 +1145,20 @@ else
     "$VERIFY_GATE_COMMAND"
 fi
 
+# The guard hook entries run the guard scripts through this link. Like the
+# verify gate, it is shared by all agent roots.
+if has_component guards; then
+  install_link "$GUARDS" "$GUARDS_LINK"
+elif links_to "$GUARDS" "$GUARDS_LINK" && [[ -f "$COMPONENTS_FILE" ]] &&
+  ! ((saved_for_roots)); then
+  echo "KEEP: $GUARDS_LINK (may be used by the install for other agent roots)"
+elif dropping_component guards; then
+  remove_owned_link "$GUARDS" "$GUARDS_LINK"
+fi
+
 # Claude keeps machine-local state in settings.json, so only the centrally
-# managed statusLine key and verify-gate hook entries are reconciled.
+# managed statusLine key, verify-gate hook entries, and guard hook entries are
+# reconciled.
 if [[ -n "$claude_staged" ]]; then
   activate_managed_file \
     "Claude managed settings" \
@@ -1199,4 +1251,9 @@ if has_component codex-rules; then
   echo
   echo "Canonical Codex command policy:"
   echo "  $CODEX_SHARED_RULES"
+fi
+if has_component guards; then
+  echo
+  echo "Canonical Claude Code guard hooks:"
+  echo "  $GUARDS"
 fi

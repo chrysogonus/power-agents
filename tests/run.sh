@@ -127,6 +127,21 @@ managed_hooks() {
   }'
 }
 
+# The guard PreToolUse groups as installed with guards in DIR (with a trailing slash).
+guard_hooks() {
+  jq --arg guards "$1" '
+    .hooks.PreToolUse |
+    walk(if type == "string" then sub("@GUARDS@"; $guards) else . end)
+  ' "$ROOT/settings/claude/guards-hooks.json"
+}
+
+# Claude hooks for an install with every component, under HOME $1.
+managed_claude_hooks() {
+  managed_hooks claude "$1/.agents/hooks/verify-gate.py" |
+    jq --argjson guards "$(guard_hooks "$1/.agents/hooks/guards/")" \
+      '. + {"PreToolUse": $guards}'
+}
+
 saved_components() {
   sed -n 's/^components=//p' "$1/.config/power-agents/components"
 }
@@ -230,8 +245,7 @@ test_clean_install_and_idempotence() {
     "$ROOT/hooks/verify-gate.py" \
     "$test_home/.agents/hooks/verify-gate.py"
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson hooks "$(managed_hooks claude \
-      "$test_home/.agents/hooks/verify-gate.py")" '
+    --argjson hooks "$(managed_claude_hooks "$test_home")" '
     . == {
       "statusLine": {
         "type": "command",
@@ -302,8 +316,7 @@ test_custom_agent_roots() {
     fail "Custom Claude root produced an incorrect status-line command"
   assert_same_link \
     "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
-  jq -e --argjson hooks "$(managed_hooks claude \
-    "$test_home/.agents/hooks/verify-gate.py")" \
+  jq -e --argjson hooks "$(managed_claude_hooks "$test_home")" \
     '.hooks == $hooks' "$claude_root/settings.json" >/dev/null ||
     fail "Custom Claude root produced incorrect verify-gate hooks"
   jq -e --argjson hooks "$(managed_hooks codex \
@@ -581,8 +594,7 @@ EOF
 
   run_installer "$test_home"
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson hooks "$(managed_hooks claude \
-      "$test_home/.agents/hooks/verify-gate.py")" '
+    --argjson hooks "$(managed_claude_hooks "$test_home")" '
     . == {
       "model": "opus",
       "permissions": {
@@ -656,13 +668,14 @@ EOF
   run_installer "$test_home"
 
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson managed "$(managed_hooks claude "$script")" '
+    --argjson managed "$(managed_hooks claude "$script")" \
+    --argjson guards "$(guard_hooks "$test_home/.agents/hooks/guards/")" '
     . == {
       "model": "opus",
       "hooks": {
-        "PreToolUse": [
+        "PreToolUse": ([
           {"matcher": "Bash", "hooks": [{"type": "command", "command": "claude-audit", "timeout": 5}]}
-        ],
+        ] + $guards),
         "Stop": ([
           {"hooks": [{"type": "command", "command": "claude-notify"}]}
         ] + $managed.Stop),
@@ -797,7 +810,8 @@ test_gate_only_install() {
     fail "Gate-only install replaced a local status-line script"
   [[ ! -e "$test_home/.codex/AGENTS.md" && ! -e "$test_home/.claude/CLAUDE.md" && \
     ! -e "$test_home/.agents/skills" && ! -e "$test_home/.claude/skills" && \
-    ! -e "$test_home/.codex/config.toml" && ! -e "$test_home/.codex/rules" ]] ||
+    ! -e "$test_home/.codex/config.toml" && ! -e "$test_home/.codex/rules" && \
+    ! -e "$test_home/.agents/hooks/guards" ]] ||
     fail "Gate-only install installed an optional component"
   [[ -f "$test_home/.config/power-agents/components" && \
     -z "$(saved_components "$test_home")" ]] ||
@@ -845,6 +859,7 @@ test_uninstall() {
     fail "Uninstall for other roots removed this install's state"
   assert_same_link \
     "$ROOT/hooks/verify-gate.py" "$test_home/.agents/hooks/verify-gate.py"
+  assert_same_link "$ROOT/hooks/guards" "$test_home/.agents/hooks/guards"
 
   run_installer_args "$test_home" --uninstall ||
     fail "Uninstall failed: $(<"$test_home/install.log")"
@@ -861,6 +876,7 @@ test_uninstall() {
   [[ "$(<"$test_home/.agents/skills/local-skill")" == "keep this skill" ]] ||
     fail "Uninstall changed an unrelated skill"
   [[ ! -e "$test_home/.agents/hooks/verify-gate.py" && \
+    ! -e "$test_home/.agents/hooks/guards" && \
     ! -e "$test_home/.codex/AGENTS.md" && ! -e "$test_home/.claude/CLAUDE.md" && \
     ! -e "$test_home/.claude/statusline-command.sh" && \
     ! -e "$test_home/.codex/rules/shared.rules" && \
@@ -981,11 +997,99 @@ test_component_detection() {
 
   run_installer_args "$test_home"
   [[ "$(saved_components "$test_home")" == \
-    "instructions,skills,statusline" ]] ||
+    "instructions,skills,statusline,guards" ]] ||
     fail "Installer did not detect previously installed components"
   [[ ! -e "$test_home/.codex/rules/shared.rules" ]] ||
     fail "Installer reinstalled an undetected component"
   assert_skill_links "$test_home/.agents/skills"
+}
+
+guard_decision() {
+  printf '%s' "$2" |
+    HOME="$TEST_ROOT/guard-log-home" node "$1" |
+    jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+}
+
+test_guard_hooks() {
+  local guards
+  local no_node_path=""
+  local command_path
+  local mirror
+  local path_entry
+  local -a path_entries
+  local test_home="$TEST_ROOT/guards-home"
+
+  mkdir -p "$test_home/.claude"
+  jq -n '{"model": "local", "hooks": {"PreToolUse": [{"matcher": "Bash",
+    "hooks": [{"type": "command", "command": "audit.sh"}]}]}}' \
+    >"$test_home/.claude/settings.json"
+
+  run_installer_args "$test_home" --components guards ||
+    fail "Guards install failed: $(<"$test_home/install.log")"
+  guards="$test_home/.agents/hooks/guards"
+  assert_same_link "$ROOT/hooks/guards" "$guards"
+  jq -e --arg guards "$guards/" '
+    .model == "local" and
+    .hooks.PreToolUse == [
+      {"matcher": "Bash",
+       "hooks": [{"type": "command", "command": "audit.sh"}]},
+      {"matcher": "Bash|Edit|MultiEdit|Write", "hooks": [{"type": "command",
+       "command": ("node \"" + $guards + "protect-tests.js\""), "timeout": 10}]},
+      {"matcher": "Read|Edit|Write|Bash|Grep", "hooks": [{"type": "command",
+       "command": ("node \"" + $guards + "protect-secrets.js\""), "timeout": 10}]}
+    ]
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Guards install produced unexpected Claude hooks"
+  [[ ! -e "$test_home/.codex/hooks.json" ]] ||
+    jq -e '[.. | strings | select(contains("hooks/guards"))] == []' \
+      "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Guards install changed Codex hooks"
+
+  [[ "$(guard_decision "$guards/protect-tests.js" \
+    '{"tool_name": "Bash", "tool_input": {"command": "rm tests/test_api.py"}}')" \
+    == deny ]] || fail "protect-tests allowed deleting a test file"
+  [[ "$(guard_decision "$guards/protect-tests.js" \
+    '{"tool_name": "Edit", "tool_input": {"file_path": "src/app.py",
+      "old_string": "a", "new_string": "b"}}')" == allow ]] ||
+    fail "protect-tests blocked an ordinary edit"
+  [[ "$(guard_decision "$guards/protect-secrets.js" \
+    '{"tool_name": "Read", "tool_input": {"file_path": "/repo/.env"}}')" \
+    == deny ]] || fail "protect-secrets allowed reading .env"
+  [[ "$(guard_decision "$guards/protect-secrets.js" \
+    '{"tool_name": "Read", "tool_input": {"file_path": "/repo/.env.example"}}')" \
+    == allow ]] || fail "protect-secrets blocked an example env file"
+
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$guards" ]] || fail "Deselecting guards kept the guards link"
+  # The verify-gate entries stay; only the guard entries go.
+  jq -e 'del(.hooks.UserPromptSubmit, .hooks.Stop) == {"model": "local",
+    "hooks": {"PreToolUse": [{"matcher": "Bash",
+    "hooks": [{"type": "command", "command": "audit.sh"}]}]}}' \
+    "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Deselecting guards did not restore the local Claude hooks"
+
+  # Mirror each PATH directory that holds node, without node.
+  IFS=: read -r -a path_entries <<<"$PATH"
+  for path_entry in "${path_entries[@]}"; do
+    [[ -n "$path_entry" ]] || continue
+    if [[ -x "$path_entry/node" ]]; then
+      mirror="$TEST_ROOT/no-node/${#no_node_path}"
+      mkdir -p "$mirror"
+      for command_path in "$path_entry"/*; do
+        [[ "${command_path##*/}" == node ]] ||
+          ln -s "$command_path" "$mirror/${command_path##*/}"
+      done
+      path_entry="$mirror"
+    fi
+    no_node_path+="${no_node_path:+:}$path_entry"
+  done
+  if PATH="$no_node_path" command -v node >/dev/null; then
+    fail "Could not hide node from PATH"
+  fi
+  if PATH="$no_node_path" run_installer_args "$test_home" --components guards; then
+    fail "Guards install succeeded without node"
+  fi
+  assert_contains "$test_home/install.log" "needed by the guards component"
 }
 
 test_component_profiles() {
@@ -1020,7 +1124,7 @@ test_component_profiles() {
   # The first profile's links still identify its components.
   run_installer_args "$test_home"
   [[ "$(saved_components "$test_home")" == \
-    "instructions,skills,statusline,codex-rules" ]] ||
+    "instructions,skills,statusline,codex-rules,guards" ]] ||
     fail "Switching profiles lost the first profile's components"
   assert_skill_links "$test_home/.agents/skills"
 
@@ -1691,6 +1795,8 @@ test_component_detection
 pass "installs without a saved selection keep their detected components"
 test_component_profiles
 pass "a selection saved for other agent roots is not applied to these roots"
+test_guard_hooks
+pass "guards install Claude Code hooks that block test removal and secret reads"
 test_replaced_status_line_script
 pass "a status-line script replaced by a local file keeps its setting"
 test_status_line_removal_after_update

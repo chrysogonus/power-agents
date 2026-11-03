@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused tests for the verify-gate hook reconciler."""
+"""Focused tests for the managed hook reconciler."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ FRAGMENTS = {
     for agent in ("claude", "codex")
 }
 SCRIPT = "/home/user/.agents/hooks/verify-gate.py"
+GUARD_FRAGMENT = ROOT / "settings" / "claude" / "guards-hooks.json"
+GUARDS = "/home/user/.agents/hooks/guards/"
 
 FOREIGN = {
     "description": "local hooks",
@@ -212,7 +214,9 @@ class ReconcileHooksTests(unittest.TestCase):
             "no placeholder": {"hooks": managed("claude")},
             "bad timeout": {"hooks": {"Stop": [{"hooks": [{
                 "type": "command", "command": "@VERIFY_GATE@", "timeout": 0}]}]}},
-            "matcher": {"hooks": {"Stop": [{"matcher": "*", "hooks": [{
+            "non-string matcher": {"hooks": {"Stop": [{"matcher": 5, "hooks": [{
+                "type": "command", "command": "@VERIFY_GATE@"}]}]}},
+            "empty matcher": {"hooks": {"Stop": [{"matcher": "", "hooks": [{
                 "type": "command", "command": "@VERIFY_GATE@"}]}]}},
         }
         fragment = self.directory / "fragment.json"
@@ -222,6 +226,70 @@ class ReconcileHooksTests(unittest.TestCase):
                 result = self.run_reconciler("validate-managed", str(fragment))
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("ERROR: managed", result.stderr)
+
+
+    def reconcile_guards(self, input_path: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_reconciler(
+            "reconcile", str(GUARD_FRAGMENT), str(input_path),
+            str(self.output_path), "--script", GUARDS, "--placeholder", "@GUARDS@",
+        )
+
+    def test_guard_fragment_needs_its_placeholder(self) -> None:
+        result = self.run_reconciler(
+            "validate-managed", str(GUARD_FRAGMENT), "--placeholder", "@GUARDS@"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.run_reconciler("validate-managed", str(GUARD_FRAGMENT))
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_guard_hooks_coexist_with_gate_and_foreign_hooks(self) -> None:
+        self.assertEqual(self.reconcile(FOREIGN).returncode, 0)
+        with_gate = self.directory / "with-gate.json"
+        with_gate.write_text(self.output_path.read_text(encoding="utf-8"),
+                             encoding="utf-8")
+
+        result = self.reconcile_guards(with_gate)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.output()
+        pre_tool_use = document["hooks"]["PreToolUse"]
+        self.assertEqual(pre_tool_use[0], FOREIGN["hooks"]["PreToolUse"][0])
+        self.assertEqual(
+            [group["matcher"] for group in pre_tool_use[1:]],
+            ["Bash|Edit|MultiEdit|Write", "Read|Edit|Write|Bash|Grep"],
+        )
+        self.assertEqual(
+            [group["hooks"][0]["command"] for group in pre_tool_use[1:]],
+            [f'node "{GUARDS}protect-tests.js"',
+             f'node "{GUARDS}protect-secrets.js"'],
+        )
+        self.assertEqual(document["hooks"]["Stop"][-1],
+                         managed("claude")["Stop"][0])
+
+        installed = self.directory / "installed.json"
+        installed.write_text(self.output_path.read_text(encoding="utf-8"),
+                             encoding="utf-8")
+        self.assertEqual(self.reconcile_guards(installed).returncode, 0)
+        self.assertEqual(self.output(), document)
+
+        result = self.run_reconciler(
+            "remove", str(installed), str(self.output_path), "--script", GUARDS
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.output(), json.loads(with_gate.read_text(encoding="utf-8"))
+        )
+
+    def test_guard_removal_keeps_similar_paths(self) -> None:
+        local = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{
+            "type": "command",
+            "command": 'node "/home/user/.agents/hooks/guards-local/x.js"'}]}]}}
+        self.input_path.write_text(json.dumps(local), encoding="utf-8")
+        result = self.run_reconciler(
+            "remove", str(self.input_path), str(self.output_path),
+            "--script", GUARDS,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.output(), local)
 
 
 if __name__ == "__main__":

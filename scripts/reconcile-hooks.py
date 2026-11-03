@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Safely reconcile the managed verify-gate hook entries in a JSON document.
+"""Safely reconcile managed hook entries in a JSON document.
 
 Claude Code settings and Codex hooks.json share the same hook layout:
 {"hooks": {"<Event>": [{"matcher": ..., "hooks": [{"command": ...}]}]}}.
 Managed entries are the handlers whose command references the installed
-verify-gate script. Every other value is preserved.
+script path: the verify gate by default, or another path such as the guards
+directory (passed with a trailing slash) together with its placeholder. Every
+other value is preserved.
 """
 
 from __future__ import annotations
@@ -44,7 +46,9 @@ def parse_file(path: Path) -> dict[str, Any]:
     return value
 
 
-def validate_managed(document: dict[str, Any]) -> None:
+def validate_managed(
+    document: dict[str, Any], placeholder: str = PLACEHOLDER
+) -> None:
     if set(document) != {"hooks"} or not isinstance(document["hooks"], dict):
         raise ValueError("managed hooks must contain only a hooks object")
     if not document["hooks"]:
@@ -56,13 +60,15 @@ def validate_managed(document: dict[str, Any]) -> None:
         for group in groups:
             if (
                 not isinstance(group, dict)
-                or set(group) != {"hooks"}
+                or not {"hooks"} <= set(group) <= {"hooks", "matcher"}
                 or not isinstance(group["hooks"], list)
                 or not group["hooks"]
+                or not isinstance(group.get("matcher", "*"), str)
+                or not group.get("matcher", "*")
             ):
                 raise ValueError(
                     f"managed {event} groups must contain only a non-empty "
-                    "hooks array"
+                    "hooks array and an optional non-empty matcher string"
                 )
             for handler in group["hooks"]:
                 if not isinstance(handler, dict) or not (
@@ -75,9 +81,9 @@ def validate_managed(document: dict[str, Any]) -> None:
                 if handler["type"] != "command":
                     raise ValueError(f"managed {event} handlers must be commands")
                 command = handler["command"]
-                if not isinstance(command, str) or PLACEHOLDER not in command:
+                if not isinstance(command, str) or placeholder not in command:
                     raise ValueError(
-                        f"managed {event} commands must reference {PLACEHOLDER}"
+                        f"managed {event} commands must reference {placeholder}"
                     )
                 timeout = handler.get("timeout", 1)
                 if (
@@ -164,9 +170,11 @@ def without_managed(document: dict[str, Any], script: str) -> dict[str, Any]:
     return result
 
 
-def managed_entries(source: dict[str, Any], script: str) -> dict[str, Any]:
+def managed_entries(
+    source: dict[str, Any], script: str, placeholder: str = PLACEHOLDER
+) -> dict[str, Any]:
     text = json.dumps(source["hooks"])
-    return json.loads(text.replace(PLACEHOLDER, json.dumps(script)[1:-1]))
+    return json.loads(text.replace(placeholder, json.dumps(script)[1:-1]))
 
 
 def validate_script_path(script: str) -> None:
@@ -190,15 +198,19 @@ def write(path: Path, document: dict[str, Any]) -> None:
 
 
 def reconcile(
-    source_path: Path, input_path: Path, output_path: Path, script: str
+    source_path: Path,
+    input_path: Path,
+    output_path: Path,
+    script: str,
+    placeholder: str = PLACEHOLDER,
 ) -> None:
     validate_script_path(script)
     source = parse_file(source_path)
-    validate_managed(source)
+    validate_managed(source, placeholder)
     original = parse_file(input_path)
     validate_config(original, input_path)
 
-    managed = managed_entries(source, script)
+    managed = managed_entries(source, script, placeholder)
     candidate = without_managed(original, script)
     hooks = candidate.setdefault("hooks", {})
     for event, groups in managed.items():
@@ -228,6 +240,7 @@ def main() -> int:
 
     validate_managed_parser = subparsers.add_parser("validate-managed")
     validate_managed_parser.add_argument("source", type=Path)
+    validate_managed_parser.add_argument("--placeholder", default=PLACEHOLDER)
 
     validate_config_parser = subparsers.add_parser("validate-config")
     validate_config_parser.add_argument("config", type=Path)
@@ -237,6 +250,7 @@ def main() -> int:
     reconcile_parser.add_argument("input", type=Path)
     reconcile_parser.add_argument("output", type=Path)
     reconcile_parser.add_argument("--script", required=True)
+    reconcile_parser.add_argument("--placeholder", default=PLACEHOLDER)
 
     remove_parser = subparsers.add_parser("remove")
     remove_parser.add_argument("input", type=Path)
@@ -247,7 +261,7 @@ def main() -> int:
 
     try:
         if arguments.command == "validate-managed":
-            validate_managed(parse_file(arguments.source))
+            validate_managed(parse_file(arguments.source), arguments.placeholder)
         elif arguments.command == "validate-config":
             validate_config(parse_file(arguments.config), arguments.config)
         elif arguments.command == "reconcile":
@@ -256,6 +270,7 @@ def main() -> int:
                 arguments.input,
                 arguments.output,
                 arguments.script,
+                arguments.placeholder,
             )
         else:
             remove(arguments.input, arguments.output, arguments.script)

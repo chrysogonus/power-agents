@@ -6,12 +6,12 @@ required workflow is summarized in [Contributing](../CONTRIBUTING.md).
 
 ## Quality Checks
 
-The core local checks use Make, Bash 4.4 or newer, Git, `jq`, Python 3 with `tomlkit` and
+The core local checks use Make, Bash 4.4 or newer, Git, `jq`, Node.js, Python 3 with `tomlkit` and
 PyYAML, and [ShellCheck](https://www.shellcheck.net/). The
 [README](../README.md#quality-checks) lists the install command for Debian or
 Ubuntu. `make test` needs the same tools except ShellCheck: the test runner
 imports `tomlkit` at startup and exercises the installer, which uses `jq` and
-PyYAML.
+PyYAML, and runs the `guards` hooks with Node.js.
 
 Run the complete pipeline locally after committing and before pushing:
 

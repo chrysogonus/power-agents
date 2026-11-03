@@ -26,6 +26,8 @@ directory remains `~/.agents/skills`, even when `CODEX_HOME` is set.
 | `statusline` | Codex TUI settings | `<Codex root>/config.toml` | `settings/codex/tui.toml` | Managed keys |
 | `statusline` | Installed Codex TUI values | `~/.config/power-agents/codex-tui.toml` | `settings/codex/tui.toml` | Copy |
 | `codex-rules` | Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Symlink |
+| `guards` | Claude Code guard hooks | `<Claude root>/settings.json` (`hooks.PreToolUse`) | `settings/claude/guards-hooks.json` | Managed entries |
+| `guards` | Guard hook scripts | `~/.agents/hooks/guards` | `hooks/guards` | Symlink |
 
 The installer also creates `~/.agents`, `~/.agents/hooks`, the Codex and Claude
 roots, and `~/.config/power-agents` when they are missing, so even a gate-only
@@ -44,7 +46,7 @@ created through interactive approvals.
 
 The verify gate is always installed. Select optional components with
 `./install.sh --components LIST`, where `LIST` is a comma-separated subset of
-`instructions`, `skills`, `statusline`, and `codex-rules`, or `all` or `none`.
+`instructions`, `skills`, `statusline`, `codex-rules`, and `guards`, or `all` or `none`.
 An unknown name fails before anything changes.
 
 - **The selection is saved.** The installer writes it to
@@ -88,10 +90,19 @@ An unknown name fails before anything changes.
   whatever `CODEX_HOME` is, and both agents run the gate from
   `~/.agents/hooks/verify-gate.py`. Deselecting `skills` for one profile
   removes the shared Codex skill links; the next install for a profile that
-  still selects `skills` restores them.
+  still selects `skills` restores them. The `~/.agents/hooks/guards` link is
+  kept when the saved selection belongs to other agent roots, since their
+  Claude settings may still run it.
+- **`guards` applies to Claude Code only.** It adds two `PreToolUse` groups
+  that run `protect-tests.js` and `protect-secrets.js` through
+  `~/.agents/hooks/guards`, after any hooks of your own. Entries whose command
+  runs a script in that directory are managed; deselecting `guards` removes
+  only those. Both scripts log blocked calls to `~/.claude/hooks-logs`, and
+  `HOOK_SAFETY_LEVEL` (`critical`, `high`, or `strict`; default `high`) tunes
+  how much they block. Codex hooks are not changed.
 - **Python modules are needed only by their component.** `statusline` needs
   `tomlkit`, also for removing it, and `skills` needs PyYAML for validation. A
-  gate-only install needs neither.
+  gate-only install needs neither. `guards` needs Node.js (`node`) instead.
 
 ## Installation Details
 
@@ -292,6 +303,9 @@ This removes, for the agent roots selected by `CODEX_HOME` and
   `<Codex root>/hooks.json`, along with any matcher group, event, or `hooks`
   object that becomes empty as a result. Every other setting and hook is kept;
 - the `~/.agents/hooks/verify-gate.py` link, if it points into this checkout;
+- the guard entries in `<Claude root>/settings.json`, and the
+  `~/.agents/hooks/guards` link unless the saved selection belongs to other
+  agent roots;
 - `~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
 
 It refuses to run when `~/.agents/hooks/verify-gate.py` belongs to another

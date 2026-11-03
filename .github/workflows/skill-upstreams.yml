@@ -60,8 +60,8 @@ jobs:
 
           body="$RUNNER_TEMP/body.md"
           {
-            echo "The weekly \`make skills-outdated\` check found imported skills whose"
-            echo "upstream path changed after the pinned revision:"
+            echo "The weekly \`make skills-outdated\` check found imported skills or hooks"
+            echo "whose upstream path changed after the pinned revision:"
             echo
             echo '```'
             grep -v ': current$' "$RUNNER_TEMP/report.txt"

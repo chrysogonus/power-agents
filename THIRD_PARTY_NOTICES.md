@@ -31,6 +31,21 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Claude Code Guard Hooks
+
+`hooks/guards/protect-tests.js` and `hooks/guards/protect-secrets.js` are
+copied unchanged from pinned revisions of
+[karanb192/claude-code-hooks](https://github.com/karanb192/claude-code-hooks),
+added on 2026-11-03 and distributed under the MIT License, which is preserved
+at `hooks/guards/LICENSE`. The upstream plugin manifests, READMEs, and tests are
+omitted; `settings/claude/guards-hooks.json` registers the scripts with the
+upstream matchers and timeouts (10 seconds is added for `protect-tests`).
+
+| Local file | Upstream path | Pinned revision | License |
+| --- | --- | --- | --- |
+| `hooks/guards/protect-tests.js` | [karanb192/claude-code-hooks / plugins/protect-tests](https://github.com/karanb192/claude-code-hooks/tree/57a28c7687305e4a9b9dd50490e9b3c552c71ca4/plugins/protect-tests) | `57a28c7687305e4a9b9dd50490e9b3c552c71ca4` | MIT |
+| `hooks/guards/protect-secrets.js` | [karanb192/claude-code-hooks / plugins/protect-secrets](https://github.com/karanb192/claude-code-hooks/tree/57a28c7687305e4a9b9dd50490e9b3c552c71ca4/plugins/protect-secrets) | `57a28c7687305e4a9b9dd50490e9b3c552c71ca4` | MIT |
+
 ## Contributor Covenant
 
 `CODE_OF_CONDUCT.md` is adapted from the

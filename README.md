@@ -151,6 +151,7 @@ until you select it:
 | `skills` | 23 ready-made guides for specific jobs, such as minimal bug fixes, test-first development, debugging, code reviews, architecture, issue triage, browser automation, React, Postgres, security, and UI design. [Browse the skills →](skills/README.md) |
 | `statusline` | Both agents show the project, the model, the context used, and usage limits at the bottom of the terminal. |
 | `codex-rules` | Codex asks before running some test commands: `.venv/bin/pytest`, `python -m pytest`, and `.venv/bin/python -m pytest`. |
+| `guards` | Claude Code refuses to delete or skip tests to make a suite pass, and to read or leak secrets such as `.env` files and SSH keys. Needs Node.js. |
 
 Pass a comma-separated list, or `all` or `none`:
 
@@ -268,8 +269,9 @@ Every installed path is listed in the
 | Install and use | GNU/Linux, Bash 4.4 or newer, GNU coreutils, `git`, `make`, `jq`, `python3` |
 | Use the `statusline` component | `tomlkit` (`python3-tomlkit`) |
 | Use the `skills` component | PyYAML (`python3-yaml`) |
+| Use the `guards` component | Node.js (`node`) |
 | Read compressed Codex transcripts | `zstd`, optional |
-| Run `make check`, `make test`, `make ci` | all of the above, plus `shellcheck`, `tomlkit`, and PyYAML |
+| Run `make check`, `make test`, `make ci` | all of the above, plus `shellcheck`, `tomlkit`, PyYAML, and Node.js |
 
 macOS is not supported yet. On Debian or Ubuntu:
 
@@ -307,6 +309,7 @@ run `make install` and restart your agent sessions.
 | Codex command rules | [`policies/codex/shared.rules`](policies/codex/shared.rules) |
 | Codex status line | [`settings/codex/tui.toml`](settings/codex/tui.toml) |
 | Claude Code status line | [`settings/claude/statusline-command.sh`](settings/claude/statusline-command.sh) |
+| Claude Code guard hooks | [`hooks/guards/`](hooks/guards/) and [`settings/claude/guards-hooks.json`](settings/claude/guards-hooks.json) |
 
 ## Quality Checks
 
@@ -315,7 +318,7 @@ the development tools from [Requirements](#requirements). On Debian or
 Ubuntu:
 
 ```bash
-sudo apt-get install git make jq python3 python3-tomlkit python3-yaml shellcheck
+sudo apt-get install git make jq nodejs python3 python3-tomlkit python3-yaml shellcheck
 ```
 
 What the checks cover is described in the

@@ -211,6 +211,7 @@ flowchart TD
     G --- S["skills<br/>23 guides for specific jobs"]
     G --- T["statusline<br/>project, model, context, limits"]
     G --- R["codex-rules<br/>Codex asks before some test commands"]
+    G --- D["guards<br/>Claude Code keeps tests and secrets safe"]
 ```
 
 Where things go:
