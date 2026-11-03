@@ -1632,6 +1632,18 @@ test_ci_workflow() {
   fi
 }
 
+test_skill_upstream_workflow() {
+  local workflow="$ROOT/.github/workflows/skill-upstreams.yml"
+
+  assert_contains "$workflow" 'cron: "17 6 * * 1"'
+  assert_contains "$workflow" "workflow_dispatch:"
+  assert_contains "$workflow" "issues: write"
+  assert_contains "$workflow" "persist-credentials: false"
+  assert_contains "$workflow" "python3 scripts/check-skill-upstreams.py"
+  assert_contains "$workflow" '--search "\"$ISSUE_TITLE\" in:title"'
+  assert_contains "$workflow" 'select(.title == env.ISSUE_TITLE)'
+}
+
 test_project_instruction_entrypoints
 pass "AGENTS.md is the sole project instruction entrypoint"
 python3 "$ROOT/tests/test_validate_skills.py"
@@ -1717,3 +1729,5 @@ test_make_targets
 pass "Make targets"
 test_ci_workflow
 pass "GitHub workflow uses the shared CI pipeline and dependencies"
+test_skill_upstream_workflow
+pass "weekly workflow checks imported skill pins and tracks them in an issue"

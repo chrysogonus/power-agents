@@ -213,7 +213,7 @@ Run these from your checkout. `make` on its own lists them.
 | `make check` | Run all checks and tests on your working copy. |
 | `make test` | Run only the behavioral tests. |
 | `make ci` | Run the same checks as GitHub Actions. |
-| `make skills-outdated` | Check the imported skills against their upstream repositories. Needs an authenticated `gh`. |
+| `make skills-outdated` | Check the imported skills against their upstream repositories. Needs an authenticated `gh`. A weekly GitHub workflow runs it and tracks outdated skills in an issue. |
 | `make eval EVAL_ARGS="--skill ponytail"` | Measure how well skills are chosen and followed. **Uses paid API calls.** [Details](docs/development.md#behavioral-skill-evaluations) |
 | `make coding-eval CODING_EVAL_ARGS="--agent claude --model MODEL"` | Plan coding-outcome trials. Add `--execute` to run them, which is **paid**. [Details](docs/coding-evaluations.md) |
 

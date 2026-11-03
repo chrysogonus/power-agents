@@ -74,6 +74,14 @@ when every pin is current, 1 when any is behind, and 2 when a check fails, for
 example when `gh` is missing or an upstream path no longer exists. It reports
 upstream changes only; it does not compare local files with the pin.
 
+The [Skill upstreams workflow](../.github/workflows/skill-upstreams.yml) runs the
+same check every Monday at 06:17 UTC and can be started manually from the
+Actions tab. When a pin is behind, it opens an issue titled "Imported skills are
+behind upstream", or updates it and comments when the list changes. It closes
+the issue once every pin is current. A failed check (exit status 2) fails the
+run instead. GitHub disables scheduled workflows after 60 days without repository
+activity; re-enable it from the Actions tab.
+
 ## Behavioral Skill Evaluations
 
 `make eval` runs every case in `skills/*/evals/evals.json` using Claude Code and

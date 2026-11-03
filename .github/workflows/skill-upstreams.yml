@@ -1,0 +1,83 @@
+name: Skill upstreams
+
+on:
+  schedule:
+    # Mondays at 06:17 UTC.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: skill-upstreams
+  cancel-in-progress: false
+
+jobs:
+  skills-outdated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_TITLE: Imported skills are behind upstream
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check imported skill pins
+        id: check
+        run: |
+          status=0
+          python3 scripts/check-skill-upstreams.py > "$RUNNER_TEMP/report.txt" || status=$?
+          cat "$RUNNER_TEMP/report.txt"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          # 0: all current, 1: some behind, 2: a check failed.
+          if ((status > 1)); then
+            exit "$status"
+          fi
+
+      - name: Open, update, or close the tracking issue
+        env:
+          STATUS: ${{ steps.check.outputs.status }}
+        run: |
+          # Search by title on the server so other open issues cannot crowd it out.
+          number="$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" \
+            --limit 100 --json number,title --jq 'map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty')"
+
+          if [[ "$STATUS" == 0 ]]; then
+            if [[ -n "$number" ]]; then
+              gh issue close "$number" --comment "All imported skill pins are current ($RUN_URL)."
+            fi
+            exit 0
+          fi
+
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "The weekly \`make skills-outdated\` check found imported skills whose"
+            echo "upstream path changed after the pinned revision:"
+            echo
+            echo '```'
+            grep -v ': current$' "$RUNNER_TEMP/report.txt"
+            echo '```'
+            echo
+            echo "Re-sync each one by hand, keeping its local adaptations, and update its pin"
+            echo "in \`THIRD_PARTY_NOTICES.md\` and the research catalog. This issue closes"
+            echo "itself once every pin is current."
+            echo
+            echo "Last checked: $RUN_URL"
+          } > "$body"
+
+          if [[ -z "$number" ]]; then
+            gh issue create --title "$ISSUE_TITLE" --body-file "$body"
+          elif ! diff -q <(gh issue view "$number" --json body --jq .body | tr -d '\r' | grep -v '^Last checked:') \
+              <(grep -v '^Last checked:' "$body") >/dev/null; then
+            gh issue edit "$number" --body-file "$body"
+            gh issue comment "$number" --body "The list of outdated skills changed ($RUN_URL)."
+          fi
