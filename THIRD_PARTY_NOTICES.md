@@ -34,12 +34,16 @@ SOFTWARE.
 ## Claude Code Guard Hooks
 
 `hooks/guards/protect-tests.js` and `hooks/guards/protect-secrets.js` are
-copied unchanged from pinned revisions of
+copied from pinned revisions of
 [karanb192/claude-code-hooks](https://github.com/karanb192/claude-code-hooks),
 added on 2026-11-03 and distributed under the MIT License, which is preserved
 at `hooks/guards/LICENSE`. The upstream plugin manifests, READMEs, and tests are
 omitted; `settings/claude/guards-hooks.json` registers the scripts with the
 upstream matchers and timeouts (10 seconds is added for `protect-tests`).
+`protect-tests.js` is unchanged. In `protect-secrets.js`, the `xargs-cat-env`
+rule was narrowed on 2026-11-05: it now needs `xargs` as a command, with `cat`
+in that same command or a `.env` path in the command before it, not just a later
+mention anywhere in the line. Reapply this change when re-syncing from upstream.
 
 | Local file | Upstream path | Pinned revision | License |
 | --- | --- | --- | --- |

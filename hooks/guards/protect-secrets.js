@@ -176,6 +176,11 @@ const SINK_FILE_FLAG = Object.entries(CLI_FILE_FLAGS)
   .join('|');
 // A reader with a file operand, so `ps aux | head | llm` is a filter, not a read.
 const READER_CMD = '(?:\\b(?:cat|head|tail|bat|tac|more|less)\\b(?:\\s+-\\S+)*\\s+[^\\s|;&<>-]|\\bgit\\s+(?:diff|show)\\b)';
+// xargs as a command, behind unquoted words on its line (sudo -u root, A=1, then, {, < list), maybe quoted or with a path.
+// Not SINK_PREFIX: its xargs wrapper backtracks badly here. Separators stay on one line so many newlines stay fast.
+const XARGS_CMD = '(?:^|[|;&(`"\'\\n])[^\\S\\n]*(?:[^\\s"\'`;|&()]+[^\\S\\n]+)*(?:[^\\s"\';|&]*\\/)?\\\\?xargs["\']?(?=[\\s<]|$)';
+// A quoted cat counts because `xargs sh -c 'echo; cat {}'` still reads.
+const XARGS_CAT = XARGS_CMD + SEG_QA + '(?:\\bcat\\b|"[^"\\n]*\\bcat\\b|\'[^\'\\n]*\\bcat\\b)';
 
 // Bash patterns that expose or exfiltrate secrets
 const BASH_PATTERNS = [
@@ -220,7 +225,7 @@ const BASH_PATTERNS = [
 
   // HIGH - Process environ
   { level: 'high', id: 'proc-environ',           regex: /\/proc\/[^/]*\/environ/,                                          reason: 'Reading process environment' },
-  { level: 'high', id: 'xargs-cat-env',          regex: /xargs.*cat|\.env.*xargs/i,                                         reason: 'Reading .env via xargs' },
+  { level: 'high', id: 'xargs-cat-env',          regex: new RegExp(XARGS_CAT + '|\\.env[^;&\\n]*&?' + XARGS_CMD, 'i'),     reason: 'Reading .env via xargs' },
   { level: 'high', id: 'find-exec-cat-env',      regex: /find\b.*\.env.*-exec|find\b.*-exec.*(cat|less)/i,                 reason: 'Finding and reading .env files' },
 
   // STRICT

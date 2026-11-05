@@ -1010,7 +1010,13 @@ guard_decision() {
     jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 
+guard_bash_decision() {
+  guard_decision "$1" "$(jq -n --arg command "$2" \
+    '{"tool_name": "Bash", "tool_input": {"command": $command}}')"
+}
+
 test_guard_hooks() {
+  local guard_command
   local guards
   local no_node_path=""
   local command_path
@@ -1058,6 +1064,39 @@ test_guard_hooks() {
   [[ "$(guard_decision "$guards/protect-secrets.js" \
     '{"tool_name": "Read", "tool_input": {"file_path": "/repo/.env.example"}}')" \
     == allow ]] || fail "protect-secrets blocked an example env file"
+  for guard_command in \
+    'find . -name .env | xargs cat' \
+    "find . -name '.env*' -print0 | xargs -0 cat" \
+    'ls -a | xargs cat' \
+    'ls -a | sudo xargs -n1 /bin/cat' \
+    "ls -a | xargs -I{} sh -c 'echo {}; cat {}'" \
+    "sh -c 'ls -a | xargs cat'" \
+    'xargs cat < files.txt' \
+    'find . -name .env | xargs wc -c' \
+    'find . -name .env > list && xargs wc -c < list' \
+    'ls -a | "xargs" cat' \
+    "ls -a | '/usr/bin/xargs' cat" \
+    '{ xargs cat; } < files.txt' \
+    '< files.txt xargs cat' \
+    'ls -a | \xargs cat' \
+    'ls -a | $HOME/bin/xargs cat' \
+    $'find . -name .env |\n  xargs cat'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == deny ]] || fail "protect-secrets allowed: $guard_command"
+  done
+  for guard_command in \
+    'ls | xargs wc -l; sed -n 1p Makefile; cat README.md' \
+    'ls | xargs wc -l | cat' \
+    'ls | xargs wc -l && cat README.md' \
+    'ls | xargs echo location' \
+    'ls | xargs grep -l concat' \
+    'man xargs; cat README.md' \
+    "grep -n 'xargs-cat-env' hooks/guards/protect-secrets.js" \
+    "node -e 'const rule = /xargs.*cat/'" \
+    'echo .env.example; ls | xargs wc -l'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == allow ]] || fail "protect-secrets blocked: $guard_command"
+  done
 
   run_installer_args "$test_home" --components none
   [[ ! -e "$guards" ]] || fail "Deselecting guards kept the guards link"
