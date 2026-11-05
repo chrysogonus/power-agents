@@ -188,12 +188,26 @@ const XARGS_CMD = '(?:^|[|;&(`"\'\\n])[^\\S\\n]*(?:[^\\s"\'`;|&()]+[^\\S\\n]+)*(
 // A quoted cat counts because `xargs sh -c 'echo; cat {}'` still reads.
 const XARGS_CAT = XARGS_CMD + SEG_QA + '(?:\\bcat\\b|"[^"\\n]*\\bcat\\b|\'[^\'\\n]*\\bcat\\b)';
 
+// A `$(...)` body, nested up to 8 levels: `)` otherwise ends a word.
+let GREP_SUBST = '[^()]';
+for (let depth = 0; depth < 8; depth += 1) GREP_SUBST = '(?:[^()]|\\(' + GREP_SUBST + '*\\))';
+// A word is a run of pieces (quoted span, escape, `$(...)`, plain char), so `-F'='`, `".env"` and `$(true) .env` still match.
+// A word ends at `)`, and word gaps stay on one line, so a later command is not read as an argument.
+const GREP_PIECE = '(?:\'[^\'\\n]*\'|"(?:[^"\\\\\\n]|\\\\[\\s\\S])*"|\\\\[\\s\\S]|\\$\\(' + GREP_SUBST + '*\\)|[^\\s|;&)"\'\\\\])';
+// A quote spanning lines only starts a word or follows `=` or a flag: a quote stuck to a word (`here"`) may end an earlier string.
+const GREP_MULTILINE = '(?:[^\\s|;&)"\'\\\\=]*=|-[A-Za-z]+)?(?:\'[^\'\\n]*\\n[^\']*\'|"(?:[^"\\\\\\n]|\\\\[\\s\\S])*\\n(?:[^"\\\\]|\\\\[\\s\\S])*")';
+const GREP_WORD = '(?:' + GREP_MULTILINE + GREP_PIECE + '*|' + GREP_PIECE + '+)';
+// .env as a file: not the identifier in process.env or import.meta.env, and not a template, whose suffix must end the name.
+const GREP_ENV_FILE = '(?<!\\b(?:process|meta))\\.env\\b(?!\\.(?:example|sample|template|schema|defaults)(?![\\w./-]))';
+// .env inside a quote: an unclosed one stops at a separator, because that quote may really be the end of an earlier string.
+const GREP_ENV = '\\b(?:grep|rg|egrep|fgrep|ag|awk|gawk)\\b(?:[^\\S\\n]+' + GREP_WORD + ')*[^\\S\\n]+' + GREP_PIECE + '*?'
+  + '(?:(?:\'[^\';|&\\n]*|"[^";|&\\n]*)?' + GREP_ENV_FILE
+  + '|\'[^\'\\n]*' + GREP_ENV_FILE + '[^\'\\n]*\'|"[^"\\n]*' + GREP_ENV_FILE + '[^"\\n]*")';
+
 // Bash patterns that expose or exfiltrate secrets
 const BASH_PATTERNS = [
   // CRITICAL
-  // A word is a run of pieces (quoted span, escape, plain char). Each kind starts with a
-  // different character, so a non-match stays linear, and `-F'='` or `".env"` still match.
-  { level: 'critical', id: 'grep-env',           regex: /\b(grep|rg|egrep|fgrep|ag|awk|gawk)\b(?:\s+(?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s|;&"'\\])+)*\s+(?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s|;&"'\\])*?(?:'[^']*|"[^"]*)?\.env\b/i, reason: 'Reading .env via text tools exposes secrets' },
+  { level: 'critical', id: 'grep-env',           regex: new RegExp(GREP_ENV, 'i'), reason: 'Reading .env via text tools exposes secrets' },
   { level: 'critical', id: 'cat-env',            regex: /\b(cat|less|head|tail|more|bat|view)\s+[^|;]*\.env\b/i,           reason: 'Reading .env file exposes secrets' },
   { level: 'critical', id: 'cat-ssh-key',        regex: /\b(cat|less|head|tail|more|bat)\s+[^|;]*(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key)\b/i, reason: 'Reading private key' },
   { level: 'critical', id: 'cat-aws-creds',      regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.aws\/credentials/i,         reason: 'Reading AWS credentials' },

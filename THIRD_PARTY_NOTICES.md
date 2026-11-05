@@ -40,9 +40,11 @@ added on 2026-11-03 and distributed under the MIT License, which is preserved
 at `hooks/guards/LICENSE`. The upstream plugin manifests, READMEs, and tests are
 omitted; `settings/claude/guards-hooks.json` registers the scripts with the
 upstream matchers and timeouts (10 seconds is added for `protect-tests`).
-`protect-tests.js` is unchanged. `protect-secrets.js` has three local changes,
+`protect-tests.js` is unchanged. `protect-secrets.js` has four local changes,
 made on 2026-11-05; reapply them when re-syncing from upstream:
 
+- The `grep-env` rule stays within one command, and no longer counts
+  `process.env`, `import.meta.env`, or template files such as `.env.example`.
 - The `xargs-cat-env` rule needs `xargs` as a command, with `cat` in that same
   command or a `.env` path in the command before it, not just a later mention
   anywhere in the line.

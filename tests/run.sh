@@ -1097,6 +1097,57 @@ test_guard_hooks() {
     [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
       == allow ]] || fail "protect-secrets blocked: $guard_command"
   done
+  # Text tools reading .env are denied, however the arguments are quoted.
+  for guard_command in \
+    'grep KEY .env' \
+    'rg KEY ".env"' \
+    "grep -F'=' .env" \
+    "awk -F= '{print \$1}' .env" \
+    'grep "a|b" .env' \
+    "grep 'a;b' .env" \
+    'grep KEY "my dir/.env"' \
+    'grep KEY my\ dir/.env' \
+    'grep KEY .env.local' \
+    'grep KEY .env | wc -l' \
+    "sh -c 'grep KEY .env'" \
+    'echo "$(grep KEY .env)"' \
+    'grep KEY $(true) .env' \
+    'grep KEY $(echo .env)' \
+    'grep KEY "$(cd app; pwd)/.env"' \
+    'grep KEY $(echo $(echo a)) .env' \
+    'grep KEY $(echo $(echo $(echo a))) .env' \
+    $'grep KEY $(echo a\n  echo b) .env' \
+    $'grep "KEY\nOTHER" .env' \
+    $'awk \'{\n  print\n}\' .env' \
+    $'awk -v s=\'a\nb\' 1 .env' \
+    $'grep -e"a\nb" .env' \
+    'grep KEY .env.example/x' \
+    'grep KEY .env.sample.bak' \
+    'grep KEY .env.example.local' \
+    'grep KEY .env.template.production' \
+    'grep KEY .env.example-old' \
+    'grep KEY .env.example .env' \
+    $'grep -r KEY \\\n  .env'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == deny ]] || fail "protect-secrets allowed: $guard_command"
+  done
+  # A later command, a code identifier, or a template is not a read of .env.
+  for guard_command in \
+    $'grep -c foo README.md\necho .env.local' \
+    'grep -c foo README.md; echo .env.local' \
+    'echo "$(grep -c "$v" docs/a.md)"; echo .env.local' \
+    'echo "use grep here"; echo x.env' \
+    '(grep foo README.md) > .env.out' \
+    'grep -rn "process.env" src/' \
+    "rg 'import.meta.env.VITE' src" \
+    'grep KEY .env.example | wc -l' \
+    'grep KEY ".env.example"' \
+    "grep KEY '.env.sample' | wc -l" \
+    $'echo "use grep here"\necho "see .env"' \
+    $'print("grep foo")\nprint(".env")'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == allow ]] || fail "protect-secrets blocked: $guard_command"
+  done
   # Wrappers before a model CLI are still seen, however they are stacked.
   for guard_command in \
     'timeout 30 sudo llm < .env' \
