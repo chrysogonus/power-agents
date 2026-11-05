@@ -99,7 +99,9 @@ An unknown name fails before anything changes.
   runs a script in that directory are managed; deselecting `guards` removes
   only those. Both scripts log blocked calls to `~/.claude/hooks-logs`, and
   `HOOK_SAFETY_LEVEL` (`critical`, `high`, or `strict`; default `high`) tunes
-  how much they block. Codex hooks are not changed.
+  how much they block. `protect-secrets.js` denies a call whose check takes more
+  than 5 seconds, which only very large or highly repetitive commands should
+  reach. Codex hooks are not changed.
 - **Python modules are needed only by their component.** `statusline` needs
   `tomlkit`, also for removing it, and `skills` needs PyYAML for validation. A
   gate-only install needs neither. `guards` needs Node.js (`node`) instead.

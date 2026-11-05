@@ -36,6 +36,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const vm = require('vm');
+
+// Well under the 10 s hook timeout, so a slow check is denied here and never times out.
+const CHECK_BUDGET_MS = 5000;
 
 // A handled tool missing from hooks.json never reaches this guard.
 const HANDLED_TOOLS = ['Read', 'Edit', 'Write', 'Bash', 'Grep'];
@@ -108,8 +112,10 @@ const SENSITIVE_FILES = [
 // Delegation sinks: file contents or secret env vars fed to an external model CLI or API host.
 const SINK_CLI = '(?:gemini(?:-cli)?|codex|llm|sgpt|aichat|openai|mods|fabric)';
 // A sink CLI behind env assignments, wrappers (sudo, npx, env, timeout, xargs ...), a path or an npm scope.
-const SINK_PREFIX = '(?:^|[|;&(`"\'!\\n]|\\b(?:do|then|else)\\b)\\s*'
-  + '(?:(?:sudo|npx|uvx|bunx|pnpm\\s+dlx|command|time|exec|nice|nohup|env|timeout|xargs)\\b[^;|&\\n]*?\\s+|[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*'
+// One wrapper is enough: its arguments already span any later wrappers, and repeating the group backtracks exponentially.
+const SINK_PREFIX = '(?:^|[|;&(`"\'!\\n]|\\b(?:do|then|else)\\b)[^\\S\\n]*'
+  + '(?:[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*'
+  + '(?:(?:sudo|npx|uvx|bunx|pnpm\\s+dlx|command|time|exec|nice|nohup|env|timeout|xargs)\\b[^;|&\\n]*?\\s)?'
   + '(?:[^\\s"\';|&]*\\/)?';
 const SINK_END = '(?=[\\s<]|$)';
 const SINK_CMD = SINK_PREFIX + SINK_CLI + SINK_END;
@@ -308,6 +314,16 @@ function check(toolName, toolInput, safetyLevel = SAFETY_LEVEL) {
   return { blocked: false, pattern: null };
 }
 
+// Some rules slow down on very large inputs: run them under a deadline, and deny when it passes.
+function checkWithinBudget(toolName, toolInput) {
+  try {
+    return vm.runInNewContext('check(toolName, toolInput)', { check, toolName, toolInput }, { timeout: CHECK_BUDGET_MS });
+  } catch (e) {
+    if (e.code !== 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw e;
+    return { blocked: true, pattern: { level: 'critical', id: 'check-timeout', reason: 'The secrets check ran out of time on this input; shorten or split it' } };
+  }
+}
+
 async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
@@ -320,7 +336,7 @@ async function main() {
       return console.log('{}');
     }
 
-    const result = check(tool_name, tool_input);
+    const result = checkWithinBudget(tool_name, tool_input);
 
     if (result.blocked) {
       const p = result.pattern;

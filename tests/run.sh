@@ -1006,7 +1006,7 @@ test_component_detection() {
 
 guard_decision() {
   printf '%s' "$2" |
-    HOME="$TEST_ROOT/guard-log-home" node "$1" |
+    HOME="$TEST_ROOT/guard-log-home" timeout 20 node "$1" |
     jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 
@@ -1097,6 +1097,32 @@ test_guard_hooks() {
     [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
       == allow ]] || fail "protect-secrets blocked: $guard_command"
   done
+  # Wrappers before a model CLI are still seen, however they are stacked.
+  for guard_command in \
+    'timeout 30 sudo llm < .env' \
+    'A=1 npx llm "$(cat .env)"' \
+    'nice -n 5 env X=1 /usr/bin/llm < .env' \
+    'ls | xargs -n1 llm $OPENAI_API_KEY' \
+    'time env A=1 xargs llm < .env' \
+    $'cd app &&\n  sudo llm < .env'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == deny ]] || fail "protect-secrets allowed: $guard_command"
+  done
+  # Repeated wrapper words must get a real answer, not a timeout or a budget denial.
+  for guard_command in \
+    "$(printf 'sudo %.0s' {1..30})" \
+    "$(printf 'xargs %.0s' {1..30})" \
+    "git commit -m \"$(printf 'time %.0s' {1..30})\"" \
+    "xargs $(printf '%100000s' '')x"; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == allow ]] || fail "protect-secrets stalled on: ${guard_command:0:40}"
+  done
+  # A check that overruns its budget fails closed, before the hook's 10 s timeout.
+  SECONDS=0
+  [[ "$(guard_bash_decision "$guards/protect-secrets.js" \
+    "llm $(printf '%120000s' '' | tr ' ' '@')")" == deny ]] ||
+    fail "protect-secrets did not deny a check over its budget"
+  ((SECONDS < 10)) || fail "protect-secrets took ${SECONDS}s, past the hook timeout"
 
   run_installer_args "$test_home" --components none
   [[ ! -e "$guards" ]] || fail "Deselecting guards kept the guards link"
