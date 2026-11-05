@@ -1169,6 +1169,9 @@ class VerifyGateTests(unittest.TestCase):
         (self.repo / "app.py").write_text("print('private 2')\n", encoding="utf-8")
         self.assertEqual(self.stop(), {})
         self.assertFalse(self.records("check")[-1]["audit"])
+        # Workers log last: one still running would recreate the cache
+        # directory during tearDown's rmtree.
+        self.wait_for("final-check", 6)
 
     def test_follow_up_prompts_and_rework_are_logged(self) -> None:
         self.mark()
