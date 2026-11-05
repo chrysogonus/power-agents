@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gc
 import importlib.util
+import itertools
 import json
 import os
 import random
@@ -16,6 +17,7 @@ import time
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -752,6 +754,14 @@ class VerifyGateTests(unittest.TestCase):
             f'"{sys.executable}" -c "{child}" & sleep 1', str(self.repo))
         self.assertEqual(status, "passed")
         self.assertLess(time.monotonic() - started, 10)
+
+    def test_project_check_duration_ignores_wall_clock_steps(self) -> None:
+        spec = importlib.util.spec_from_file_location("verify_gate", SCRIPT)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        with mock.patch("time.time", side_effect=itertools.count(1000, -10)):
+            status, seconds, _ = gate.run_check("true", str(self.repo))
+        self.assertEqual((status, seconds), ("passed", 0))
 
     def test_project_settings_override_global_and_fail_closed(self) -> None:
         toggle = self.home / ".config" / "power-agents" / "cross-review-on"

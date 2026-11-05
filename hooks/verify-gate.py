@@ -890,7 +890,7 @@ def experiment_settings():
 
 def run_check(command, cwd):
     """Run the project's check command; return (status, seconds, output)."""
-    started = time.time()
+    started = time.monotonic()
     try:
         proc = subprocess.Popen(
             command, shell=True, cwd=cwd, stdin=subprocess.DEVNULL,
@@ -923,7 +923,7 @@ def run_check(command, cwd):
     proc.wait()
     reader.join(5)  # a child that left the group may still hold the pipe
     text = bytes(tail).decode(errors="replace")[-MAX_CHECK_CHARS:].rstrip()
-    return status, round(time.time() - started), text
+    return status, round(time.monotonic() - started), text
 
 
 def detect_agent(event, arg):
