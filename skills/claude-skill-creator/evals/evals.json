@@ -1,0 +1,51 @@
+{
+  "skill_name": "claude-skill-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to turn our release-notes workflow into a Claude Code skill and test it on a few real prompts against a baseline before I trust it.",
+      "expected_output": "Load claude-skill-creator, capture the intent, draft the skill, propose two or three realistic test prompts, and ask for approval of the paid with-skill and baseline runs before starting them.",
+      "assertions": [
+        "claude-skill-creator is loaded.",
+        "The response proposes realistic test prompts for the skill.",
+        "The response asks for approval before starting paid model runs."
+      ],
+      "routing": {
+        "required": [
+          "claude-skill-creator"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Tighten the wording of our AGENTS.md so the completion criteria are clearer. I will paste it next.",
+      "expected_output": "Do not load claude-skill-creator: editing an agent instruction file without test runs belongs to writing-for-agents.",
+      "assertions": [
+        "claude-skill-creator is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "writing-for-agents"
+        ],
+        "forbidden": [
+          "claude-skill-creator"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "My review-report skill rarely triggers. Optimize its description with a trigger eval set and measure the hit rate before and after.",
+      "expected_output": "Load claude-skill-creator for description optimization, plan a realistic should-trigger and should-not-trigger query set for the user to review, and ask before running the paid claude -p loop.",
+      "assertions": [
+        "claude-skill-creator is loaded.",
+        "The response includes near-miss should-not-trigger queries in the plan.",
+        "The response asks for approval before running the optimization loop."
+      ],
+      "routing": {
+        "required": [
+          "claude-skill-creator"
+        ]
+      }
+    }
+  ]
+}

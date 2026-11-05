@@ -1,0 +1,52 @@
+{
+  "skill_name": "finishing-a-development-branch",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm done with the retry-backoff work in my feature/retry worktree. Wrap up the branch for me.",
+      "expected_output": "Load finishing-a-development-branch, run the project's checks first, confirm the base branch, and present the merge, pull request, and keep options without merging or pushing before the user chooses.",
+      "assertions": [
+        "finishing-a-development-branch is loaded.",
+        "The response verifies the tests or checks before offering integration options.",
+        "The response does not merge, push, or delete anything before the user picks an option."
+      ],
+      "routing": {
+        "required": [
+          "finishing-a-development-branch"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Summarize this session in a document so a fresh agent can continue the migration work tomorrow.",
+      "expected_output": "Do not load finishing-a-development-branch: a session handoff belongs to handoff.",
+      "assertions": [
+        "finishing-a-development-branch is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "handoff"
+        ],
+        "forbidden": [
+          "finishing-a-development-branch"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Create a new worktree for an experimental refactor so my main checkout stays clean.",
+      "expected_output": "Do not load finishing-a-development-branch: creating an isolated workspace belongs to using-git-worktrees.",
+      "assertions": [
+        "finishing-a-development-branch is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "using-git-worktrees"
+        ],
+        "forbidden": [
+          "finishing-a-development-branch"
+        ]
+      }
+    }
+  ]
+}

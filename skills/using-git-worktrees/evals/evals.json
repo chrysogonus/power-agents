@@ -1,0 +1,48 @@
+{
+  "skill_name": "using-git-worktrees",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up a separate git worktree so I can build the CSV export feature without touching my current checkout. The repo uses pytest.",
+      "expected_output": "Load using-git-worktrees, check whether the session is already in a linked worktree, prefer a native worktree tool, keep any project-local worktree directory ignored without committing, and plan a clean baseline test run.",
+      "assertions": [
+        "using-git-worktrees is loaded.",
+        "The response checks for existing isolation or a native worktree tool before running git worktree add.",
+        "The response does not commit a .gitignore change without being asked."
+      ],
+      "routing": {
+        "required": [
+          "using-git-worktrees"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "The feature on my branch is done and the tests pass. Help me merge it back or open a pull request.",
+      "expected_output": "Do not load using-git-worktrees: integrating finished work belongs to finishing-a-development-branch.",
+      "assertions": [
+        "using-git-worktrees is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "finishing-a-development-branch"
+        ],
+        "forbidden": [
+          "using-git-worktrees"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "What is the difference between git worktree and git stash?",
+      "expected_output": "Answer the conceptual question directly without loading a skill or creating a worktree.",
+      "assertions": [
+        "No worktree is created.",
+        "The response explains that worktrees give separate checkouts while stash shelves changes in the same checkout."
+      ],
+      "routing": {
+        "allowed": []
+      }
+    }
+  ]
+}

@@ -2,7 +2,8 @@
 name: writing-for-agents
 description: Use when creating or restructuring AGENTS.md, CLAUDE.md, SKILL.md, or agent-facing
   references for clear triggers, progressive disclosure, and completion criteria. For an existing
-  standalone prompt draft use prompt-refiner.
+  standalone prompt draft use prompt-refiner; for testing a skill with Claude Code runs,
+  benchmarks, or description-trigger optimization use claude-skill-creator.
 metadata:
   evaluation-status: unmeasured
 ---

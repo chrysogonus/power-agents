@@ -188,6 +188,36 @@
       "local_adaptations": "Narrowed routing to public-facing web pages, app screens left to frontend-design unless requested; documented working files, history file, network downloads, and running without the scripts; omitted README.md and comparative evals.",
       "whitespace_normalized": [],
       "integrated_on": "2026-11-03"
+    },
+    {
+      "name": "using-git-worktrees",
+      "repository": "obra/superpowers",
+      "revision": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "upstream_path": "skills/using-git-worktrees",
+      "local_adaptations": "Narrowed routing to requested isolated workspaces and parallel branches, separated from finishing-a-development-branch; a request counts as Step 0 consent; ignores the worktree directory through .git/info/exclude instead of committing .gitignore; prefers documented project setup and checks, installs Python only into the project environment; removed the announce line.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-04"
+    },
+    {
+      "name": "finishing-a-development-branch",
+      "repository": "obra/superpowers",
+      "revision": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "upstream_path": "skills/finishing-a-development-branch",
+      "local_adaptations": "Narrowed routing to requested branch or worktree wrap-up, excluding routine end-of-task reporting, handoffs, and reviews; the chosen option authorizes only its merge or push; runs the project's required checks; named using-git-worktrees as the owner of .worktrees/ cleanup; removed the announce line.",
+      "whitespace_normalized": [],
+      "integrated_on": "2026-11-04"
+    },
+    {
+      "name": "claude-skill-creator",
+      "repository": "anthropics/skills",
+      "revision": "ca45fc496a3436251f191354091d557da31c15b5",
+      "upstream_path": "skills/skill-creator",
+      "local_adaptations": "Renamed from skill-creator so it does not shadow Codex's bundled skill-creator; narrowed routing to Claude Code test runs, benchmarks, and description optimization, separated from writing-for-agents; repository skill conventions replace the pushy-description advice; workspaces go to a scratchpad or temporary directory; paid runs need explicit approval; documented the viewer's port kill, CDN loads, and run_eval's temporary command file.",
+      "whitespace_normalized": [
+        "scripts/quick_validate.py",
+        "scripts/improve_description.py"
+      ],
+      "integrated_on": "2026-11-04"
     }
   ]
 }

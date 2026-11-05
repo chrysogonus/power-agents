@@ -1,7 +1,7 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **23 skills**: four core skills and nineteen
+kind of task. This repository contains **26 skills**: four core skills and twenty-two
 imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
 
 ## Install and Use
@@ -45,7 +45,7 @@ checks it together with the imported skills.
 
 ## Imported Skills
 
-These nineteen skills are included in the same installation and use normal automatic
+These twenty-two skills are included in the same installation and use normal automatic
 discovery. They are experimental: live routing and task-effect evaluations remain
 unmeasured. Each package includes its required references, license, and
 routing fixtures (see [Skill Format](#skill-format)). Pinned origins and
@@ -73,6 +73,9 @@ adaptations are recorded in
 | [`domain-modeling`](domain-modeling/SKILL.md) | Sharpening domain terms in `GLOSSARY.md` and recording ADRs. |
 | [`triage`](triage/SKILL.md) | Issue-tracker triage states, verification, and agent briefs, with confirmation before tracker writes. |
 | [`handoff`](handoff/SKILL.md) | A handoff document, outside the workspace, for continuing the session in a fresh agent. |
+| [`using-git-worktrees`](using-git-worktrees/SKILL.md) | A requested isolated workspace: detects existing isolation, prefers the runtime's native worktree tool, and falls back to `git worktree`. |
+| [`finishing-a-development-branch`](finishing-a-development-branch/SKILL.md) | Wrapping up a finished branch or worktree: checks first, then a local merge, a pull request, or keeping it, as the user chooses. |
+| [`claude-skill-creator`](claude-skill-creator/SKILL.md) | Drafting and testing skills with Claude Code runs, benchmarks, a review viewer, and description-trigger optimization. Runs make paid model calls through the `claude` CLI. |
 
 `grilling` applies when an interview is requested; routine implementation does
 not require that interview.
@@ -92,7 +95,14 @@ root cause belongs to `systematic-debugging`, and measured slowdowns to
 `improve-codebase-architecture`, one module's interface design to
 `codebase-design`, and readability refactors to `code-simplification`; domain
 terms and ADRs belong to `domain-modeling`, issue-tracker work to `triage`, and
-session handoffs to `handoff`. Existing plugin or unmanaged skills remain
+session handoffs to `handoff`. Creating an isolated worktree belongs to
+`using-git-worktrees` and integrating a finished branch to
+`finishing-a-development-branch`. Editing agent instruction files belongs to
+`writing-for-agents`, while testing a skill through Claude Code runs,
+benchmarks, or description-trigger optimization belongs to
+`claude-skill-creator`; it is renamed from upstream `skill-creator` so it does
+not shadow the skill-creator bundled with Codex, which remains the choice for
+Codex skills. Existing plugin or unmanaged skills remain
 outside this repository's routing inventory.
 
 `review-report` uses a distinct name so it does not shadow the bundled review
@@ -155,7 +165,7 @@ select one fixture set while keeping all skills available for routing. See the r
 [evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 23 skills now have fixture sets, including security-specific positive and
+All 26 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. Every case has
 a `routing` object. This is coverage, not evidence of live routing success.
 

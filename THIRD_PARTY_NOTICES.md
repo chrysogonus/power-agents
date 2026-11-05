@@ -100,7 +100,8 @@ The following packages were imported from pinned revisions on 2026-10-05;
 `grilling`, `code-simplification`, and `performance-optimization` were re-synced
 on 2026-11-01. `agent-browser`, `improve-codebase-architecture`, `handoff`,
 `triage`, `domain-modeling`, `codebase-design`, and `design-taste-frontend` were
-added on 2026-11-03.
+added on 2026-11-03, and `using-git-worktrees`, `finishing-a-development-branch`,
+and `claude-skill-creator` were added on 2026-11-04.
 All have normal automatic discovery, as explicitly requested by the owner.
 Live routing and effect evaluations remain unmeasured.
 
@@ -125,13 +126,18 @@ Live routing and effect evaluations remain unmeasured.
 | `domain-modeling` | [mattpocock/skills / skills/engineering/domain-modeling](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/domain-modeling) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
 | `codebase-design` | [mattpocock/skills / skills/engineering/codebase-design](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/codebase-design) | `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` | MIT |
 | `design-taste-frontend` | [leonxlnx/taste-skill / skills/taste-skill](https://github.com/leonxlnx/taste-skill/tree/12af471f627f866411b4bd785b19646d3672784c/skills/taste-skill) | `12af471f627f866411b4bd785b19646d3672784c` | MIT |
+| `using-git-worktrees` | [obra/superpowers / skills/using-git-worktrees](https://github.com/obra/superpowers/tree/22f0b463e7a5e579904dd6211a520321035526f7/skills/using-git-worktrees) | `22f0b463e7a5e579904dd6211a520321035526f7` | MIT |
+| `finishing-a-development-branch` | [obra/superpowers / skills/finishing-a-development-branch](https://github.com/obra/superpowers/tree/22f0b463e7a5e579904dd6211a520321035526f7/skills/finishing-a-development-branch) | `22f0b463e7a5e579904dd6211a520321035526f7` | MIT |
+| `claude-skill-creator` | [anthropics/skills / skills/skill-creator](https://github.com/anthropics/skills/tree/ca45fc496a3436251f191354091d557da31c15b5/skills/skill-creator) | `ca45fc496a3436251f191354091d557da31c15b5` | Apache-2.0 |
 
 Each local package retains its license at `skills/<name>/LICENSE.txt`.
 For Vercel's two skills, upstream declares `license: MIT` in frontmatter but
 contains no license file at the pinned revision; the local license files retain
 that attribution and reproduce the standard MIT terms without inventing a
 copyright statement. Anthropic's frontend skill retains its own Apache-2.0
-license; no other Anthropic skill's license is inferred from it. The
+license; no other Anthropic skill's license is inferred from it, and
+`claude-skill-creator` retains the Apache-2.0 `LICENSE.txt` shipped in its own
+upstream directory. The
 `agent-browser` license is the Apache-2.0 file at the root of
 vercel-labs/agent-browser, and the `design-taste-frontend` license is the MIT
 file at the root of leonxlnx/taste-skill.
@@ -140,8 +146,9 @@ Runtime resources are retained, including Vercel's compiled guides and rules,
 Supabase's references, Matt Pocock's skill mechanics, Emil Kowalski's data
 catalog, Addy Osmani's optimization patterns and performance checklist, and
 superpowers' testing and debugging references and `find-polluter.sh`, Matt
-Pocock's architecture, triage, and domain-modeling references, and taste-skill's
-scripts, assets, library, and references. Authoring-only templates, superpowers'
+Pocock's architecture, triage, and domain-modeling references, taste-skill's
+scripts, assets, library, and references, and skill-creator's agents, scripts,
+eval viewer, assets, and schema reference. Authoring-only templates, superpowers'
 creation log and pressure-test scenarios, taste-skill's README and comparative
 evals, upstream README/changelog files, and build metadata are omitted.
 `agent-browser` is the upstream discovery stub only; its workflow content is
@@ -174,6 +181,10 @@ been run against live models. Specific adaptations:
 - `domain-modeling`: Narrowed routing to changing the domain model and separated agent instruction files (writing-for-agents); proposes rather than writes glossary and ADR changes when only an explanation, review, or plan is requested.
 - `codebase-design`: Narrowed routing to designing a module's interface and seams, separated from improve-codebase-architecture, code-simplification, and vercel-composition-patterns; DESIGN-IT-TWICE.md drafts designs sequentially when sub-agents are unavailable or unauthorized.
 - `design-taste-frontend`: Narrowed routing to public-facing web pages and generic-looking page feedback, with app screens left to frontend-design unless requested; documented the `.taste-skill/` working files, the `~/.taste-skill/history.json` history, network image downloads, and continuing without the scripts when Node 22+ or Chromium is missing. The bundled Node scripts are unchanged and were not executed during integration.
+- `using-git-worktrees`: Narrowed routing to requested isolated workspaces and parallel branches, separated from finishing-a-development-branch; a request counts as the Step 0 consent; ignores a project-local worktree directory through `.git/info/exclude` instead of committing a `.gitignore` change; prefers the project's documented setup and checks, and installs Python dependencies only into the project's environment; removed the announce line.
+- `finishing-a-development-branch`: Narrowed routing to a requested branch or worktree wrap-up, excluding routine end-of-task reporting, session handoffs (handoff), and reviews; the option the user picks authorizes only that merge or push; runs the project's required checks; names using-git-worktrees as the owner of `.worktrees/` cleanup; removed the announce line.
+- `claude-skill-creator`: Renamed from `skill-creator` so it does not shadow the skill-creator bundled with Codex; narrowed routing to building or improving skills through Claude Code test runs, benchmarks, and description optimization, separated from writing-for-agents; repository skill conventions and routing boundaries replace the "pushy" description advice; workspaces go to a scratchpad or temporary directory instead of beside the skill; paid runs require explicit approval of their size and model; documents that `scripts.run_eval` writes a temporary `.claude/commands/` file, that the eval viewer terminates any process on its port, and that its pages load Google Fonts and SheetJS from CDNs. The bundled scripts are unchanged apart from trailing-whitespace removal on one line each of `scripts/quick_validate.py` and `scripts/improve_description.py` (the second inside a prompt string), and were not executed during integration.
+- `writing-for-agents`: On 2026-11-04, pointed skill test runs, benchmarks, and description-trigger optimization to claude-skill-creator.
 
 Trailing whitespace was removed in the imported Vercel compiled guides,
 `rules/_sections.md`, and the affected React rule files so repository checks
