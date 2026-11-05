@@ -3,15 +3,18 @@
 
 from __future__ import annotations
 
+import gc
 import importlib.util
 import json
 import os
 import random
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
+import warnings
 from pathlib import Path
 
 
@@ -726,6 +729,29 @@ class VerifyGateTests(unittest.TestCase):
         self.assertEqual(status, "failed with exit code 2")
         self.assertEqual(len(output), gate.MAX_CHECK_CHARS - 1)  # newline trimmed
         self.assertTrue(output.endswith("x é\nEND"), output[-20:])
+
+    def test_project_check_closes_its_output_pipe(self) -> None:
+        spec = importlib.util.spec_from_file_location("verify_gate", SCRIPT)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ResourceWarning)
+            self.assertEqual(gate.run_check("true", str(self.repo))[0], "passed")
+            gc.collect()
+        self.assertEqual([str(w.message) for w in caught
+                          if issubclass(w.category, ResourceWarning)], [])
+
+    def test_project_check_returns_while_a_detached_child_holds_the_pipe(self) -> None:
+        spec = importlib.util.spec_from_file_location("verify_gate", SCRIPT)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        # The sleep 1 lets the child leave the group before the group is killed.
+        child = "import os, time; os.setsid(); time.sleep(12)"
+        started = time.monotonic()
+        status, _, _ = gate.run_check(
+            f'"{sys.executable}" -c "{child}" & sleep 1', str(self.repo))
+        self.assertEqual(status, "passed")
+        self.assertLess(time.monotonic() - started, 10)
 
     def test_project_settings_override_global_and_fail_closed(self) -> None:
         toggle = self.home / ".config" / "power-agents" / "cross-review-on"

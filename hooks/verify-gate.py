@@ -902,9 +902,11 @@ def run_check(command, cwd):
     tail = bytearray()  # only the end: a looping check must not fill memory
 
     def drain():
-        for chunk in iter(lambda: proc.stdout.read1(65536), b""):
-            tail.extend(chunk)
-            del tail[:-4 * MAX_CHECK_CHARS]  # up to 4 bytes per character
+        # Closed here: from another thread, close() waits for a blocked read.
+        with proc.stdout:
+            for chunk in iter(lambda: proc.stdout.read1(65536), b""):
+                tail.extend(chunk)
+                del tail[:-4 * MAX_CHECK_CHARS]  # up to 4 bytes per character
 
     reader = threading.Thread(target=drain, daemon=True)
     reader.start()
