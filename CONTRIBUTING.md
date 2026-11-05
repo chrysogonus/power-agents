@@ -50,8 +50,8 @@ Install the required tooling first; see
 - When adding or importing a skill, include `evals/evals.json` routing
   fixtures, add a pinned entry with its license to
   [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for imported content, and
-  update the skill counts in `README.md` and `skills/README.md`; no test
-  enforces those counts.
+  update the skill counts in `README.md`, `skills/README.md`,
+  `docs/overview.md`, and `docs/development.md`; no test enforces those counts.
 - Keep diffs surgical: every changed line should trace to the stated purpose.
 
 ## Reporting Problems

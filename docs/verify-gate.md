@@ -105,7 +105,8 @@ waits while the check runs, and the check runs once per turn: edits the agent
 makes during its self-check are not checked again. While an
 [experiment](experiment.md) runs, it runs once more after the turn, in the
 background. When the command exits, the gate stops any processes it left
-running.
+running, except one that moved to its own process group. If such a process still
+holds the output open, the gate waits 5 more seconds and then continues.
 
 The full self-check and review prompts are at the top of
 [`hooks/verify-gate.py`](../hooks/verify-gate.py). The self-check is a prompt:

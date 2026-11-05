@@ -16,6 +16,8 @@ body:
       options:
         - Installer (install.sh)
         - Sync (sync.sh)
+        - Verify gate (hooks/verify-gate.py)
+        - Guards (hooks/guards/)
         - Checks or tests (scripts/, tests/)
         - Skills (skills/)
         - Codex policy (policies/codex/shared.rules)

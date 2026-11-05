@@ -185,9 +185,9 @@ The judge still grades response assertions; routing checks do not depend on its
 opinion. Reports include missing required skills and unexpected activations.
 Keep prompts natural, and test explicit invocation separately. The
 `review-report` and `security-best-practices` review fixtures use distinct
-prompts. Ten other sets still share one identical review prompt ("Review this PR
-for correctness and security before merge…") as a shared negative case, and most of the
-imported sets' remaining cases are legacy prompts that tell the agent to load a
+prompts. Twelve other sets still share one identical review prompt ("Review this PR
+for correctness and security before merge…") as a shared negative case, and many of the
+older imported sets' remaining cases are legacy prompts that tell the agent to load a
 skill first.
 
 Compare global instruction variants with `--instructions baseline|none`

@@ -15,6 +15,8 @@ that machine:
 - `settings/claude/statusline-command.sh`
 - `hooks/verify-gate.py`, which both agents run as a hook on every prompt and
   stop
+- `hooks/guards/`, which Claude Code runs as a hook on tool calls when the
+  `guards` component is installed
 - `policies/codex/shared.rules`
 - `settings/`, `instructions/`, and `skills/` content that agents load
   automatically
@@ -63,6 +65,12 @@ current script contents. Write access to the upstream repository is therefore
 the control for this script: anyone who can push there can change the code both
 agents run as hooks. With cross-review enabled, the script also sends session
 transcripts and diffs to the other agent's vendor; redaction is best-effort.
+
+With the `guards` component, `hooks/guards/` reaches Claude Code the same way,
+through the installed `~/.agents/hooks/guards` link. These scripts are best-effort
+pattern matching, not a security boundary. `protect-secrets.js` logs each call it
+stops to `~/.claude/hooks-logs`, including the file path or the first 100
+characters of the command, unredacted.
 
 ## Out of Scope
 

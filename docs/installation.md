@@ -321,7 +321,8 @@ It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`),
 your [per-project settings](verify-gate.md#per-project-settings)
 (`~/.config/power-agents/projects.json`), any
 [experiment settings](experiment.md) (`~/.config/power-agents/experiment.json`),
-and the gate's decision log and state in `$XDG_CACHE_HOME/verify-gate`
+the guards' logs in `~/.claude/hooks-logs` (`CLAUDE_CONFIG_DIR` does not move
+them), and the gate's decision log and state in `$XDG_CACHE_HOME/verify-gate`
 (`~/.cache/verify-gate` by default); delete those by hand if you want them gone.
 Directories the installer created, such as `~/.agents/hooks`,
 `~/.agents/skills`, `<Codex root>/rules`, and `~/.config/power-agents`, stay

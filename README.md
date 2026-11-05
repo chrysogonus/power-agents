@@ -22,7 +22,7 @@ agent for a second opinion.
 | ✅ | **Self-check** · on | Before it finishes, the agent re-reads what it changed, runs the checks, and fixes what is wrong. |
 | 🔁 | **Cross-review** · opt-in | Codex reviews Claude Code's work and Claude Code reviews Codex's work. The original agent then accepts or rejects each point. |
 | 🧾 | **Summary line** | Every checked turn ends with one line saying what was checked, what was fixed, and what is still open. |
-| 🧩 | **Optional extras** | Shared coding preferences, 26 skills, status lines, and Codex command rules. [Pick only what you want](#optional-components). |
+| 🧩 | **Optional extras** | Shared coding preferences, 26 skills, status lines, Codex command rules, and Claude Code guards. [Pick only what you want](#optional-components). |
 
 ## Quick Start
 
@@ -234,6 +234,8 @@ Run these from your checkout. `make` on its own lists them.
   settings/ (status lines)       ──▶ ~/.claude/statusline-command.sh, merged into
                                      ~/.claude/settings.json, ~/.codex/config.toml
   policies/codex/shared.rules    ──▶ ~/.codex/rules/shared.rules
+  hooks/guards/                  ──▶ ~/.agents/hooks/guards, merged into
+                                     ~/.claude/settings.json
 
   Installer state                    ~/.config/power-agents/
 ```
@@ -328,7 +330,7 @@ What the checks cover is described in the
 
 ```text
 power-agents/
-├── hooks/          The verify gate (self-check and cross-review)
+├── hooks/          The verify gate (self-check and cross-review) and the guards
 ├── settings/       Agent-specific settings: hook entries and status lines
 ├── instructions/   Coding preferences installed for both agents
 ├── skills/         One folder per skill, each with a SKILL.md

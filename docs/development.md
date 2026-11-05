@@ -61,9 +61,12 @@ both sides of that boundary; the checks validate their schema, but do not
 execute agent sessions or measure routing pass rates. Run the opt-in evaluations
 below to measure their behavior.
 
-The [agent skills research catalog](../research/agent-skills-2026-10-05.md)
-records upstream candidates, sources, and integration notes. Twenty-two selected skills
-are included in the [imported skill inventory](../skills/README.md#imported-skills);
+The [agent skills research catalog](../research/agent-skills-2026-10-05.md) is a
+dated snapshot of upstream candidates, sources, and integration notes, and does
+not cover every skill imported since. Twenty-two selected skills are included in
+the [imported skill inventory](../skills/README.md#imported-skills), with pinned
+origins and adaptations in
+[Third-Party Notices](../THIRD_PARTY_NOTICES.md#skills-integrated-from-the-research-catalog);
 their live routing and task-effect evaluations remain unmeasured.
 
 Run `make skills-outdated` to check every pinned upstream path recorded in
