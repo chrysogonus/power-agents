@@ -1017,6 +1017,7 @@ guard_bash_decision() {
 
 test_guard_hooks() {
   local guard_command
+  local guard_tool
   local guards
   local no_node_path=""
   local command_path
@@ -1145,6 +1146,127 @@ test_guard_hooks() {
     "grep KEY '.env.sample' | wc -l" \
     $'echo "use grep here"\necho "see .env"' \
     $'print("grep foo")\nprint(".env")'; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == allow ]] || fail "protect-secrets blocked: $guard_command"
+  done
+  # Every other reader of .env: by file operand, inline script, heredoc, or redirect.
+  for guard_tool in sed gsed tac nl strings cut sort uniq paste fold fmt rev shuf \
+    comm join diff sdiff column expand unexpand iconv od xxd hexdump hd base32 \
+    base64 basenc dd zcat xargs python python3 python3.12 node ruby perl php; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_tool x .env")" \
+      == deny ]] || fail "protect-secrets allowed: $guard_tool x .env"
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_tool x README.md")" \
+      == allow ]] || fail "protect-secrets blocked: $guard_tool x README.md"
+  done
+  for guard_command in \
+    'sed -n p .env' \
+    '/usr/bin/sort .env' \
+    'sudo tac ./.env' \
+    'nl "my dir/.env"' \
+    'cut -d= -f2 .env.local' \
+    'strings .env | wc -l' \
+    'sort .env > out' \
+    "sh -c 'tac .env'" \
+    'dd if=.env' \
+    'xargs -a .env echo' \
+    "python3 -c \"print(open('.env').read())\"" \
+    "python3 -c 'print(open(\".env\").read())'" \
+    "uv run python -c \"print(open('.env').read())\"" \
+    "node -e \"require('fs').readFileSync('.env')\"" \
+    "perl -ne 'print' .env" \
+    'python3 x.py ".env"' \
+    'python3 x.py "a" "my dir/.env"' \
+    'python3 x.py ./.env' \
+    'python3 -c "open(\".env\")"' \
+    "python3 -c \"open('/app/.env.local')\"" \
+    "python3 -c \"Path('.env').read_text()\"" \
+    $'python3 -c "\nprint(open(\'.env\').read())\n"' \
+    $'python3 - <<\'PY\'\nprint(open(\'.env\').read())\nPY' \
+    $'python3 <<EOF\nprint(open(".env").read())\nEOF' \
+    $'python3 <<-EOF\n\tprint(open(".env").read())\n\tEOF' \
+    'while read l; do echo "$l"; done < .env' \
+    'while read l; do echo "$l"; done < "./.env"' \
+    'while read l; do echo "$l"; done <.env.local' \
+    'read x < "$HOME/.env"' \
+    'x=$(< .env)' \
+    'tr a b < "my dir/.env"' \
+    'tr a b < my\ dir/.env' \
+    'python3 app.py < .env' \
+    'awk 1 marker=--env-file .env' \
+    'python3 x.py marker=--env-file .env' \
+    'sed -n p .env .env.example' \
+    'sort .env; echo .env.example' \
+    'cat .env; echo .env.example' \
+    'cp .env .env.example' \
+    'jq -R . .env' \
+    'jq -Rs . ".env"' \
+    'yq . .env' \
+    $'cat <<\'PY\' | python3\nprint(open(\'.env\').read())\nPY' \
+    "echo \"print(open('.env').read())\" | python3" \
+    '"sort" .env' \
+    "bash -lc 'sort .env'" \
+    'eval "sort .env"' \
+    'if sort .env; then :; fi' \
+    '{ sort .env; }' \
+    'echo "$(sort .env)"' \
+    'A=1 sort .env' \
+    'timeout 5 sed -n p .env' \
+    "sh -c 'read x < .env'" \
+    '{ read x; } < .env' \
+    '(read x) < .env' \
+    ".venv/bin/python -c \"open('.env')\""; do
+    [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
+      == deny ]] || fail "protect-secrets allowed: $guard_command"
+  done
+  # A template, a later command, a flag, or a check that shows no contents is not a read.
+  for guard_command in \
+    'sed -n p .env.example' \
+    'sort .env.sample | uniq' \
+    "sed -i 's/a/b/' Dockerfile .env.docker.example" \
+    'grep KEY .env.local.example | wc -l' \
+    "python3 -c \"print(open('.env.example').read())\"" \
+    'python3 -c "from apl.survey.env import start"' \
+    'python3 -m apl.survey.env' \
+    $'python3 - <<\'PY\'\nfrom apl.dungeon.env import Env\nPY' \
+    $'python3 - <<\'PY\'\ns = "see the .env file"\nPY' \
+    $'python3 - <<\'PY\'\ns = "keep keys in `.env`, not here"\nPY' \
+    'node -e "console.log(E.bands||E.env)"' \
+    "node -e 'const r=/\\.env.*x/i'" \
+    "jq '{env: (.env|keys?)}' settings.json" \
+    'sed -n p compose.yml > .env' \
+    'python3 gen.py > .env' \
+    'sort a >> ./.env' \
+    'sort a >.env' \
+    'jq .env settings.json' \
+    'jq -r .env settings.json' \
+    "echo 'sort .env'" \
+    'echo "sort .env"' \
+    'echo "a < .env"' \
+    "sed -i 's/.env/x/' config.js" \
+    "sed 's/\\.env\$//' list.txt" \
+    "sed -n '/.env/p' README.md" \
+    'cat .env.example | wc -l' \
+    'git diff --stat .env' \
+    'node --env-file .env app.js' \
+    'print("python .env")' \
+    'while read l; do echo "$l"; done < .env.example' \
+    'sort README.md; echo .env.local' \
+    $'sed -n p README.md\necho .env' \
+    'python3 x.py; echo .env' \
+    $'python3 x.py\necho .env' \
+    $'python3 - <<\'PY\'\nprint(1)\nPY\necho .env' \
+    $'echo "use python here"\necho .env' \
+    $'echo "use python here"\necho ".env"' \
+    'echo "a<b"; echo ".env"' \
+    'docker ps --sort x .env' \
+    'node --env-file=.env app.js' \
+    'node --env-file=./.env app.js' \
+    'python3 -m uvicorn app:app --env-file .env' \
+    "node -e \"console.log(process.env.HOME)\"" \
+    'gh pr view 1 --json x | jq .title; test -f .env' \
+    'echo KEY=1 > .env' \
+    'ls -la .env' \
+    'test -f .env'; do
     [[ "$(guard_bash_decision "$guards/protect-secrets.js" "$guard_command")" \
       == allow ]] || fail "protect-secrets blocked: $guard_command"
   done

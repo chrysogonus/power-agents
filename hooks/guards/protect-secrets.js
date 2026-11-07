@@ -68,6 +68,8 @@ const ALLOWLIST = [
   /\.env\.example$/i, /\.env\.sample$/i, /\.env\.template$/i,
   /\.env\.schema$/i, /\.env\.defaults$/i, /env\.example$/i, /example\.env$/i,
 ];
+// One template name in a Bash command, including multi-part ones like .env.docker.example. Its suffix must end the name.
+const TEMPLATE_WORD = /(?<![^\s"';|&<>()])[^\s"';|&<>()]*(?:\.env(?:\.[\w-]+)*\.(?:example|sample|template|schema|defaults)|env\.example|example\.env)(?![\w./-])/gi;
 
 // Sensitive file patterns for Read, Edit, Write tools
 const SENSITIVE_FILES = [
@@ -197,17 +199,51 @@ const GREP_PIECE = '(?:\'[^\'\\n]*\'|"(?:[^"\\\\\\n]|\\\\[\\s\\S])*"|\\\\[\\s\\S
 // A quote spanning lines only starts a word or follows `=` or a flag: a quote stuck to a word (`here"`) may end an earlier string.
 const GREP_MULTILINE = '(?:[^\\s|;&)"\'\\\\=]*=|-[A-Za-z]+)?(?:\'[^\'\\n]*\\n[^\']*\'|"(?:[^"\\\\\\n]|\\\\[\\s\\S])*\\n(?:[^"\\\\]|\\\\[\\s\\S])*")';
 const GREP_WORD = '(?:' + GREP_MULTILINE + GREP_PIECE + '*|' + GREP_PIECE + '+)';
-// .env as a file: not the identifier in process.env or import.meta.env, and not a template, whose suffix must end the name.
-const GREP_ENV_FILE = '(?<!\\b(?:process|meta))\\.env\\b(?!\\.(?:example|sample|template|schema|defaults)(?![\\w./-]))';
+// .env as a file: not the identifier in process.env or import.meta.env. Template names are already removed by TEMPLATE_WORD.
+const GREP_ENV_FILE = '(?<!\\b(?:process|meta))\\.env\\b';
 // .env inside a quote: an unclosed one stops at a separator, because that quote may really be the end of an earlier string.
 const GREP_ENV = '\\b(?:grep|rg|egrep|fgrep|ag|awk|gawk)\\b(?:[^\\S\\n]+' + GREP_WORD + ')*[^\\S\\n]+' + GREP_PIECE + '*?'
   + '(?:(?:\'[^\';|&\\n]*|"[^";|&\\n]*)?' + GREP_ENV_FILE
   + '|\'[^\'\\n]*' + GREP_ENV_FILE + '[^\'\\n]*\'|"[^"\\n]*' + GREP_ENV_FILE + '[^"\\n]*")';
+// A quote starts a command only after -c or eval, so `echo 'sort .env'` holds none.
+const SHELL_QUOTE = '(?:\\s-[a-z]*c|\\beval)[^\\S\\n]+["\']';
+// A command word, behind env assignments, a wrapper, a path or quotes: `--sort`, `git diff` and `x.sort()` do not count.
+const envCmd = (names) => '(?:^|[|;&(`!{\\n]|\\b(?:do|then|else|if|elif|while|until)\\b|' + SHELL_QUOTE + ')[^\\S\\n]*'
+  + '(?:[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*'
+  + '(?:(?:sudo|doas|npx|uvx|bunx|pnpm\\s+dlx|(?:uv|poetry|pipenv)\\s+run|command|time|exec|nice|ionice|nohup|env|timeout|stdbuf|watch|parallel|busybox|xargs)\\b[^;|&\\n]*?\\s)?'
+  + '(?:(?:[^\\s"\';|&]*\\/)?\\\\?(?:' + names + ')\\b|"(?:[^\\s"\';|&]*\\/)?(?:' + names + ')"|\'(?:[^\\s"\';|&]*\\/)?(?:' + names + ')\')';
+// .env as a whole word, so a sed script such as 's/.env/x/' does not count, and not behind `>`, which writes it. `stem` is what may come before it unquoted.
+const envOperand = (file, stem) => '(?:[^\\S\\n]+' + GREP_WORD + ')*[^\\S\\n]+(?:"(?:[^"\\n]*\\/)?' + file + '[\\w.-]*"|\'(?:[^\'\\n]*\\/)?' + file + '[\\w.-]*\'|' + stem + '(?<!>[^\\S\\n]*\\S*)' + file + ')';
+const READER_OPERAND = envOperand(GREP_ENV_FILE, GREP_PIECE + '*?');
+// Commands that show a file they are given.
+const ENV_READER = envCmd('sed|gsed|tac|nl|strings|cut|sort|uniq|paste|fold|fmt|rev|shuf|comm|join|diff|sdiff|column|expand|unexpand|iconv|od|xxd|hexdump|hd|base32|base64|basenc|dd|zcat|xargs') + READER_OPERAND;
+// jq and yq take a filter first, and .env is usually a JSON path there: only a later word is a file.
+const ENV_JQ = envCmd('jq|yq') + '(?:[^\\S\\n]+-\\S+)*[^\\S\\n]+(?!-)' + GREP_WORD + READER_OPERAND;
+const INTERP_NAMES = 'python[\\d.]*|node|ruby|perl|php';
+// An interpreter's argument needs a path or nothing before .env, because `-m a.env` is a module. A standalone --env-file loads it without printing it.
+const ENV_INTERP_OPERAND = envOperand('(?<!\\s--env-file(?:=|\\s+)\\S*)' + GREP_ENV_FILE, '(?:' + GREP_PIECE + '*?\\/)?');
+// In a script, .env counts only as a whole file name in a string literal, so prose, Markdown and `obj.env` do not.
+const ENV_LITERAL = '\\\\?["\'](?:[^\\s"\']*\\/)?' + GREP_ENV_FILE + '[\\w.-]*\\\\?["\']';
+// An inline script may span lines: its quote starts a word and must close, so the end of an earlier string does not count.
+const ENV_INLINE = '(?:[^\\S\\n]+[^\\s;|&"\']+)*[^\\S\\n]+(?:-[A-Za-z]+)?(?:"(?:[^"\\\\]|\\\\[\\s\\S])*?' + ENV_LITERAL + '(?:[^"\\\\]|\\\\[\\s\\S])*"|\'[^\']*?' + ENV_LITERAL + '[^\']*\')';
+// A heredoc script ends at its terminator, so a later command does not count.
+const heredocTo = (quote, tag) => '<<-?[^\\S\\n]*(?<' + quote + '>[\'"]?)(?<' + tag + '>[\\w.-]+)\\k<' + quote + '>';
+const heredocBody = (tag) => '(?:(?!\\n[^\\S\\n]*\\k<' + tag + '>(?:\\n|$))[\\s\\S])*?' + ENV_LITERAL;
+const ENV_HEREDOC = '[^;|&\\n]*' + heredocTo('quote', 'tag') + '[^\\n]*' + heredocBody('tag');
+const INTERP_WORD = '(?<![\\w.-])(?:' + INTERP_NAMES + ')\\b';
+const ENV_INTERP = envCmd(INTERP_NAMES) + '(?:' + ENV_INTERP_OPERAND + '|' + ENV_INLINE + '|' + ENV_HEREDOC + ')';
+// A script piped into an interpreter.
+const ENV_PIPED = heredocTo('pipedQuote', 'pipedTag') + '[^\\n]*\\|[^\\n]*?' + INTERP_WORD + '[^\\n]*' + heredocBody('pipedTag')
+  + '|\\b(?:echo|printf)\\b[^|;&\\n]*' + ENV_LITERAL + '[^|;&\\n]*\\|[^;&\\n]*?' + INTERP_WORD;
+// Any command fed from .env, with the `<` outside quotes. A quote opens the target only at its start or last, so `"a<b"; echo ".env"` does not count.
+const ENV_REDIRECT = '(?:^|[|;&(`\\n]|' + SHELL_QUOTE + ')' + SEG_QA + '(?<!<)<(?![<(])[^\\S\\n]*(?:\'[^\'\\n]*\'|"[^"\\n]*")?(?:\\$\\(' + GREP_SUBST + '*\\)|\\\\[\\s\\S]|[^\\s|;&()<>"\'\\\\])*(?:\'[^\'\\n]*|"[^"\\n]*)?' + GREP_ENV_FILE;
+const READ_ENV = [ENV_READER, ENV_JQ, ENV_INTERP, ENV_PIPED, ENV_REDIRECT].join('|');
 
 // Bash patterns that expose or exfiltrate secrets
 const BASH_PATTERNS = [
   // CRITICAL
   { level: 'critical', id: 'grep-env',           regex: new RegExp(GREP_ENV, 'i'), reason: 'Reading .env via text tools exposes secrets' },
+  { level: 'critical', id: 'read-env',           regex: new RegExp(READ_ENV, 'i'), reason: 'Reading .env exposes secrets' },
   { level: 'critical', id: 'cat-env',            regex: /\b(cat|less|head|tail|more|bat|view)\s+[^|;]*\.env\b/i,           reason: 'Reading .env file exposes secrets' },
   { level: 'critical', id: 'cat-ssh-key',        regex: /\b(cat|less|head|tail|more|bat)\s+[^|;]*(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key)\b/i, reason: 'Reading private key' },
   { level: 'critical', id: 'cat-aws-creds',      regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.aws\/credentials/i,         reason: 'Reading AWS credentials' },
@@ -293,10 +329,8 @@ function checkFilePath(filePath, safetyLevel = SAFETY_LEVEL) {
 
 function checkBashCommand(cmd, safetyLevel = SAFETY_LEVEL) {
   if (!cmd) return { blocked: false, pattern: null };
-  cmd = cmd.replace(/\\\r?\n\s*/g, ' ');
-  for (const allow of ALLOWLIST) {
-    if (allow.test(cmd)) return { blocked: false, pattern: null };
-  }
+  // A template exempts only itself: replaced, not allowed outright, so `sort .env; echo .env.example` is still seen.
+  cmd = cmd.replace(/\\\r?\n\s*/g, ' ').replace(TEMPLATE_WORD, 'template-file');
   const threshold = LEVELS[safetyLevel] || 2;
   for (const p of BASH_PATTERNS) {
     if (LEVELS[p.level] <= threshold && p.regex.test(cmd)) {
