@@ -1587,6 +1587,7 @@ if [[ "$PERMISSIONS_MODE" == install ]]; then
 fi
 declare -a subagent_staged=()
 declare -a subagent_targets=()
+staged_file=""
 if has_component subagents; then
   for subagent_candidate in "$subagents_candidate"/*/*; do
     subagent_targets+=("$GENERATED_AGENTS/${subagent_candidate#"$subagents_candidate/"}")
