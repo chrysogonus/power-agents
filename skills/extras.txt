@@ -1,0 +1,14 @@
+# Skills installed by the skills-extra component. Every other skill in this
+# directory is core and is installed by the skills component.
+agent-browser
+break-ui
+claude-skill-creator
+design-taste-frontend
+frontend-design
+improve-codebase-architecture
+performance-optimization
+readme-sync
+security-best-practices
+supabase-postgres-best-practices
+vercel-composition-patterns
+vercel-react-best-practices

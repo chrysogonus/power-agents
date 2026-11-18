@@ -1,0 +1,3 @@
+interface:
+  display_name: Remember
+  short_description: Save facts that hold across projects to shared memory

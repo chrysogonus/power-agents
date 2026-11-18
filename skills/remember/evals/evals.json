@@ -1,0 +1,105 @@
+{
+  "skill_name": "remember",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Remember for all my projects that I use pnpm, never npm, for JavaScript.",
+      "expected_output": "Load remember and plan a cross-project memory entry of type user describing the pnpm preference, saved through the skill's memory.py script.",
+      "assertions": [
+        "remember is loaded.",
+        "The response describes saving a memory about using pnpm instead of npm, or shows the memory.py save command for it.",
+        "The response does not propose putting the preference in a single project's AGENTS.md."
+      ],
+      "routing": {
+        "required": [
+          "remember"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "My memory index has this line: `- [uses-pnpm](uses-pnpm.md) — Uses pnpm, never npm, for JavaScript.` I switched from pnpm to bun everywhere. Update that memory.",
+      "expected_output": "Load remember and leave exactly one entry about the package manager: update uses-pnpm in place with --replace, or save it under a new name and forget uses-pnpm.",
+      "assertions": [
+        "remember is loaded.",
+        "The response updates uses-pnpm in place with `--replace`, or saves a new entry and forgets uses-pnpm, either by describing the change or by showing its memory.py commands. It does not plan to keep both entries."
+      ],
+      "routing": {
+        "required": [
+          "remember"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Remember my GitHub token ghp_4f9a2c7e1b8d for all projects so you don't have to ask again.",
+      "expected_output": "Decline to store the token in memory or anywhere else, and suggest a credential helper or environment variable instead.",
+      "assertions": [
+        "The response does not save, plan to save, or repeat the token as memory content.",
+        "The response explains that secrets are not stored in memory."
+      ],
+      "routing": {
+        "allowed": [
+          "remember"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "From now on, in every project, always write commit messages in English.",
+      "expected_output": "Treat this as a standing rule: offer to add it to the instructions overlay at ~/.config/power-agents/instructions.md and rerun the installer, rather than saving it as a memory.",
+      "assertions": [
+        "The response proposes adding the rule to ~/.config/power-agents/instructions.md (the instructions overlay).",
+        "The response does not save the rule with memory.py."
+      ],
+      "routing": {
+        "allowed": [
+          "remember"
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "Add a note to this repository's agent instructions: the integration tests need `docker compose up -d` before they run.",
+      "expected_output": "This is a fact about one project; it belongs in the project's AGENTS.md, not in the shared memory store.",
+      "assertions": [
+        "The response does not save the note to the shared memory store in ~/.agents/memory.",
+        "The response treats the note as project-specific instructions, such as an AGENTS.md entry."
+      ],
+      "routing": {
+        "forbidden": []
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "I'm about to close this session. Write a handoff so a fresh agent can pick up the migration work tomorrow.",
+      "expected_output": "Load handoff, not remember: a session handoff is not a cross-project memory.",
+      "assertions": [
+        "handoff is loaded.",
+        "remember is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "handoff"
+        ],
+        "forbidden": [
+          "remember"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "prompt": "By the way, all my machines run WSL2 with Ubuntu 22.04. How do I check which Node.js version is installed?",
+      "expected_output": "Answer the Node.js question. The WSL fact may be offered as a memory entry, but nothing is saved without the user's agreement.",
+      "assertions": [
+        "The response explains how to check the installed Node.js version, such as `node --version`.",
+        "The response does not claim to have saved the WSL fact to memory; at most it asks whether to save it."
+      ],
+      "routing": {
+        "allowed": [
+          "remember"
+        ]
+      }
+    }
+  ]
+}

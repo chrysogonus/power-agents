@@ -1,8 +1,10 @@
 # Skills
 
 Skills are reusable instructions that tell an agent how to handle a particular
-kind of task. This repository contains **26 skills**: four core skills and twenty-two
-imported skills. Each lives in its own folder with a `SKILL.md` entrypoint.
+kind of task. This repository contains **28 skills**: six written here and
+twenty-two imported. Each lives in its own folder with a `SKILL.md` entrypoint.
+They are installed in two tiers: 16 core skills for everyday work and 12 extra
+skills for specific stacks and jobs.
 
 ## Install and Use
 
@@ -10,11 +12,26 @@ Skills are an optional component. Follow the repository's
 [quick installation guide](../README.md#installation), then select them:
 
 ```bash
-./install.sh --components skills   # add other components to the list as needed
+./install.sh --components skills                # core tier only
+./install.sh --components skills,skills-extra   # every skill
 ```
 
-This links every skill for both Codex and Claude Code. Later runs of
-`make install` keep the saved selection.
+This links the selected skills for both Codex and Claude Code. Later runs of
+`make install` keep the saved selection. To leave out single skills, list them
+in `~/.config/power-agents/disabled-skills`
+([personal overlay](../README.md#personal-overlay)).
+
+### Tiers
+
+[`extras.txt`](extras.txt) lists the extra tier; every other skill is core.
+
+| Tier | Component | Skills |
+| --- | --- | --- |
+| Core | `skills` | `ponytail`, `test-driven-development`, `systematic-debugging`, `code-simplification`, `grilling`, `handoff`, `writing-for-agents`, `review-report`, `using-git-worktrees`, `finishing-a-development-branch`, `codebase-design`, `domain-modeling`, `prompt-refiner`, `triage`, `remember`, `portfolio` |
+| Extra | `skills-extra` | `agent-browser`, `break-ui`, `claude-skill-creator`, `design-taste-frontend`, `frontend-design`, `improve-codebase-architecture`, `performance-optimization`, `readme-sync`, `security-best-practices`, `supabase-postgres-best-practices`, `vercel-composition-patterns`, `vercel-react-best-practices` |
+
+The split follows how often each skill applies to general software work. No
+skill has been dropped; routing evaluations will decide that.
 
 Ask for a skill explicitly, or let the agent select one from your request:
 
@@ -30,12 +47,14 @@ paste-ready PR comments, use `review-report`.
 
 ## Available Skills
 
-### Core Skills
+### Skills Written Here
 
 | Skill | Purpose |
 | --- | --- |
 | [`review-report`](review-report/SKILL.md) | Writes `CODE_REVIEW.md` with verified, plain-language findings, concrete examples, and paste-ready review comments, starting from the runtime's built-in review. |
 | [`prompt-refiner`](prompt-refiner/SKILL.md) | Improves existing prompts and drafts new non-coding prompts. |
+| [`portfolio`](portfolio/SKILL.md) | Answers questions across projects, such as uncommitted work, active sessions, and waiting handoffs, from the portfolio the `context` component keeps. |
+| [`remember`](remember/SKILL.md) | Saves, updates, and forgets facts that hold across projects in the shared memory store, `~/.agents/memory`, with a script that records the source and commits to a local git repository. |
 | [`security-best-practices`](security-best-practices/SKILL.md) | Provides explicitly requested security reviews and guidance for Python, JavaScript/TypeScript, and Go. |
 | [`readme-sync`](readme-sync/SKILL.md) | Creates or updates the root `README.md` from the current codebase, keeping accurate sections and checking commands against project files. |
 
@@ -45,8 +64,8 @@ checks it together with the imported skills.
 
 ## Imported Skills
 
-These twenty-two skills are included in the same installation and use normal automatic
-discovery. They are experimental: live routing and task-effect evaluations remain
+These twenty-two skills use normal automatic discovery, installed through
+their tier. They are experimental: live routing and task-effect evaluations remain
 unmeasured. Each package includes its required references, license, and
 routing fixtures (see [Skill Format](#skill-format)). Pinned origins and
 adaptations are recorded in
@@ -72,7 +91,7 @@ adaptations are recorded in
 | [`codebase-design`](codebase-design/SKILL.md) | Deep-module vocabulary for designing one module's interface and seams. |
 | [`domain-modeling`](domain-modeling/SKILL.md) | Sharpening domain terms in `GLOSSARY.md` and recording ADRs. |
 | [`triage`](triage/SKILL.md) | Issue-tracker triage states, verification, and agent briefs, with confirmation before tracker writes. |
-| [`handoff`](handoff/SKILL.md) | A handoff document, outside the workspace, for continuing the session in a fresh agent. |
+| [`handoff`](handoff/SKILL.md) | A handoff document, outside the workspace, for continuing the session in a fresh agent; saved to the project's handoff inbox when the `context` component is installed. |
 | [`using-git-worktrees`](using-git-worktrees/SKILL.md) | A requested isolated workspace: detects existing isolation, prefers the runtime's native worktree tool, and falls back to `git worktree`. |
 | [`finishing-a-development-branch`](finishing-a-development-branch/SKILL.md) | Wrapping up a finished branch or worktree: checks first, then a local merge, a pull request, or keeping it, as the user chooses. |
 | [`claude-skill-creator`](claude-skill-creator/SKILL.md) | Drafting and testing skills with Claude Code runs, benchmarks, a review viewer, and description-trigger optimization. Runs make paid model calls through the `claude` CLI. |
@@ -165,7 +184,7 @@ select one fixture set while keeping all skills available for routing. See the r
 [evaluation instructions](../docs/development.md#behavioral-skill-evaluations) for runtime,
 credentials, repetition, grading, and result details. `make check` validates
 fixtures and tests the runner offline; it does not execute LLM evaluations.
-All 26 skills now have fixture sets, including security-specific positive and
+All 28 skills now have fixture sets, including security-specific positive and
 negative cases and simple questions that should load no skill. Every case has
 a `routing` object. This is coverage, not evidence of live routing success.
 
@@ -196,8 +215,9 @@ for isolation, interpretation, and external instruction conflicts.
 
 ## Adding a Skill
 
-Create the directory and `SKILL.md`, then run `./install.sh` from the repository
-root, with the `skills` component selected, to validate all skill names and create the new per-skill links for Codex
-and Claude Code. Existing unrelated skills in either agent's skill directory
+Create the directory and `SKILL.md`. A new skill is core; add its name to
+[`extras.txt`](extras.txt) to make it extra. Then run `./install.sh` from the
+repository root, with its tier selected, to validate all skill names and create
+the new per-skill links for Codex and Claude Code. Existing unrelated skills in either agent's skill directory
 remain untouched. Run `make check` to validate the change. Edits to an
 already linked skill are available immediately through its link.
