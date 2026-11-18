@@ -10,18 +10,24 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_INSTRUCTIONS="$ROOT/instructions/general-global.md"
 SKILLS="$ROOT/skills"
+SKILL_EXTRAS="$SKILLS/extras.txt"
 CLAUDE_SETTINGS="$ROOT/settings/claude/settings.json"
 CLAUDE_STATUS_LINE="$ROOT/settings/claude/statusline-command.sh"
 CLAUDE_HOOKS="$ROOT/settings/claude/hooks.json"
 CLAUDE_GUARD_HOOKS="$ROOT/settings/claude/guards-hooks.json"
+CLAUDE_PERMISSIONS="$ROOT/settings/claude/permissions.json"
 GUARDS="$ROOT/hooks/guards"
 CODEX_TUI_SETTINGS="$ROOT/settings/codex/tui.toml"
 CODEX_HOOKS="$ROOT/settings/codex/hooks.json"
+CODEX_PERMISSION_RULES="$ROOT/policies/codex/permissions.rules"
 CODEX_SHARED_RULES="$ROOT/policies/codex/shared.rules"
 CODEX_CONFIG_RECONCILER="$ROOT/scripts/reconcile-codex-config.py"
 HOOKS_RECONCILER="$ROOT/scripts/reconcile-hooks.py"
 VERIFY_GATE="$ROOT/hooks/verify-gate.py"
+AGENT_HUB="$ROOT/hooks/agent-hub.py"
 SKILL_VALIDATOR="$ROOT/scripts/validate-skills.py"
+SUBAGENTS="$ROOT/subagents"
+SUBAGENT_RENDERER="$ROOT/scripts/render-subagents.py"
 INSTALL_HOME="$HOME"
 AGENTS_ROOT=""
 CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"
@@ -29,10 +35,30 @@ CLAUDE_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_STATUS_LINE_COMMAND=""
 VERIFY_GATE_COMMAND=""
 GUARDS_LINK=""
+AGENT_HUB_COMMAND=""
 # The verify gate is always installed; these components are optional.
-ALL_COMPONENTS="instructions,skills,statusline,codex-rules,guards"
+ALL_COMPONENTS="instructions,skills,skills-extra,statusline,codex-rules,guards,permissions,notify,context,format,subagents"
+# Components whose hooks run the agent hub, from settings/<agent>/<component>-hooks.json.
+HUB_COMPONENTS=(notify context format)
+HUB_FRAGMENTS=()
+for hub_component in "${HUB_COMPONENTS[@]}"; do
+  HUB_FRAGMENTS+=("$ROOT/settings/claude/$hub_component-hooks.json"
+    "$ROOT/settings/codex/$hub_component-hooks.json")
+done
 COMPONENTS_FILE=""
+INSTRUCTIONS_OVERLAY=""
+DISABLED_SKILLS_FILE=""
+GENERATED_INSTRUCTIONS=""
+AGENT_MODELS_OVERLAY=""
+GENERATED_AGENTS=""
+SUBAGENT_ROLES=","
+INSTRUCTIONS_SOURCE=""
+EXTRA_SKILLS=","
+DISABLED_SKILLS=","
 CODEX_TUI_SNAPSHOT=""
+PERMISSIONS_SNAPSHOT=""
+PERMISSIONS_MODE=""
+PERMISSIONS_OWNED="/dev/null"
 REQUESTED_COMPONENTS=""
 COMPONENTS_REQUESTED=0
 UNINSTALL=0
@@ -147,9 +173,11 @@ Usage: ./install.sh [--components LIST]
        ./install.sh --uninstall
 
 Installs the verify gate for Codex and Claude Code. LIST selects optional
-components: a comma-separated subset of instructions, skills, statusline,
-codex-rules, and guards, or "all" or "none". Without --components, the selection saved by
-the previous install is reused.
+components: a comma-separated subset of instructions, skills, skills-extra,
+statusline, codex-rules, guards, permissions, notify, context, format, and
+subagents,
+or "all" or "none".
+Without --components, the selection saved by the previous install is reused.
 
 --uninstall removes the verify gate and every component this checkout
 installed, and keeps all other settings.
@@ -236,17 +264,121 @@ links_to() {
   [[ -L "$2" && "$2" -ef "$1" ]]
 }
 
-skills_installed() {
+# Codex skips symlinked rules files and refuses symlinked agent roles, so
+# those are installed as copies whose first line marks them as this
+# installer's and names EDIT, the repository file to change instead.
+copy_marker() {
+  printf '# Managed by power-agents. Edit %s in that repository and run ./install.sh.' "$1"
+}
+
+# True when TARGET is a copy this installer made, marked with EDIT.
+is_managed_copy() {
+  [[ -f "$1" && ! -L "$1" ]] &&
+    [[ "$(head -n 1 -- "$1" 2>/dev/null)" == "$(copy_marker "$2")" ]]
+}
+
+# True when TARGET is this installer's copy of the rules file SOURCE, or the
+# symlink earlier installs created.
+owns_rules() {
+  links_to "$1" "$2" || is_managed_copy "$2" "${1#"$ROOT"/}"
+}
+
+# True when TARGET, in Codex's agents directory, is this installer's copy of a
+# generated role, or the symlink earlier installs created.
+owns_codex_agent() {
+  local name="${1##*/}"
+
+  links_to_generated_agent "$1" || is_managed_copy "$1" "subagents/${name%.*}.md"
+}
+
+# True when NAME is listed in skills/extras.txt.
+extra_skill() {
+  [[ "$EXTRA_SKILLS" == *",$1,"* ]]
+}
+
+# True when the selected tiers include skill NAME and the overlay does not
+# disable it.
+skill_selected() {
+  [[ "$DISABLED_SKILLS" != *",$1,"* ]] || return 1
+  if extra_skill "$1"; then
+    has_component skills-extra
+  else
+    has_component skills
+  fi
+}
+
+# True when any skill of a tier (skills or skills-extra) is linked.
+skill_tier_installed() {
+  local name
   local root
   local skill_dir
 
   for root in "$AGENTS_ROOT/skills" "$CLAUDE_ROOT/skills"; do
     links_to "$SKILLS" "$root" && return 0
-    for skill_dir in "$SKILLS"/*; do
-      links_to "$skill_dir" "$root/${skill_dir##*/}" && return 0
+    for skill_dir in "$SKILLS"/*/; do
+      name="$(basename "$skill_dir")"
+      if extra_skill "$name"; then
+        [[ "$1" == skills-extra ]] || continue
+      else
+        [[ "$1" == skills ]] || continue
+      fi
+      links_to "$skill_dir" "$root/$name" && return 0
     done
   done
   return 1
+}
+
+# True when a component whose hooks run the agent hub is selected.
+hub_selected() {
+  local component
+  for component in "${HUB_COMPONENTS[@]}"; do
+    if has_component "$component"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# True when LINK points at a subagent file the installer generated.
+links_to_generated_agent() {
+  [[ -L "$1" && "$(readlink "$1")" == "$GENERATED_AGENTS/"* ]]
+}
+
+# The directory and file extension of AGENT's subagent definitions.
+subagent_directory() {
+  if [[ "$1" == claude ]]; then
+    printf '%s\n' "$CLAUDE_ROOT/agents"
+  else
+    printf '%s\n' "$CODEX_ROOT/agents"
+  fi
+}
+
+subagent_extension() {
+  if [[ "$1" == claude ]]; then
+    printf '%s\n' md
+  else
+    printf '%s\n' toml
+  fi
+}
+
+# True when TARGET links to the shared instructions or the generated
+# instructions, even when the generated file is missing.
+links_to_instructions() {
+  links_to "$GLOBAL_INSTRUCTIONS" "$1" || links_to "$GENERATED_INSTRUCTIONS" "$1" ||
+    { [[ -L "$1" ]] && [[ "$(readlink "$1")" == "$GENERATED_INSTRUCTIONS" ]]; }
+}
+
+# Prints the names listed in FILE, one per line, skipping comments and blanks.
+read_name_list() {
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line//[[:space:]]/}"
+    if [[ -n "$line" ]]; then
+      printf '%s\n' "$line"
+    fi
+  done <"$1"
 }
 
 # Prints the saved selection, failing when it was saved for other agent roots.
@@ -254,6 +386,7 @@ read_saved_components() {
   local claude=""
   local codex=""
   local components=""
+  local format=""
   local line
 
   while IFS= read -r line; do
@@ -261,10 +394,15 @@ read_saved_components() {
       components=*) components="${line#components=}" ;;
       codex_root=*) codex="${line#codex_root=}" ;;
       claude_root=*) claude="${line#claude_root=}" ;;
+      format=*) format="${line#format=}" ;;
     esac
   done <"$COMPONENTS_FILE"
 
   [[ "$codex" == "$CODEX_ROOT" && "$claude" == "$CLAUDE_ROOT" ]] || return 1
+  # Before format 2, the skills component installed every skill.
+  if [[ -z "$format" && ",$components," == *",skills,"* ]]; then
+    components+=",skills-extra"
+  fi
   printf '%s\n' "$components"
 }
 
@@ -273,22 +411,44 @@ read_saved_components() {
 detect_installed_components() {
   local detected=""
 
-  if links_to "$GLOBAL_INSTRUCTIONS" "$CODEX_ROOT/AGENTS.md" ||
-    links_to "$GLOBAL_INSTRUCTIONS" "$CLAUDE_ROOT/CLAUDE.md"; then
+  if links_to_instructions "$CODEX_ROOT/AGENTS.md" ||
+    links_to_instructions "$CLAUDE_ROOT/CLAUDE.md"; then
     detected+=",instructions"
   fi
-  if skills_installed; then
+  if skill_tier_installed skills; then
     detected+=",skills"
+  fi
+  if skill_tier_installed skills-extra; then
+    detected+=",skills-extra"
   fi
   if links_to "$CLAUDE_STATUS_LINE" "$CLAUDE_ROOT/statusline-command.sh"; then
     detected+=",statusline"
   fi
-  if links_to "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"; then
+  if owns_rules "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"; then
     detected+=",codex-rules"
   fi
   if links_to "$GUARDS" "$GUARDS_LINK"; then
     detected+=",guards"
   fi
+  if owns_rules "$CODEX_PERMISSION_RULES" "$CODEX_ROOT/rules/permissions.rules"; then
+    detected+=",permissions"
+  fi
+  for hub_component in "${HUB_COMPONENTS[@]}"; do
+    for hooks_file in "$CLAUDE_ROOT/settings.json" "$CODEX_ROOT/hooks.json"; do
+      if jq -e --arg command "python3 \"$AGENT_HUB_COMMAND\" $hub_component " '
+        [.. | .command? | strings] | any(startswith($command))
+      ' "$hooks_file" >/dev/null 2>&1; then
+        detected+=",$hub_component"
+        break
+      fi
+    done
+  done
+  for agent_link in "$CLAUDE_ROOT/agents"/* "$CODEX_ROOT/agents"/*; do
+    if links_to_generated_agent "$agent_link" || owns_codex_agent "$agent_link"; then
+      detected+=",subagents"
+      break
+    fi
+  done
   printf '%s\n' "${detected#,}"
 }
 
@@ -368,18 +528,85 @@ canonicalize_install_root \
 CLAUDE_STATUS_LINE_COMMAND="$CLAUDE_ROOT/statusline-command.sh"
 VERIFY_GATE_COMMAND="$AGENTS_ROOT/hooks/verify-gate.py"
 GUARDS_LINK="$AGENTS_ROOT/hooks/guards"
+AGENT_HUB_COMMAND="$AGENTS_ROOT/hooks/agent-hub.py"
 COMPONENTS_FILE="$INSTALL_HOME/.config/power-agents/components"
 # The Codex TUI values the last statusline install wrote, so removal can tell
 # them apart from user values after settings/codex/tui.toml changes.
 CODEX_TUI_SNAPSHOT="$INSTALL_HOME/.config/power-agents/codex-tui.toml"
+# The Claude permission rules the permissions component added, and the Claude
+# root it added them to, so removal leaves rules the user wrote.
+PERMISSIONS_SNAPSHOT="$INSTALL_HOME/.config/power-agents/claude-permissions.json"
+# Personal overlay: instructions appended to the shared ones, and skills to
+# leave out. Both belong to the user and may be symlinks.
+INSTRUCTIONS_OVERLAY="$INSTALL_HOME/.config/power-agents/instructions.md"
+DISABLED_SKILLS_FILE="$INSTALL_HOME/.config/power-agents/disabled-skills"
+# The shared instructions followed by the overlay, written only while an
+# overlay exists.
+GENERATED_INSTRUCTIONS="$AGENTS_ROOT/instructions.md"
+# Model names for the subagents, per agent and role; part of the overlay.
+AGENT_MODELS_OVERLAY="$INSTALL_HOME/.config/power-agents/agent-models.json"
+# Subagent definitions rendered from subagents/ and the model overlay, linked
+# from each agent's agents directory.
+GENERATED_AGENTS="$AGENTS_ROOT/agents"
 
-for state_file in "$COMPONENTS_FILE" "$CODEX_TUI_SNAPSHOT"; do
+for state_file in "$COMPONENTS_FILE" "$CODEX_TUI_SNAPSHOT" \
+  "$GENERATED_INSTRUCTIONS" "$PERMISSIONS_SNAPSHOT"; do
   if [[ -L "$state_file" ]] ||
     [[ -e "$state_file" && ! -f "$state_file" ]]; then
     echo "ERROR: Installer state is not a regular file: $state_file" >&2
     exit 1
   fi
 done
+
+if [[ -e "$INSTRUCTIONS_OVERLAY" || -L "$INSTRUCTIONS_OVERLAY" ]] &&
+  [[ ! -f "$INSTRUCTIONS_OVERLAY" || ! -r "$INSTRUCTIONS_OVERLAY" ]]; then
+  echo "ERROR: Instructions overlay is not a regular file: $INSTRUCTIONS_OVERLAY" >&2
+  exit 1
+fi
+if [[ -f "$INSTRUCTIONS_OVERLAY" ]]; then
+  INSTRUCTIONS_SOURCE="$GENERATED_INSTRUCTIONS"
+else
+  INSTRUCTIONS_SOURCE="$GLOBAL_INSTRUCTIONS"
+fi
+
+if [[ ! -f "$SKILL_EXTRAS" ]]; then
+  echo "ERROR: Missing $SKILL_EXTRAS" >&2
+  exit 1
+fi
+mapfile -t extra_skill_names < <(read_name_list "$SKILL_EXTRAS")
+for name in "${extra_skill_names[@]}"; do
+  if [[ ! -d "$SKILLS/$name" ]]; then
+    echo "ERROR: Unknown skill in $SKILL_EXTRAS: $name" >&2
+    exit 1
+  fi
+  EXTRA_SKILLS+="$name,"
+done
+
+if [[ -e "$AGENT_MODELS_OVERLAY" || -L "$AGENT_MODELS_OVERLAY" ]] &&
+  [[ ! -f "$AGENT_MODELS_OVERLAY" || ! -r "$AGENT_MODELS_OVERLAY" ]]; then
+  echo "ERROR: Subagent models overlay is not a regular file: $AGENT_MODELS_OVERLAY" >&2
+  exit 1
+fi
+
+for subagent_source in "$SUBAGENTS"/*.md; do
+  [[ -f "$subagent_source" ]] || continue
+  subagent_name="${subagent_source##*/}"
+  SUBAGENT_ROLES+="${subagent_name%.md},"
+done
+
+if [[ -e "$DISABLED_SKILLS_FILE" || -L "$DISABLED_SKILLS_FILE" ]]; then
+  if [[ ! -f "$DISABLED_SKILLS_FILE" || ! -r "$DISABLED_SKILLS_FILE" ]]; then
+    echo "ERROR: Disabled skills list is not a regular file: $DISABLED_SKILLS_FILE" >&2
+    exit 1
+  fi
+  mapfile -t disabled_skill_names < <(read_name_list "$DISABLED_SKILLS_FILE")
+  for name in "${disabled_skill_names[@]}"; do
+    if [[ ! -d "$SKILLS/$name" ]]; then
+      echo "WARNING: Unknown skill in $DISABLED_SKILLS_FILE: $name" >&2
+    fi
+    DISABLED_SKILLS+="$name,"
+  done
+fi
 
 saved_for_roots=0
 if [[ -f "$COMPONENTS_FILE" ]] && saved_components="$(read_saved_components)"; then
@@ -413,6 +640,18 @@ elif dropping_component statusline && ((saved_for_roots)) &&
   CODEX_TUI_SOURCE="$CODEX_TUI_SNAPSHOT"
 fi
 
+# Claude permission rules are owned only through the snapshot of the rules an
+# install added to this Claude root.
+if [[ -f "$PERMISSIONS_SNAPSHOT" ]] && jq -e --arg root "$CLAUDE_ROOT" \
+  '.claude_root == $root' "$PERMISSIONS_SNAPSHOT" >/dev/null 2>&1; then
+  PERMISSIONS_OWNED="$PERMISSIONS_SNAPSHOT"
+fi
+if has_component permissions; then
+  PERMISSIONS_MODE="install"
+elif [[ "$PERMISSIONS_OWNED" != /dev/null ]]; then
+  PERMISSIONS_MODE="remove"
+fi
+
 if [[ -n "$CODEX_CONFIG_MODE" ]] &&
   ! python3 -c 'import tomlkit' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: tomlkit" >&2
@@ -420,7 +659,8 @@ if [[ -n "$CODEX_CONFIG_MODE" ]] &&
   exit 1
 fi
 
-if has_component skills && ! python3 -c 'import yaml' >/dev/null 2>&1; then
+if { has_component skills || has_component skills-extra; } &&
+  ! python3 -c 'import yaml' >/dev/null 2>&1; then
   echo "ERROR: Required Python module not found: yaml (PyYAML)" >&2
   echo "       See README.md#installation for setup instructions." >&2
   exit 1
@@ -474,7 +714,9 @@ fi
 
 for required_file in \
   "$CLAUDE_HOOKS" "$CLAUDE_GUARD_HOOKS" "$CODEX_HOOKS" "$HOOKS_RECONCILER" \
-  "$VERIFY_GATE" "$GUARDS/protect-tests.js" "$GUARDS/protect-secrets.js"; do
+  "$VERIFY_GATE" "$GUARDS/protect-tests.js" "$GUARDS/protect-secrets.js" \
+  "$CLAUDE_PERMISSIONS" "$CODEX_PERMISSION_RULES" "$AGENT_HUB" \
+  "${HUB_FRAGMENTS[@]}"; do
   if [[ ! -f "$required_file" ]]; then
     echo "ERROR: Missing $required_file" >&2
     exit 1
@@ -509,6 +751,34 @@ validate_hook_fragments() {
   if ! python3 "$HOOKS_RECONCILER" validate-managed "$CLAUDE_GUARD_HOOKS" \
     --placeholder "@GUARDS@"; then
     echo "ERROR: Invalid managed hooks fragment: $CLAUDE_GUARD_HOOKS" >&2
+    return 1
+  fi
+  for fragment in "${HUB_FRAGMENTS[@]}"; do
+    if ! python3 "$HOOKS_RECONCILER" validate-managed "$fragment" \
+      --placeholder "@AGENT_HUB@"; then
+      echo "ERROR: Invalid managed hooks fragment: $fragment" >&2
+      return 1
+    fi
+  done
+}
+
+# True when FILE's permissions, if any, hold only string lists in deny and ask.
+valid_permissions() {
+  jq -e '
+    .permissions == null or (.permissions | type == "object" and
+      all(.deny, .ask; . == null or (type == "array" and all(.[]; type == "string"))))
+  ' "$1" >/dev/null 2>&1
+}
+
+validate_permission_sources() {
+  if ! jq -e '(.permissions | keys) == ["ask", "deny"]' "$CLAUDE_PERMISSIONS" \
+    >/dev/null 2>&1 || ! valid_permissions "$CLAUDE_PERMISSIONS"; then
+    echo "ERROR: Invalid Claude permissions fragment: $CLAUDE_PERMISSIONS" >&2
+    return 1
+  fi
+  if [[ "$PERMISSIONS_OWNED" != /dev/null ]] &&
+    ! valid_permissions "$PERMISSIONS_OWNED"; then
+    echo "ERROR: Invalid installer state: $PERMISSIONS_SNAPSHOT" >&2
     return 1
   fi
 }
@@ -586,6 +856,7 @@ validate_skill_links_target() {
 
   for skill_dir in "$SKILLS"/*; do
     [[ -d "$skill_dir" ]] || continue
+    skill_selected "${skill_dir##*/}" || continue
     validate_link_target \
       "$skill_dir" \
       "$target_root/$(basename "$skill_dir")" || return 1
@@ -624,10 +895,27 @@ install_skill_links() {
 
   for skill_dir in "$SKILLS"/*; do
     [[ -d "$skill_dir" ]] || continue
-    install_link \
-      "$skill_dir" \
-      "$target_root/$(basename "$skill_dir")"
+    skill_link="$target_root/$(basename "$skill_dir")"
+    if skill_selected "${skill_dir##*/}"; then
+      install_link "$skill_dir" "$skill_link"
+    elif links_to "$skill_dir" "$skill_link"; then
+      unlink_owned "$skill_link" "unselected skill"
+    fi
   done
+}
+
+# Links TARGET to the instructions source, replacing a link to the other one.
+install_instructions_link() {
+  if ! links_to "$INSTRUCTIONS_SOURCE" "$1" && links_to_instructions "$1"; then
+    unlink_owned "$1" "instructions source changed"
+  fi
+  install_link "$INSTRUCTIONS_SOURCE" "$1"
+}
+
+remove_instructions_link() {
+  if links_to_instructions "$1"; then
+    unlink_owned "$1"
+  fi
 }
 
 unlink_owned() {
@@ -645,6 +933,89 @@ unlink_owned() {
 remove_owned_link() {
   if links_to "$1" "$2"; then
     unlink_owned "$2"
+  fi
+}
+
+validate_rules_target() {
+  if owns_rules "$1" "$2"; then
+    return 0
+  fi
+  validate_link_target "$1" "$2"
+}
+
+# Installs SOURCE at TARGET as a copy marked with EDIT.
+install_managed_copy() {
+  local backup
+  local edit="$3"
+  local source="$1"
+  local staged
+  local target="$2"
+
+  if ! staged="$(mktemp "${target}.tmp.XXXXXX")"; then
+    echo "ERROR: Could not create temporary file for $target" >&2
+    return 1
+  fi
+  record_rollback remove-path "$staged"
+  if ! { copy_marker "$edit" && echo && cat -- "$source"; } >"$staged" ||
+    ! chmod 644 -- "$staged"; then
+    echo "ERROR: Could not stage copy: $target" >&2
+    return 1
+  fi
+
+  if [[ -f "$target" && ! -L "$target" ]] && cmp -s "$staged" "$target"; then
+    if ! rm -f -- "$staged"; then
+      echo "ERROR: Could not remove unchanged temporary file for $target" >&2
+      return 1
+    fi
+    echo "OK: $target"
+    return
+  fi
+
+  if [[ -L "$target" ]]; then
+    record_rollback restore-symlink "$target" "$(readlink "$target")"
+  elif [[ -e "$target" ]]; then
+    backup="$TRANSACTION_DIR/backup-${#ROLLBACK_TYPES[@]}"
+    if ! cp -p -- "$target" "$backup"; then
+      echo "ERROR: Could not back up $target" >&2
+      return 1
+    fi
+    record_rollback restore-file "$target" "$backup"
+  else
+    record_rollback remove-path "$target"
+  fi
+  if ! mv -f -- "$staged" "$target"; then
+    echo "ERROR: Could not install copy: $target" >&2
+    return 1
+  fi
+  echo "COPY: $target <- $source"
+}
+
+# Removes TARGET, a managed copy or an earlier install's symlink.
+remove_managed_copy() {
+  local backup
+  local label="${2:-deselected component}"
+  local target="$1"
+
+  if [[ -L "$target" ]]; then
+    unlink_owned "$target" "$label"
+    return
+  fi
+  backup="$TRANSACTION_DIR/backup-${#ROLLBACK_TYPES[@]}"
+  if ! cp -p -- "$target" "$backup"; then
+    echo "ERROR: Could not back up $target" >&2
+    return 1
+  fi
+  record_rollback restore-file "$target" "$backup"
+  if ! rm -f -- "$target"; then
+    echo "ERROR: Could not remove copy: $target" >&2
+    return 1
+  fi
+  echo "REMOVE: $target ($label)"
+}
+
+remove_owned_rules() {
+  if owns_rules "$1" "$2"; then
+    remove_managed_copy "$2"
   fi
 }
 
@@ -689,6 +1060,62 @@ reconcile_guard_hooks() {
   else
     python3 "$HOOKS_RECONCILER" remove "$1" "$2" --script "$GUARDS_LINK/"
   fi
+}
+
+# Writes INPUT to OUTPUT with the agent hub hooks of the selected components
+# added, from AGENT's fragments. Every hook entry that runs the agent hub is
+# managed, so deselected components' entries are removed.
+reconcile_hub_hooks() {
+  local -a fragments=()
+  local merged="$2.hub-fragment"
+  local component
+
+  for component in "${HUB_COMPONENTS[@]}"; do
+    if has_component "$component"; then
+      fragments+=("$ROOT/settings/$3/$component-hooks.json")
+    fi
+  done
+  if ((${#fragments[@]} == 0)); then
+    python3 "$HOOKS_RECONCILER" remove "$1" "$2" --script "$AGENT_HUB_COMMAND"
+    return
+  fi
+  jq -s '{"hooks": (reduce (.[].hooks | to_entries[]) as $event ({};
+    .[$event.key] += $event.value))}' "${fragments[@]}" >"$merged" &&
+    python3 "$HOOKS_RECONCILER" reconcile "$merged" "$1" "$2" \
+      --script "$AGENT_HUB_COMMAND" --placeholder "@AGENT_HUB@"
+}
+
+# Writes the Claude settings INPUT to OUTPUT with the permission rules the last
+# install added replaced by the current ones, or removed, and writes the rules
+# it added, which the user did not already have, to SNAPSHOT.
+reconcile_permissions() {
+  local wanted="/dev/null"
+  local merged="$TRANSACTION_DIR/permissions-merged.json"
+
+  if [[ "$PERMISSIONS_MODE" == install ]]; then
+    wanted="$CLAUDE_PERMISSIONS"
+  fi
+  jq --slurpfile owned "$PERMISSIONS_OWNED" --slurpfile wanted "$wanted" \
+    --arg root "$CLAUDE_ROOT" '
+    reduce ("deny", "ask") as $key ({settings: ., added: {}};
+      ($owned[0].permissions[$key] // []) as $old |
+      ((.settings.permissions[$key] // []) - $old) as $kept |
+      [($wanted[0].permissions[$key] // [])[] |
+        select(. as $rule | $kept | index([$rule]) | not)] as $added |
+      .added[$key] = $added |
+      if ($kept + $added) != [] then
+        .settings.permissions[$key] = $kept + $added
+      elif $old != [] then
+        del(.settings.permissions[$key])
+      else
+        .
+      end
+    ) |
+    if .settings.permissions == {} then del(.settings.permissions) else . end |
+    [.settings, {claude_root: $root, permissions: .added}]
+  ' "$1" >"$merged" &&
+    jq '.[0]' "$merged" >"$2" &&
+    jq '.[1]' "$merged" >"$3"
 }
 
 # True for settings files to reconcile: all of them on install, and only
@@ -740,6 +1167,12 @@ validate_claude_settings_target() {
     echo "ERROR: Invalid or unsupported Claude hooks: $target" >&2
     return 1
   fi
+
+  if [[ -n "$PERMISSIONS_MODE" ]] && ! valid_permissions "$target"; then
+    echo "ERROR: Invalid Claude permissions: $target" >&2
+    echo "       permissions.deny and permissions.ask must be lists of strings." >&2
+    return 1
+  fi
 }
 
 prepare_claude_settings() {
@@ -747,7 +1180,9 @@ prepare_claude_settings() {
   local target="$CLAUDE_ROOT/settings.json"
   local input="/dev/null"
   local status_line_output="$output.status-line"
+  local permissions_output="$output.permissions"
   local gate_output="$output.gate"
+  local guard_output="$output.guards"
   local mode="keep"
   local -a sources
 
@@ -781,13 +1216,26 @@ prepare_claude_settings() {
     return 1
   fi
 
-  if ! reconcile_gate_hooks "$CLAUDE_HOOKS" "$status_line_output" "$gate_output"; then
+  if [[ -z "$PERMISSIONS_MODE" ]]; then
+    cp -- "$status_line_output" "$permissions_output"
+  elif ! reconcile_permissions "$status_line_output" "$permissions_output" \
+    "$TRANSACTION_DIR/claude-permissions.json"; then
+    echo "ERROR: Could not prepare Claude permissions for $target" >&2
+    return 1
+  fi
+
+  if ! reconcile_gate_hooks "$CLAUDE_HOOKS" "$permissions_output" "$gate_output"; then
     echo "ERROR: Could not prepare Claude hooks for $target" >&2
     return 1
   fi
 
-  if ! reconcile_guard_hooks "$gate_output" "$output"; then
+  if ! reconcile_guard_hooks "$gate_output" "$guard_output"; then
     echo "ERROR: Could not prepare Claude guard hooks for $target" >&2
+    return 1
+  fi
+
+  if ! reconcile_hub_hooks "$guard_output" "$output" claude; then
+    echo "ERROR: Could not prepare Claude agent hub hooks for $target" >&2
     return 1
   fi
 
@@ -875,7 +1323,8 @@ prepare_codex_hooks() {
     input="$target"
   fi
 
-  if ! reconcile_gate_hooks "$CODEX_HOOKS" "$input" "$output"; then
+  if ! reconcile_gate_hooks "$CODEX_HOOKS" "$input" "$output.gate" ||
+    ! reconcile_hub_hooks "$output.gate" "$output" codex; then
     echo "ERROR: Could not prepare Codex hooks for $target" >&2
     return 1
   fi
@@ -950,6 +1399,7 @@ validate_legacy_codex_skills() {
 
   for skill_dir in "$SKILLS"/*; do
     [[ -d "$skill_dir" ]] || continue
+    skill_selected "${skill_dir##*/}" || continue
     legacy_skill="$legacy_root/$(basename "$skill_dir")"
 
     if [[ -e "$legacy_skill" || -L "$legacy_skill" ]]; then
@@ -962,7 +1412,7 @@ validate_legacy_codex_skills() {
   return "$failed"
 }
 
-if has_component skills; then
+if has_component skills || has_component skills-extra; then
   validate_skills
 fi
 if has_component statusline; then
@@ -972,18 +1422,18 @@ if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   validate_codex_tui_settings
 fi
 validate_hook_fragments
+validate_permission_sources
 validate_distinct_install_roots
 
 failed=0
 if has_component instructions; then
-  validate_link_target \
-    "$GLOBAL_INSTRUCTIONS" \
-    "$CODEX_ROOT/AGENTS.md" || failed=1
-  validate_link_target \
-    "$GLOBAL_INSTRUCTIONS" \
-    "$CLAUDE_ROOT/CLAUDE.md" || failed=1
+  for instructions_target in "$CODEX_ROOT/AGENTS.md" "$CLAUDE_ROOT/CLAUDE.md"; do
+    links_to_instructions "$instructions_target" ||
+      validate_link_target \
+        "$INSTRUCTIONS_SOURCE" "$instructions_target" || failed=1
+  done
 fi
-if has_component skills; then
+if has_component skills || has_component skills-extra; then
   validate_skill_links_target "$AGENTS_ROOT/skills" || failed=1
   validate_skill_links_target "$CLAUDE_ROOT/skills" || failed=1
   validate_legacy_codex_skills || failed=1
@@ -995,12 +1445,32 @@ if has_component statusline; then
 fi
 validate_claude_settings_target || failed=1
 if has_component codex-rules; then
-  validate_link_target \
+  validate_rules_target \
     "$CODEX_SHARED_RULES" \
     "$CODEX_ROOT/rules/shared.rules" || failed=1
 fi
 if has_component guards; then
   validate_link_target "$GUARDS" "$GUARDS_LINK" || failed=1
+fi
+if has_component permissions; then
+  validate_rules_target \
+    "$CODEX_PERMISSION_RULES" \
+    "$CODEX_ROOT/rules/permissions.rules" || failed=1
+fi
+if hub_selected; then
+  validate_link_target "$AGENT_HUB" "$AGENT_HUB_COMMAND" || failed=1
+fi
+if has_component subagents; then
+  IFS=, read -r -a subagent_roles <<<"${SUBAGENT_ROLES:1:-1}"
+  for agent in claude codex; do
+    for role in "${subagent_roles[@]}"; do
+      subagent_link="$(subagent_directory "$agent")/$role.$(subagent_extension "$agent")"
+      links_to_generated_agent "$subagent_link" ||
+        { [[ "$agent" == codex ]] && owns_codex_agent "$subagent_link"; } ||
+        validate_link_target "$GENERATED_AGENTS/$agent/${subagent_link##*/}" \
+          "$subagent_link" || failed=1
+    done
+  done
 fi
 if [[ -n "$CODEX_CONFIG_MODE" ]]; then
   validate_codex_config_target || failed=1
@@ -1032,6 +1502,7 @@ claude_candidate="$TRANSACTION_DIR/claude-settings.json"
 codex_candidate="$TRANSACTION_DIR/codex-config.toml"
 codex_hooks_candidate="$TRANSACTION_DIR/codex-hooks.json"
 components_candidate="$TRANSACTION_DIR/components"
+instructions_candidate="$TRANSACTION_DIR/instructions.md"
 if managed_target "$CLAUDE_ROOT/settings.json"; then
   prepare_claude_settings "$claude_candidate"
 fi
@@ -1041,18 +1512,40 @@ fi
 if managed_target "$CODEX_ROOT/hooks.json"; then
   prepare_codex_hooks "$codex_hooks_candidate"
 fi
-printf 'components=%s\ncodex_root=%s\nclaude_root=%s\n' \
+printf 'format=2\ncomponents=%s\ncodex_root=%s\nclaude_root=%s\n' \
   "$SELECTED_COMPONENTS" "$CODEX_ROOT" "$CLAUDE_ROOT" >"$components_candidate"
+subagents_candidate="$TRANSACTION_DIR/agents"
+if has_component subagents; then
+  subagent_models=()
+  if [[ -f "$AGENT_MODELS_OVERLAY" ]]; then
+    subagent_models=(--models "$AGENT_MODELS_OVERLAY")
+  fi
+  python3 "$SUBAGENT_RENDERER" "$SUBAGENTS" "$subagents_candidate" \
+    "${subagent_models[@]}"
+fi
+generate_instructions=0
+if has_component instructions &&
+  [[ "$INSTRUCTIONS_SOURCE" == "$GENERATED_INSTRUCTIONS" ]]; then
+  generate_instructions=1
+  { cat -- "$GLOBAL_INSTRUCTIONS" && echo && cat -- "$INSTRUCTIONS_OVERLAY"; } \
+    >"$instructions_candidate"
+fi
 
 if ! ((UNINSTALL)); then
   ensure_directory "$AGENTS_ROOT"
   ensure_directory "$AGENTS_ROOT/hooks"
   ensure_directory "$CODEX_ROOT"
-  if has_component codex-rules; then
+  if has_component codex-rules || has_component permissions; then
     ensure_directory "$CODEX_ROOT/rules"
   fi
   ensure_directory "$CLAUDE_ROOT"
   ensure_directory "${COMPONENTS_FILE%/*}"
+  if has_component subagents; then
+    for agent in claude codex; do
+      ensure_directory "$GENERATED_AGENTS/$agent"
+      ensure_directory "$(subagent_directory "$agent")"
+    done
+  fi
 fi
 
 claude_staged=""
@@ -1060,6 +1553,7 @@ codex_staged=""
 codex_hooks_staged=""
 components_staged=""
 snapshot_staged=""
+instructions_staged=""
 if managed_target "$CLAUDE_ROOT/settings.json"; then
   stage_managed_file \
     "$claude_candidate" \
@@ -1084,6 +1578,28 @@ if has_component statusline; then
     "$CODEX_TUI_SNAPSHOT" \
     snapshot_staged
 fi
+permissions_staged=""
+if [[ "$PERMISSIONS_MODE" == install ]]; then
+  stage_managed_file \
+    "$TRANSACTION_DIR/claude-permissions.json" \
+    "$PERMISSIONS_SNAPSHOT" \
+    permissions_staged
+fi
+declare -a subagent_staged=()
+declare -a subagent_targets=()
+if has_component subagents; then
+  for subagent_candidate in "$subagents_candidate"/*/*; do
+    subagent_targets+=("$GENERATED_AGENTS/${subagent_candidate#"$subagents_candidate/"}")
+    stage_managed_file "$subagent_candidate" "${subagent_targets[-1]}" staged_file
+    subagent_staged+=("$staged_file")
+  done
+fi
+if ((generate_instructions)); then
+  stage_managed_file \
+    "$instructions_candidate" \
+    "$GENERATED_INSTRUCTIONS" \
+    instructions_staged
+fi
 if ! ((UNINSTALL)); then
   stage_managed_file \
     "$components_candidate" \
@@ -1099,27 +1615,34 @@ else
 fi
 echo
 
-# Shared instructions.
+# Shared instructions, with the overlay appended when there is one.
+if ((generate_instructions)); then
+  activate_managed_file \
+    "shared instructions and overlay" \
+    "$instructions_staged" \
+    "$GENERATED_INSTRUCTIONS"
+fi
 if has_component instructions; then
-  install_link \
-    "$GLOBAL_INSTRUCTIONS" \
-    "$CODEX_ROOT/AGENTS.md"
-
-  install_link \
-    "$GLOBAL_INSTRUCTIONS" \
-    "$CLAUDE_ROOT/CLAUDE.md"
+  install_instructions_link "$CODEX_ROOT/AGENTS.md"
+  install_instructions_link "$CLAUDE_ROOT/CLAUDE.md"
 elif dropping_component instructions; then
-  remove_owned_link "$GLOBAL_INSTRUCTIONS" "$CODEX_ROOT/AGENTS.md"
-  remove_owned_link "$GLOBAL_INSTRUCTIONS" "$CLAUDE_ROOT/CLAUDE.md"
+  remove_instructions_link "$CODEX_ROOT/AGENTS.md"
+  remove_instructions_link "$CLAUDE_ROOT/CLAUDE.md"
+fi
+# Like the verify gate, the generated file is shared by all agent roots, so
+# it stays while a selection saved for other roots may still use it.
+if ! ((generate_instructions)) && [[ -f "$GENERATED_INSTRUCTIONS" ]] &&
+  { ((saved_for_roots)) || [[ ! -f "$COMPONENTS_FILE" ]]; }; then
+  remove_state_file "$GENERATED_INSTRUCTIONS"
 fi
 
 # Codex discovers ~/.agents/skills. Claude Code discovers skills in its selected
-# configuration root. Link each canonical skill so unrelated local skills remain
+# configuration root. Link each selected skill so unrelated local skills remain
 # untouched.
-if has_component skills; then
+if has_component skills || has_component skills-extra; then
   install_skill_links "$AGENTS_ROOT/skills"
   install_skill_links "$CLAUDE_ROOT/skills"
-elif dropping_component skills; then
+elif dropping_component skills || dropping_component skills-extra; then
   remove_skill_links "$AGENTS_ROOT/skills"
   remove_skill_links "$CLAUDE_ROOT/skills"
 fi
@@ -1156,6 +1679,33 @@ elif dropping_component guards; then
   remove_owned_link "$GUARDS" "$GUARDS_LINK"
 fi
 
+# The notify, context, and format hook entries run the agent hub through this
+# link, which is shared by all agent roots like the verify gate.
+if hub_selected; then
+  install_link "$AGENT_HUB" "$AGENT_HUB_COMMAND"
+elif links_to "$AGENT_HUB" "$AGENT_HUB_COMMAND" && [[ -f "$COMPONENTS_FILE" ]] &&
+  ! ((saved_for_roots)); then
+  echo "KEEP: $AGENT_HUB_COMMAND (may be used by the install for other agent roots)"
+elif dropping_component notify || dropping_component context ||
+  dropping_component format; then
+  remove_owned_link "$AGENT_HUB" "$AGENT_HUB_COMMAND"
+fi
+
+# Where notifications are Windows toasts (WSL), a Windows link handler lets a
+# click bring the session's window forward. Like the agent hub, it is shared by
+# all agent roots. Windows settings cannot be rolled back, so it is changed
+# after the transaction.
+focus_handler_action=
+if command -v powershell.exe >/dev/null 2>&1; then
+  if has_component notify; then
+    focus_handler_action=install
+  elif [[ -f "$COMPONENTS_FILE" ]] && ! ((saved_for_roots)); then
+    : # may be used by the install for other agent roots
+  elif dropping_component notify; then
+    focus_handler_action=remove
+  fi
+fi
+
 # Claude keeps machine-local state in settings.json, so only the centrally
 # managed statusLine key, verify-gate hook entries, and guard hook entries are
 # reconciled.
@@ -1167,11 +1717,22 @@ if [[ -n "$claude_staged" ]]; then
 fi
 
 if has_component codex-rules; then
-  install_link \
+  install_managed_copy \
     "$CODEX_SHARED_RULES" \
-    "$CODEX_ROOT/rules/shared.rules"
+    "$CODEX_ROOT/rules/shared.rules" \
+    "${CODEX_SHARED_RULES#"$ROOT"/}"
 elif dropping_component codex-rules; then
-  remove_owned_link "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"
+  remove_owned_rules "$CODEX_SHARED_RULES" "$CODEX_ROOT/rules/shared.rules"
+fi
+
+if has_component permissions; then
+  install_managed_copy \
+    "$CODEX_PERMISSION_RULES" \
+    "$CODEX_ROOT/rules/permissions.rules" \
+    "${CODEX_PERMISSION_RULES#"$ROOT"/}"
+elif dropping_component permissions; then
+  remove_owned_rules \
+    "$CODEX_PERMISSION_RULES" "$CODEX_ROOT/rules/permissions.rules"
 fi
 
 # Codex keeps machine-local state in config.toml, so only the centrally managed
@@ -1192,11 +1753,68 @@ if [[ -n "$codex_hooks_staged" ]]; then
     "$CODEX_ROOT/hooks.json"
 fi
 
+if [[ "$PERMISSIONS_MODE" == install ]]; then
+  activate_managed_file \
+    "added Claude permission rules" \
+    "$permissions_staged" \
+    "$PERMISSIONS_SNAPSHOT"
+elif [[ "$PERMISSIONS_MODE" == remove ]]; then
+  remove_state_file "$PERMISSIONS_SNAPSHOT"
+fi
+
 if has_component statusline; then
   activate_managed_file \
     "installed Codex TUI values" \
     "$snapshot_staged" \
     "$CODEX_TUI_SNAPSHOT"
+fi
+
+# Claude Code's agents directory links to the generated definitions, and
+# Codex's holds marked copies of them. Those for roles no longer selected or
+# defined are removed; your own agent files are never touched.
+for agent in claude codex; do
+  for subagent_link in "$(subagent_directory "$agent")"/*; do
+    if [[ "$agent" == claude ]]; then
+      links_to_generated_agent "$subagent_link" || continue
+    else
+      owns_codex_agent "$subagent_link" || continue
+    fi
+    subagent_name="${subagent_link##*/}"
+    if ! has_component subagents; then
+      remove_managed_copy "$subagent_link"
+    elif [[ "$SUBAGENT_ROLES" != *",${subagent_name%.*},"* ]]; then
+      remove_managed_copy "$subagent_link" "removed subagent"
+    fi
+  done
+done
+for index in "${!subagent_targets[@]}"; do
+  activate_managed_file "subagent definition" "${subagent_staged[index]}" \
+    "${subagent_targets[index]}"
+  subagent_file="${subagent_targets[index]}"
+  subagent_agent="${subagent_file%/*}"
+  subagent_agent="${subagent_agent##*/}"
+  if [[ "$subagent_agent" == claude ]]; then
+    install_link "$subagent_file" \
+      "$(subagent_directory "$subagent_agent")/${subagent_file##*/}"
+  else
+    subagent_name="${subagent_file##*/}"
+    install_managed_copy "$subagent_file" \
+      "$(subagent_directory "$subagent_agent")/$subagent_name" \
+      "subagents/${subagent_name%.*}.md"
+  fi
+done
+# Like the generated instructions, the generated definitions are shared by
+# all agent roots, so they stay while a selection saved for other roots may
+# still use them.
+if { ((saved_for_roots)) || [[ ! -f "$COMPONENTS_FILE" ]]; }; then
+  for generated_agent in "$GENERATED_AGENTS"/claude/* "$GENERATED_AGENTS"/codex/*; do
+    [[ -f "$generated_agent" ]] || continue
+    generated_name="${generated_agent##*/}"
+    if ! has_component subagents ||
+      [[ "$SUBAGENT_ROLES" != *",${generated_name%.*},"* ]]; then
+      remove_state_file "$generated_agent"
+    fi
+  done
 fi
 
 # Saved last so that a failed install leaves the previous selection in place.
@@ -1214,6 +1832,22 @@ else
 fi
 
 TRANSACTION_ACTIVE=0
+
+if [[ "$focus_handler_action" == install ]]; then
+  if python3 "$AGENT_HUB" focus-handler install; then
+    echo "Registered the Windows handler that opens a session's window from its notification"
+  else
+    echo "WARNING: Could not register the notification click handler;" \
+      "notifications still work, but clicking one does nothing." >&2
+  fi
+elif [[ "$focus_handler_action" == remove ]]; then
+  if python3 "$AGENT_HUB" focus-handler remove; then
+    echo "Removed the Windows notification click handler"
+  else
+    echo "WARNING: Could not remove the notification click handler" \
+      "(HKCU\\Software\\Classes\\power-agents-focus)." >&2
+  fi
+fi
 
 if ((UNINSTALL)); then
   echo
@@ -1235,8 +1869,11 @@ if has_component instructions; then
   echo
   echo "Canonical instructions:"
   echo "  $GLOBAL_INSTRUCTIONS"
+  if ((generate_instructions)); then
+    echo "  $INSTRUCTIONS_OVERLAY (your overlay, appended)"
+  fi
 fi
-if has_component skills; then
+if has_component skills || has_component skills-extra; then
   echo
   echo "Canonical skills:"
   echo "  $SKILLS"
@@ -1256,4 +1893,23 @@ if has_component guards; then
   echo
   echo "Canonical Claude Code guard hooks:"
   echo "  $GUARDS"
+fi
+if has_component permissions; then
+  echo
+  echo "Canonical permission rules:"
+  echo "  $CLAUDE_PERMISSIONS"
+  echo "  $CODEX_PERMISSION_RULES"
+fi
+if has_component subagents; then
+  echo
+  echo "Canonical subagents:"
+  echo "  $SUBAGENTS"
+  if [[ -f "$AGENT_MODELS_OVERLAY" ]]; then
+    echo "  $AGENT_MODELS_OVERLAY (your model choices)"
+  fi
+fi
+if hub_selected; then
+  echo
+  echo "Canonical agent hub (notify, context, and format hooks):"
+  echo "  $AGENT_HUB"
 fi

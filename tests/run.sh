@@ -14,6 +14,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# On WSL the real powershell.exe would change the Windows registry, so every
+# test finds this fake first. It logs each script it is given.
+mkdir "$TEST_ROOT/windows-bin"
+cat >"$TEST_ROOT/windows-bin/powershell.exe" <<'EOF'
+#!/bin/sh
+python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[-1]).decode("utf-16-le"))' \
+  "$@" >>"$POWER_AGENTS_POWERSHELL_LOG"
+EOF
+chmod +x "$TEST_ROOT/windows-bin/powershell.exe"
+export PATH="$TEST_ROOT/windows-bin:$PATH"
+export POWER_AGENTS_POWERSHELL_LOG="$TEST_ROOT/powershell.log"
+
 fail() {
   echo "FAIL: $*" >&2
   exit 1
@@ -33,6 +45,27 @@ assert_same_link() {
 
   [[ -L "$target" ]] || fail "Expected symlink: $target"
   [[ "$target" -ef "$source" ]] || fail "Wrong symlink target: $target"
+}
+
+# Codex does not follow symlinked rules files or agent roles, so the installer
+# copies them below a line that marks the copy as its own and names EDIT, the
+# repository file to change instead.
+assert_managed_copy() {
+  local edit="$3"
+  local source="$1"
+  local target="$2"
+
+  [[ -f "$target" && ! -L "$target" ]] ||
+    fail "Expected a managed copy: $target"
+  [[ "$(head -n 1 "$target")" == \
+    "# Managed by power-agents. Edit $edit in that repository and run ./install.sh." ]] ||
+    fail "Copy lacks the managed line: $target"
+  tail -n +2 "$target" | cmp -s - "$source" ||
+    fail "Copy differs from $source: $target"
+}
+
+assert_rules_copy() {
+  assert_managed_copy "$1" "$2" "${1#"$ROOT"/}"
 }
 
 assert_skill_links() {
@@ -135,11 +168,36 @@ guard_hooks() {
   ' "$ROOT/settings/claude/guards-hooks.json"
 }
 
+# Merges the hook objects on stdin, appending each event's groups in order.
+merge_hooks() {
+  jq -s 'reduce (.[] | to_entries[]) as $event ({}; .[$event.key] += $event.value)'
+}
+
+# The notify, context, and format hooks for AGENT as installed with the agent
+# hub at PATH.
+hub_hooks() {
+  jq --arg hub "$2" '
+    .hooks | walk(if type == "string" then sub("@AGENT_HUB@"; $hub) else . end)
+  ' "$ROOT/settings/$1/notify-hooks.json" \
+    "$ROOT/settings/$1/context-hooks.json" \
+    "$ROOT/settings/$1/format-hooks.json" | merge_hooks
+}
+
 # Claude hooks for an install with every component, under HOME $1.
 managed_claude_hooks() {
-  managed_hooks claude "$1/.agents/hooks/verify-gate.py" |
-    jq --argjson guards "$(guard_hooks "$1/.agents/hooks/guards/")" \
-      '. + {"PreToolUse": $guards}'
+  {
+    managed_hooks claude "$1/.agents/hooks/verify-gate.py"
+    guard_hooks "$1/.agents/hooks/guards/" | jq '{"PreToolUse": .}'
+    hub_hooks claude "$1/.agents/hooks/agent-hub.py"
+  } | merge_hooks
+}
+
+# Codex hooks for an install with every component, under HOME $1.
+managed_codex_hooks() {
+  {
+    managed_hooks codex "$1/.agents/hooks/verify-gate.py"
+    hub_hooks codex "$1/.agents/hooks/agent-hub.py"
+  } | merge_hooks
 }
 
 saved_components() {
@@ -245,24 +303,25 @@ test_clean_install_and_idempotence() {
     "$ROOT/hooks/verify-gate.py" \
     "$test_home/.agents/hooks/verify-gate.py"
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson hooks "$(managed_claude_hooks "$test_home")" '
+    --argjson hooks "$(managed_claude_hooks "$test_home")" \
+    --argjson permissions "$(managed_permissions)" '
     . == {
       "statusLine": {
         "type": "command",
         "command": $command
       },
+      "permissions": $permissions,
       "hooks": $hooks
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
     fail "Clean install produced unexpected Claude settings"
-  jq -e --argjson hooks "$(managed_hooks codex \
-    "$test_home/.agents/hooks/verify-gate.py")" '
+  jq -e --argjson hooks "$(managed_codex_hooks "$test_home")" '
     . == {"hooks": $hooks}
   ' "$test_home/.codex/hooks.json" >/dev/null ||
     fail "Clean install produced unexpected Codex hooks"
   assert_contains "$test_home/install.log" \
     "Codex: trust the verify-gate hooks with /hooks in a new session."
-  assert_same_link \
+  assert_rules_copy \
     "$ROOT/policies/codex/shared.rules" \
     "$test_home/.codex/rules/shared.rules"
   cmp -s "$ROOT/settings/codex/tui.toml" "$test_home/.codex/config.toml" ||
@@ -319,11 +378,10 @@ test_custom_agent_roots() {
   jq -e --argjson hooks "$(managed_claude_hooks "$test_home")" \
     '.hooks == $hooks' "$claude_root/settings.json" >/dev/null ||
     fail "Custom Claude root produced incorrect verify-gate hooks"
-  jq -e --argjson hooks "$(managed_hooks codex \
-    "$test_home/.agents/hooks/verify-gate.py")" \
+  jq -e --argjson hooks "$(managed_codex_hooks "$test_home")" \
     '. == {"hooks": $hooks}' "$codex_root/hooks.json" >/dev/null ||
     fail "Custom Codex root produced incorrect verify-gate hooks"
-  assert_same_link \
+  assert_rules_copy \
     "$ROOT/policies/codex/shared.rules" "$codex_root/rules/shared.rules"
   cmp -s "$ROOT/settings/codex/tui.toml" "$codex_root/config.toml" ||
     fail "Custom Codex root produced unexpected configuration"
@@ -468,11 +526,13 @@ EOF
   cat >"$test_home/.codex/config.toml" <<'EOF'
 model = "machine-local-model"
 EOF
-  # Activation order: Claude settings, Codex config, Codex hooks, then the
-  # component selection.
+  # Activation order: Claude settings, the two Codex rules copies, Codex
+  # config, Codex hooks, the permissions and Codex TUI snapshots, six subagent
+  # definitions and the three Codex copies of them, then the component
+  # selection.
   case "$kind" in
     config)
-      fail_at=2
+      fail_at=4
       failed_target="$test_home/.codex/config.toml"
       printf '%s\n' \
         '{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "local-stop"}]}]}}' \
@@ -480,11 +540,11 @@ EOF
       codex_hooks_before="$(cksum "$test_home/.codex/hooks.json")"
       ;;
     hooks)
-      fail_at=3
+      fail_at=5
       failed_target="$test_home/.codex/hooks.json"
       ;;
     components)
-      fail_at=5
+      fail_at=17
       failed_target="$components_file"
       mkdir -p "${components_file%/*}"
       printf '%s\n' "instructions" >"$components_file"
@@ -551,6 +611,8 @@ EOF
     fail "Rollback left Claude skills installed"
   [[ ! -e "$test_home/.claude/statusline-command.sh" ]] ||
     fail "Rollback left the Claude status line installed"
+  [[ ! -e "$test_home/.claude/agents" && ! -e "$test_home/.codex/agents" ]] ||
+    fail "Rollback left subagents installed"
   [[ ! -e "$test_home/.agents" ]] ||
     fail "Rollback left shared skills or the verify gate installed"
   if [[ "$kind" == components ]]; then
@@ -560,6 +622,8 @@ EOF
       fail "Rollback left a temporary component selection behind"
     [[ ! -e "${components_file%/*}/codex-tui.toml" ]] ||
       fail "Rollback left the installed Codex TUI values behind"
+    [[ ! -e "${components_file%/*}/claude-permissions.json" ]] ||
+      fail "Rollback left the added Claude permission rules behind"
   else
     [[ ! -e "$test_home/.config" ]] ||
       fail "Rollback left a component selection behind"
@@ -594,12 +658,11 @@ EOF
 
   run_installer "$test_home"
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson hooks "$(managed_claude_hooks "$test_home")" '
+    --argjson hooks "$(managed_claude_hooks "$test_home")" \
+    --argjson permissions "$(managed_permissions)" '
     . == {
       "model": "opus",
-      "permissions": {
-        "allow": ["Read"]
-      },
+      "permissions": ({"allow": ["Read"]} + $permissions),
       "statusLine": {
         "type": "command",
         "command": $command
@@ -633,10 +696,8 @@ test_claude_settings_rejection() {
 test_foreign_hooks_preservation() {
   local claude_settings_before
   local codex_hooks_before
-  local script
   local test_home="$TEST_ROOT/foreign-hooks-home"
 
-  script="$test_home/.agents/hooks/verify-gate.py"
   mkdir -p "$test_home/.claude" "$test_home/.codex"
   cat >"$test_home/.claude/settings.json" <<'EOF'
 {
@@ -668,35 +729,36 @@ EOF
   run_installer "$test_home"
 
   jq -e --arg command "$test_home/.claude/statusline-command.sh" \
-    --argjson managed "$(managed_hooks claude "$script")" \
-    --argjson guards "$(guard_hooks "$test_home/.agents/hooks/guards/")" '
+    --argjson managed "$(managed_claude_hooks "$test_home")" \
+    --argjson permissions "$(managed_permissions)" '
     . == {
       "model": "opus",
-      "hooks": {
-        "PreToolUse": ([
+      "hooks": ({
+        "PreToolUse": [
           {"matcher": "Bash", "hooks": [{"type": "command", "command": "claude-audit", "timeout": 5}]}
-        ] + $guards),
-        "Stop": ([
+        ],
+        "Stop": [
           {"hooks": [{"type": "command", "command": "claude-notify"}]}
-        ] + $managed.Stop),
-        "UserPromptSubmit": $managed.UserPromptSubmit
-      },
-      "statusLine": {"type": "command", "command": $command}
+        ]
+      } | reduce ($managed | to_entries[]) as $event (.;
+        .[$event.key] += $event.value)),
+      "statusLine": {"type": "command", "command": $command},
+      "permissions": $permissions
     }
   ' "$test_home/.claude/settings.json" >/dev/null ||
     fail "Installer did not preserve foreign Claude hooks"
-  jq -e --argjson managed "$(managed_hooks codex "$script")" '
+  jq -e --argjson managed "$(managed_codex_hooks "$test_home")" '
     . == {
       "description": "local Codex hooks",
-      "hooks": {
+      "hooks": ({
         "SessionStart": [
           {"matcher": "startup", "hooks": [{"type": "command", "command": "codex-start"}]}
         ],
-        "Stop": ([
+        "Stop": [
           {"hooks": [{"type": "command", "command": "codex-notify"}]}
-        ] + $managed.Stop),
-        "UserPromptSubmit": $managed.UserPromptSubmit
-      }
+        ]
+      } | reduce ($managed | to_entries[]) as $event (.;
+        .[$event.key] += $event.value))
     }
   ' "$test_home/.codex/hooks.json" >/dev/null ||
     fail "Installer did not preserve foreign Codex hooks"
@@ -811,7 +873,9 @@ test_gate_only_install() {
   [[ ! -e "$test_home/.codex/AGENTS.md" && ! -e "$test_home/.claude/CLAUDE.md" && \
     ! -e "$test_home/.agents/skills" && ! -e "$test_home/.claude/skills" && \
     ! -e "$test_home/.codex/config.toml" && ! -e "$test_home/.codex/rules" && \
-    ! -e "$test_home/.agents/hooks/guards" ]] ||
+    ! -e "$test_home/.agents/hooks/guards" && ! -e "$test_home/.agents/agents" && \
+    ! -e "$test_home/.claude/agents" && ! -e "$test_home/.codex/agents" && \
+    ! -e "$test_home/.agents/hooks/agent-hub.py" ]] ||
     fail "Gate-only install installed an optional component"
   [[ -f "$test_home/.config/power-agents/components" && \
     -z "$(saved_components "$test_home")" ]] ||
@@ -921,6 +985,7 @@ test_uninstall() {
 }
 
 test_component_selection() {
+  local -a core_skills
   local repository_links
   local test_home="$TEST_ROOT/component-selection-home"
 
@@ -930,9 +995,10 @@ test_component_selection() {
   run_installer_args "$test_home" --components "skills, codex-rules"
   [[ "$(saved_components "$test_home")" == "skills,codex-rules" ]] ||
     fail "Installer saved an unexpected component selection"
-  assert_skill_links "$test_home/.agents/skills"
-  assert_skill_links "$test_home/.claude/skills"
-  assert_same_link \
+  mapfile -t core_skills < <(skill_tier core)
+  assert_skill_selection "$test_home/.agents/skills" "${core_skills[@]}"
+  assert_skill_selection "$test_home/.claude/skills" "${core_skills[@]}"
+  assert_rules_copy \
     "$ROOT/policies/codex/shared.rules" "$test_home/.codex/rules/shared.rules"
   [[ ! -e "$test_home/.codex/AGENTS.md" && \
     ! -e "$test_home/.claude/statusline-command.sh" ]] ||
@@ -943,7 +1009,7 @@ test_component_selection() {
   run_installer_args "$test_home"
   [[ "$(saved_components "$test_home")" == "skills,codex-rules" ]] ||
     fail "A plain rerun changed the saved component selection"
-  assert_skill_links "$test_home/.claude/skills"
+  assert_skill_selection "$test_home/.claude/skills" "${core_skills[@]}"
   [[ ! -e "$test_home/.claude/CLAUDE.md" ]] ||
     fail "A plain rerun installed an unselected component"
 
@@ -997,11 +1063,207 @@ test_component_detection() {
 
   run_installer_args "$test_home"
   [[ "$(saved_components "$test_home")" == \
-    "instructions,skills,statusline,guards" ]] ||
+    "instructions,skills,skills-extra,statusline,guards,permissions,notify,context,format,subagents" ]] ||
     fail "Installer did not detect previously installed components"
   [[ ! -e "$test_home/.codex/rules/shared.rules" ]] ||
     fail "Installer reinstalled an undetected component"
   assert_skill_links "$test_home/.agents/skills"
+}
+
+# Prints the skills of one tier, core or extra, one per line.
+skill_tier() {
+  local name
+  local skill_dir
+
+  for skill_dir in "$ROOT"/skills/*/; do
+    name="$(basename "$skill_dir")"
+    if grep -qxF -- "$name" "$ROOT/skills/extras.txt"; then
+      if [[ "$1" == extra ]]; then
+        printf '%s\n' "$name"
+      fi
+    elif [[ "$1" == core ]]; then
+      printf '%s\n' "$name"
+    fi
+  done
+}
+
+# Asserts that the skill directory TARGET_ROOT links exactly the named skills.
+assert_skill_selection() {
+  local name
+  local skill_dir
+  local target_root="$1"
+
+  shift
+  for skill_dir in "$ROOT"/skills/*/; do
+    name="$(basename "$skill_dir")"
+    if [[ " $* " == *" $name "* ]]; then
+      assert_same_link "$ROOT/skills/$name" "$target_root/$name"
+    elif [[ -e "$target_root/$name" || -L "$target_root/$name" ]]; then
+      fail "Unselected skill is installed: $target_root/$name"
+    fi
+  done
+}
+
+test_codex_rules_copies() {
+  local conflict_home="$TEST_ROOT/rules-conflict-home"
+  local name
+  local test_home="$TEST_ROOT/rules-copy-home"
+
+  # Earlier installs linked the rules files; the next install replaces those
+  # links with copies and keeps the components selected.
+  mkdir -p "$test_home/.codex/rules"
+  for name in shared permissions; do
+    ln -s "$ROOT/policies/codex/$name.rules" \
+      "$test_home/.codex/rules/$name.rules"
+  done
+  run_installer "$test_home" ||
+    fail "Install over linked rules failed: $(<"$test_home/install.log")"
+  [[ ",$(saved_components "$test_home")," == *",codex-rules,"*",permissions,"* ]] ||
+    fail "Installer did not detect linked rules: $(saved_components "$test_home")"
+  for name in shared permissions; do
+    assert_rules_copy "$ROOT/policies/codex/$name.rules" \
+      "$test_home/.codex/rules/$name.rules"
+  done
+
+  # A copy that no longer matches the repository is updated.
+  printf '%s\n' '# stale' >>"$test_home/.codex/rules/shared.rules"
+  run_installer "$test_home" ||
+    fail "Reinstall over a stale rules copy failed: $(<"$test_home/install.log")"
+  assert_rules_copy "$ROOT/policies/codex/shared.rules" \
+    "$test_home/.codex/rules/shared.rules"
+  run_installer "$test_home"
+  assert_contains "$test_home/install.log" \
+    "OK: $test_home/.codex/rules/shared.rules"
+
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$test_home/.codex/rules/shared.rules" && \
+    ! -e "$test_home/.codex/rules/permissions.rules" ]] ||
+    fail "Removing the rules components left a rules copy"
+
+  # A rules file the user wrote under the same name is never replaced.
+  mkdir -p "$conflict_home/.codex/rules"
+  printf '%s\n' '# my rules' >"$conflict_home/.codex/rules/shared.rules"
+  if run_installer_args "$conflict_home" --components codex-rules; then
+    fail "Installer replaced a user rules file"
+  fi
+  assert_contains "$conflict_home/install.log" \
+    "ERROR: Refusing to replace existing path: $conflict_home/.codex/rules/shared.rules"
+  [[ "$(<"$conflict_home/.codex/rules/shared.rules")" == '# my rules' ]] ||
+    fail "A refused install changed a user rules file"
+}
+
+test_skill_tiers() {
+  local -a core
+  local -a extra
+  local root
+  local test_home="$TEST_ROOT/skill-tiers-home"
+
+  mapfile -t core < <(skill_tier core)
+  mapfile -t extra < <(skill_tier extra)
+  ((${#core[@]} > 0 && ${#extra[@]} > 0)) ||
+    fail "Both skill tiers must contain skills"
+
+  run_installer_args "$test_home" --components skills
+  for root in "$test_home/.agents/skills" "$test_home/.claude/skills"; do
+    assert_skill_selection "$root" "${core[@]}"
+  done
+
+  run_installer_args "$test_home" --components skills-extra
+  for root in "$test_home/.agents/skills" "$test_home/.claude/skills"; do
+    assert_skill_selection "$root" "${extra[@]}"
+  done
+
+  run_installer_args "$test_home" --components "skills-extra,skills"
+  [[ "$(saved_components "$test_home")" == "skills,skills-extra" ]] ||
+    fail "Installer saved an unexpected skill tier selection"
+  assert_skill_links "$test_home/.agents/skills"
+  assert_skill_links "$test_home/.claude/skills"
+}
+
+test_disabled_skills() {
+  local disabled
+  local test_home="$TEST_ROOT/disabled-skills-home"
+
+  disabled="$test_home/.config/power-agents/disabled-skills"
+  run_installer "$test_home"
+  printf '%s\n' '# Not wanted on this machine.' ponytail no-such-skill \
+    >"$disabled"
+
+  run_installer "$test_home"
+  [[ ! -e "$test_home/.agents/skills/ponytail" && \
+    ! -L "$test_home/.claude/skills/ponytail" ]] ||
+    fail "Installer kept a disabled skill"
+  assert_contains "$test_home/install.log" \
+    "REMOVE: $test_home/.claude/skills/ponytail"
+  assert_contains "$test_home/install.log" \
+    "WARNING: Unknown skill in $disabled: no-such-skill"
+  assert_same_link "$ROOT/skills/grilling" "$test_home/.claude/skills/grilling"
+
+  rm "$disabled"
+  run_installer "$test_home"
+  assert_skill_links "$test_home/.claude/skills"
+}
+
+test_legacy_skill_selection() {
+  local components_file
+  local test_home="$TEST_ROOT/legacy-skill-selection-home"
+
+  components_file="$test_home/.config/power-agents/components"
+  run_installer_args "$test_home" --components "instructions,skills"
+  # Selections saved before the skill tiers existed meant every skill.
+  sed -i '/^format=/d' "$components_file"
+
+  run_installer_args "$test_home"
+  [[ "$(saved_components "$test_home")" == \
+    "instructions,skills,skills-extra" ]] ||
+    fail "A legacy skills selection did not keep the extra skills"
+  assert_skill_links "$test_home/.claude/skills"
+  grep -qx 'format=2' "$components_file" ||
+    fail "Installer did not save the selection format"
+}
+
+test_instruction_overlay() {
+  local generated
+  local overlay
+  local test_home="$TEST_ROOT/instruction-overlay-home"
+
+  generated="$test_home/.agents/instructions.md"
+  overlay="$test_home/.config/power-agents/instructions.md"
+  mkdir -p "${overlay%/*}"
+  printf '%s\n' '## Personal' '' '- Prefer tabs.' >"$overlay"
+
+  run_installer_args "$test_home" --components instructions
+  assert_same_link "$generated" "$test_home/.codex/AGENTS.md"
+  assert_same_link "$generated" "$test_home/.claude/CLAUDE.md"
+  cmp -s "$generated" <(cat "$ROOT/instructions/general-global.md"; echo; cat "$overlay") ||
+    fail "Generated instructions are not the shared file followed by the overlay"
+
+  run_installer_args "$test_home"
+  assert_contains "$test_home/install.log" "OK: $generated"
+
+  printf '%s\n' '- Prefer spaces.' >>"$overlay"
+  run_installer_args "$test_home"
+  assert_contains "$generated" '- Prefer spaces.'
+
+  rm "$overlay"
+  run_installer_args "$test_home"
+  assert_same_link \
+    "$ROOT/instructions/general-global.md" "$test_home/.claude/CLAUDE.md"
+  [[ ! -e "$generated" ]] || fail "Installer kept unused generated instructions"
+
+  printf '%s\n' '- Prefer tabs.' >"$overlay"
+  run_installer_args "$test_home"
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$test_home/.codex/AGENTS.md" && ! -e "$generated" ]] ||
+    fail "Deselecting instructions kept generated instructions"
+
+  rm "$overlay"
+  mkdir "$overlay"
+  if run_installer_args "$test_home" --components instructions; then
+    fail "Installer accepted an instructions overlay that is not a file"
+  fi
+  assert_contains "$test_home/install.log" \
+    "ERROR: Instructions overlay is not a regular file: $overlay"
 }
 
 guard_decision() {
@@ -1330,6 +1592,303 @@ test_guard_hooks() {
   assert_contains "$test_home/install.log" "needed by the guards component"
 }
 
+# The permission rules a permissions install adds to Claude settings.
+managed_permissions() {
+  jq '.permissions' "$ROOT/settings/claude/permissions.json"
+}
+
+test_permissions() {
+  local settings="$TEST_ROOT/permissions-home/.claude/settings.json"
+  local snapshot="$TEST_ROOT/permissions-home/.config/power-agents/claude-permissions.json"
+  local test_home="$TEST_ROOT/permissions-home"
+  local user_deny='Bash(curl *)'
+  local shared_rule
+
+  shared_rule="$(jq -r '.permissions.deny[0]' "$ROOT/settings/claude/permissions.json")"
+  mkdir -p "$test_home/.claude"
+  jq -n --arg user "$user_deny" --arg shared "$shared_rule" \
+    '{"model": "local", "permissions": {"deny": [$user, $shared],
+      "defaultMode": "default"}}' >"$settings"
+  cp "$settings" "$test_home/settings-before.json"
+
+  run_installer_args "$test_home" --components permissions ||
+    fail "Permissions install failed: $(<"$test_home/install.log")"
+  assert_rules_copy "$ROOT/policies/codex/permissions.rules" \
+    "$test_home/.codex/rules/permissions.rules"
+  jq -e --argjson managed "$(managed_permissions)" --arg user "$user_deny" '
+    .model == "local" and .permissions.defaultMode == "default" and
+    .permissions.deny == [$user] + $managed.deny and
+    .permissions.ask == $managed.ask
+  ' "$settings" >/dev/null ||
+    fail "Permissions install did not merge the managed rules: $(<"$settings")"
+  # A rule the user already had stays theirs.
+  jq -e --arg shared "$shared_rule" \
+    '.permissions.deny | index($shared) | not' "$snapshot" >/dev/null ||
+    fail "Permissions snapshot claimed a rule the user already had"
+
+  cp "$settings" "$test_home/settings-installed.json"
+  run_installer_args "$test_home"
+  cmp -s "$settings" "$test_home/settings-installed.json" ||
+    fail "Reinstalling permissions changed Claude settings"
+
+  # A rule dropped from the repository since the last install is removed.
+  jq '.permissions.ask += ["Bash(old rule *)"]' "$settings" >"$settings.tmp"
+  mv "$settings.tmp" "$settings"
+  jq '.permissions.ask += ["Bash(old rule *)"]' "$snapshot" >"$snapshot.tmp"
+  mv "$snapshot.tmp" "$snapshot"
+  run_installer_args "$test_home"
+  cmp -s "$settings" "$test_home/settings-installed.json" ||
+    fail "Reinstalling permissions kept a rule the repository dropped"
+
+  run_installer_args "$test_home" --components none
+  jq -e --argjson before "$(<"$test_home/settings-before.json")" \
+    --argjson hooks "$(managed_hooks claude \
+      "$test_home/.agents/hooks/verify-gate.py")" \
+    '. == ($before + {"hooks": $hooks})' "$settings" >/dev/null ||
+    fail "Removing permissions did not restore the user's rules: $(<"$settings")"
+  [[ ! -e "$snapshot" && ! -e "$test_home/.codex/rules/permissions.rules" ]] ||
+    fail "Removing permissions left its snapshot or Codex rules"
+
+  printf '%s\n' '{"permissions": {"deny": "Bash(rm *)"}}' >"$settings"
+  if run_installer_args "$test_home" --components permissions; then
+    fail "Permissions install accepted a malformed deny list"
+  fi
+  assert_contains "$test_home/install.log" "ERROR: Invalid Claude permissions"
+}
+
+test_notify_hooks() {
+  local agent
+  local hooks_file
+  local hub="$TEST_ROOT/notify-home/.agents/hooks/agent-hub.py"
+  local test_home="$TEST_ROOT/notify-home"
+
+  : >"$POWER_AGENTS_POWERSHELL_LOG"
+  run_installer_args "$test_home" --components notify ||
+    fail "Notify install failed: $(<"$test_home/install.log")"
+  assert_same_link "$ROOT/hooks/agent-hub.py" "$hub"
+  assert_contains "$POWER_AGENTS_POWERSHELL_LOG" \
+    "New-ItemProperty -LiteralPath \$key -Name 'URL Protocol'"
+  assert_contains "$test_home/install.log" \
+    "Registered the Windows handler that opens a session's window"
+  for agent in claude codex; do
+    hooks_file="$test_home/.$agent/hooks.json"
+    [[ $agent == claude ]] && hooks_file="$test_home/.claude/settings.json"
+    jq -e --arg command "python3 \"$hub\" window --agent $agent" '
+      any(.hooks.UserPromptSubmit[]; . == {"hooks": [
+        {"type": "command", "command": $command, "timeout": 10}]})
+    ' "$hooks_file" >/dev/null &&
+      [[ "$(hub_events "$hooks_file" "$hub" window)" == '["UserPromptSubmit"]' ]] ||
+      fail "Notify install did not record the $agent session window"
+  done
+  jq -e --argjson gate "$(managed_hooks claude \
+    "$test_home/.agents/hooks/verify-gate.py")" --arg hub "$hub" '
+    .hooks.Stop == $gate.Stop + [{"hooks": [{"type": "command",
+      "command": ("python3 \"" + $hub + "\" notify --agent claude"),
+      "timeout": 10}]}] and
+    (.hooks.Notification[0].hooks[0].command | contains("notify --agent claude"))
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Notify install produced unexpected Claude hooks"
+  jq -e --arg hub "$hub" '
+    [.hooks.Stop[1], .hooks.PermissionRequest[0]] | map(.hooks[0].command) ==
+      [range(2) | "python3 \"" + $hub + "\" notify --agent codex"]
+  ' "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Notify install produced unexpected Codex hooks"
+
+  : >"$POWER_AGENTS_POWERSHELL_LOG"
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$hub" ]] || fail "Removing notify kept the agent hub link"
+  assert_contains "$POWER_AGENTS_POWERSHELL_LOG" \
+    "Remove-Item -LiteralPath 'HKCU:\\Software\\Classes\\power-agents-focus'"
+  jq -e --argjson hooks "$(managed_hooks claude \
+    "$test_home/.agents/hooks/verify-gate.py")" '. == {"hooks": $hooks}' \
+    "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Removing notify left Claude notify hooks"
+  jq -e --argjson hooks "$(managed_hooks codex \
+    "$test_home/.agents/hooks/verify-gate.py")" '. == {"hooks": $hooks}' \
+    "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Removing notify left Codex notify hooks"
+}
+
+# The events in FILE that run the agent hub with SUBCOMMAND.
+hub_events() {
+  jq -c --arg command "python3 \"$2\" $3 " '
+    [.hooks | to_entries[] | select(any(.value[].hooks[];
+      .command | startswith($command))) | .key] | sort
+  ' "$1"
+}
+
+test_context_hooks() {
+  local agent
+  local hooks_file
+  local hub="$TEST_ROOT/context-home/.agents/hooks/agent-hub.py"
+  local test_home="$TEST_ROOT/context-home"
+
+  run_installer_args "$test_home" --components context ||
+    fail "Context install failed: $(<"$test_home/install.log")"
+  assert_same_link "$ROOT/hooks/agent-hub.py" "$hub"
+  for agent in claude codex; do
+    hooks_file="$test_home/.$agent/hooks.json"
+    [[ $agent == claude ]] && hooks_file="$test_home/.claude/settings.json"
+    jq -e --arg command "python3 \"$hub\" context --agent $agent" '
+      .hooks.SessionStart == [{"hooks": [
+        {"type": "command", "command": $command, "timeout": 15}]}]
+    ' "$hooks_file" >/dev/null &&
+      [[ "$(hub_events "$hooks_file" "$hub" activity)" == \
+        '["Stop","UserPromptSubmit"]' && \
+        "$(hub_events "$hooks_file" "$hub" end)" == '["SessionEnd"]' ]] ||
+      fail "Context install produced unexpected $agent hooks"
+  done
+
+  run_installer_args "$test_home" --components context,notify
+  [[ "$(hub_events "$test_home/.claude/settings.json" "$hub" context)" == \
+    '["SessionStart"]' && \
+    "$(hub_events "$test_home/.claude/settings.json" "$hub" notify)" == \
+    '["Notification","Stop"]' && \
+    "$(hub_events "$test_home/.codex/hooks.json" "$hub" notify)" == \
+    '["PermissionRequest","Stop"]' ]] ||
+    fail "Context and notify did not install side by side"
+
+  run_installer_args "$test_home" --components notify
+  assert_same_link "$ROOT/hooks/agent-hub.py" "$hub"
+  [[ "$(hub_events "$test_home/.claude/settings.json" "$hub" context)" == '[]' && \
+    "$(hub_events "$test_home/.codex/hooks.json" "$hub" context)" == '[]' && \
+    "$(hub_events "$test_home/.codex/hooks.json" "$hub" activity)" == '[]' && \
+    "$(hub_events "$test_home/.claude/settings.json" "$hub" end)" == '[]' && \
+    "$(hub_events "$test_home/.claude/settings.json" "$hub" notify)" == \
+    '["Notification","Stop"]' ]] ||
+    fail "Removing context changed the notify hooks or kept context hooks"
+
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$hub" ]] || fail "Removing every hub component kept the agent hub link"
+}
+
+test_format_hooks() {
+  local hub="$TEST_ROOT/format-home/.agents/hooks/agent-hub.py"
+  local test_home="$TEST_ROOT/format-home"
+
+  run_installer_args "$test_home" --components format ||
+    fail "Format install failed: $(<"$test_home/install.log")"
+  assert_same_link "$ROOT/hooks/agent-hub.py" "$hub"
+  jq -e --arg command "python3 \"$hub\" format --agent claude" '
+    .hooks.PostToolUse == [{"matcher": "Edit|Write|MultiEdit", "hooks": [
+      {"type": "command", "command": $command, "timeout": 60}]}]
+  ' "$test_home/.claude/settings.json" >/dev/null ||
+    fail "Format install produced unexpected Claude hooks"
+  jq -e --arg command "python3 \"$hub\" format --agent codex" '
+    .hooks.PostToolUse == [{"matcher": "^apply_patch$", "hooks": [
+      {"type": "command", "command": $command, "timeout": 60}]}]
+  ' "$test_home/.codex/hooks.json" >/dev/null ||
+    fail "Format install produced unexpected Codex hooks"
+
+  run_installer_args "$test_home" --components format,notify
+  [[ "$(hub_events "$test_home/.codex/hooks.json" "$hub" format)" == \
+    '["PostToolUse"]' && \
+    "$(hub_events "$test_home/.codex/hooks.json" "$hub" notify)" == \
+    '["PermissionRequest","Stop"]' ]] ||
+    fail "Format and notify did not install side by side"
+
+  run_installer_args "$test_home" --components notify
+  [[ "$(hub_events "$test_home/.claude/settings.json" "$hub" format)" == '[]' && \
+    "$(hub_events "$test_home/.codex/hooks.json" "$hub" format)" == '[]' ]] ||
+    fail "Removing format kept its hooks"
+
+  run_installer_args "$test_home" --components none
+  [[ ! -e "$hub" ]] || fail "Removing every hub component kept the agent hub link"
+}
+
+test_subagents() {
+  local conflict_home="$TEST_ROOT/subagents-conflict-home"
+  local generated="$TEST_ROOT/subagents-home/.agents/agents"
+  local models="$TEST_ROOT/subagents-home/.config/power-agents/agent-models.json"
+  local role
+  local test_home="$TEST_ROOT/subagents-home"
+
+  mkdir -p "$test_home/.claude/agents" "${models%/*}"
+  printf '%s\n' '---' 'name: mine' 'description: Mine.' '---' 'Mine.' \
+    >"$test_home/.claude/agents/mine.md"
+
+  run_installer_args "$test_home" --components subagents ||
+    fail "Subagents install failed: $(<"$test_home/install.log")"
+  for role in reviewer docs-researcher test-runner; do
+    assert_same_link "$generated/claude/$role.md" \
+      "$test_home/.claude/agents/$role.md"
+    assert_managed_copy "$generated/codex/$role.toml" \
+      "$test_home/.codex/agents/$role.toml" "subagents/$role.md"
+  done
+  assert_contains "$generated/claude/reviewer.md" "model: opus"
+  [[ -f "$test_home/.claude/agents/mine.md" && \
+    ! -L "$test_home/.claude/agents/mine.md" ]] ||
+    fail "Subagents install changed a user agent file"
+  [[ ! -e "$test_home/.codex/config.toml" ]] ||
+    fail "Subagents install changed the Codex config"
+
+  printf '%s\n' '{"claude": {"reviewer": "sonnet"}, "codex": {"reviewer": "gpt-test"}}' \
+    >"$models"
+  run_installer_args "$test_home" ||
+    fail "Subagents install with models failed: $(<"$test_home/install.log")"
+  assert_contains "$generated/claude/reviewer.md" "model: sonnet"
+  assert_contains "$generated/codex/reviewer.toml" 'model = "gpt-test"'
+  assert_managed_copy "$generated/codex/reviewer.toml" \
+    "$test_home/.codex/agents/reviewer.toml" "subagents/reviewer.md"
+
+  # Earlier installs linked the Codex roles; a role no longer defined goes,
+  # and a Codex agent file the user wrote stays.
+  ln -sf "$generated/codex/reviewer.toml" "$test_home/.codex/agents/reviewer.toml"
+  printf '%s\n' \
+    '# Managed by power-agents. Edit subagents/retired.md in that repository and run ./install.sh.' \
+    'name = "retired"' >"$test_home/.codex/agents/retired.toml"
+  printf '%s\n' 'name = "mine"' >"$test_home/.codex/agents/mine.toml"
+  run_installer_args "$test_home" ||
+    fail "Subagents reinstall failed: $(<"$test_home/install.log")"
+  assert_managed_copy "$generated/codex/reviewer.toml" \
+    "$test_home/.codex/agents/reviewer.toml" "subagents/reviewer.md"
+  [[ ! -e "$test_home/.codex/agents/retired.toml" ]] ||
+    fail "Reinstall kept the copy of a removed Codex role"
+  [[ "$(<"$test_home/.codex/agents/mine.toml")" == 'name = "mine"' ]] ||
+    fail "Reinstall changed a user Codex agent file"
+
+  cp "$generated/claude/reviewer.md" "$test_home/reviewer-before.md"
+  printf '%s\n' '{"claude": {"reviewer": "bad model"}}' >"$models"
+  if run_installer_args "$test_home"; then
+    fail "Subagents install accepted an invalid model name"
+  fi
+  assert_contains "$test_home/install.log" "invalid model name for claude.reviewer"
+  cmp -s "$test_home/reviewer-before.md" "$generated/claude/reviewer.md" ||
+    fail "A rejected model overlay changed the installed subagents"
+  rm -- "$models"
+
+  run_installer_args "$test_home" --components none
+  for role in reviewer docs-researcher test-runner; do
+    [[ ! -e "$test_home/.claude/agents/$role.md" && \
+      ! -e "$test_home/.codex/agents/$role.toml" && \
+      ! -e "$generated/claude/$role.md" ]] ||
+      fail "Removing subagents left $role behind"
+  done
+  [[ -f "$test_home/.claude/agents/mine.md" && \
+    -f "$test_home/.codex/agents/mine.toml" ]] ||
+    fail "Removing subagents removed a user agent file"
+
+  mkdir -p "$conflict_home/.claude/agents"
+  printf '%s\n' 'local reviewer' >"$conflict_home/.claude/agents/reviewer.md"
+  if run_installer_args "$conflict_home" --components subagents; then
+    fail "Subagents install replaced a user agent file"
+  fi
+  assert_contains "$conflict_home/install.log" "ERROR: Refusing to replace existing path:"
+  [[ "$(<"$conflict_home/.claude/agents/reviewer.md")" == "local reviewer" ]] ||
+    fail "A refused subagents install changed a user agent file"
+
+  mv "$conflict_home/.claude/agents/reviewer.md" "$conflict_home/reviewer.md"
+  mkdir -p "$conflict_home/.codex/agents"
+  printf '%s\n' 'name = "reviewer"' >"$conflict_home/.codex/agents/reviewer.toml"
+  if run_installer_args "$conflict_home" --components subagents; then
+    fail "Subagents install replaced a user Codex agent file"
+  fi
+  assert_contains "$conflict_home/install.log" \
+    "ERROR: Refusing to replace existing path: $conflict_home/.codex/agents/reviewer.toml"
+  [[ "$(<"$conflict_home/.codex/agents/reviewer.toml")" == 'name = "reviewer"' ]] ||
+    fail "A refused subagents install changed a user Codex agent file"
+}
+
 test_component_profiles() {
   local profile_b="$TEST_ROOT/component-profiles-home/profile-b"
   local status_line_b
@@ -1362,7 +1921,7 @@ test_component_profiles() {
   # The first profile's links still identify its components.
   run_installer_args "$test_home"
   [[ "$(saved_components "$test_home")" == \
-    "instructions,skills,statusline,codex-rules,guards" ]] ||
+    "instructions,skills,skills-extra,statusline,codex-rules,guards,permissions,notify,context,format,subagents" ]] ||
     fail "Switching profiles lost the first profile's components"
   assert_skill_links "$test_home/.agents/skills"
 
@@ -1585,13 +2144,20 @@ test_codex_runtime_compatibility() {
   local invalid_codex_home="$TEST_ROOT/codex-runtime-home/invalid-config"
   local invalid_runtime_log="$TEST_ROOT/codex-runtime-home/invalid-codex.log"
   local policy_output
-  local rules="$ROOT/policies/codex/shared.rules"
+  local prompt_input
+  local role
+  local rules_home="$TEST_ROOT/codex-runtime-rules-home"
+  local rules="$rules_home/.codex/rules/shared.rules"
   local runtime_log="$TEST_ROOT/codex-runtime-home/codex.log"
   local test_home="$TEST_ROOT/codex-runtime-home"
   local -a command_parts
 
   mkdir -p "$codex_home"
   cp "$ROOT/settings/codex/tui.toml" "$codex_home/config.toml"
+  # Codex must parse the rules files and agent roles as the installer copies
+  # them.
+  run_installer_args "$rules_home" --components codex-rules,permissions,subagents ||
+    fail "Rules install failed: $(<"$rules_home/install.log")"
   codex_version="$(HOME="$test_home" CODEX_HOME="$codex_home" \
     codex --version 2>>"$runtime_log")"
   echo "INFO: Testing $codex_version"
@@ -1640,6 +2206,41 @@ test_codex_runtime_compatibility() {
     decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
     [[ "$decision" == "none" ]] ||
       fail "Codex policy unexpectedly matched: $command"
+  done
+
+  for command in \
+    "forbidden:rm -rf /" \
+    "forbidden:rm -fr ~/" \
+    "forbidden:git push --force origin main" \
+    "forbidden:git push origin master -f" \
+    "forbidden:git push origin +main" \
+    'forbidden:rm -rf $HOME' \
+    'forbidden:rm -fr $HOME/' \
+    "forbidden:git push --force upstream main" \
+    "forbidden:git push upstream master -f" \
+    "prompt:git push --force-with-lease origin feature" \
+    "prompt:git reset --hard HEAD~1" \
+    "none:rm -rf /tmp/build" \
+    "none:git push origin main" \
+    "none:git reset --soft HEAD~1"; do
+    read -r -a command_parts <<<"${command#*:}"
+    policy_output="$(HOME="$test_home" CODEX_HOME="$codex_home" \
+      codex execpolicy check --rules "$rules_home/.codex/rules/permissions.rules" \
+      -- "${command_parts[@]}" 2>>"$runtime_log")"
+    decision="$(jq -r '.decision // "none"' <<<"$policy_output")"
+    [[ "$decision" == "${command%%:*}" ]] ||
+      fail "Codex permission rules returned '$decision' for: ${command#*:}"
+  done
+
+  # Codex must offer each installed role as a role of its spawn tool.
+  mkdir -p "$codex_home/agents"
+  cp "$rules_home/.codex/agents/"*.toml "$codex_home/agents/"
+  prompt_input="$(HOME="$test_home" CODEX_HOME="$codex_home" \
+    codex debug prompt-input "hello" 2>>"$runtime_log")" ||
+    fail "Codex could not render its prompt input with the subagents installed"
+  for role in reviewer docs-researcher test-runner; do
+    grep -Fq -- "$role: {" <<<"$prompt_input" ||
+      fail "Codex does not offer the $role subagent"
   done
 }
 
@@ -2005,6 +2606,12 @@ python3 "$ROOT/tests/test_reconcile_hooks.py"
 pass "verify-gate hook reconciler"
 python3 "$ROOT/tests/test_verify_gate.py"
 pass "verify gate and cross-review hook with stub reviewers"
+python3 "$ROOT/tests/test_agent_hub.py"
+pass "agent hub notifications and session context"
+python3 "$ROOT/tests/test_memory.py"
+pass "remember skill memory store script"
+python3 "$ROOT/tests/test_render_subagents.py"
+pass "subagent definitions render for Claude Code and Codex"
 test_clean_install_and_idempotence
 pass "clean install, stale-link cleanup, unrelated-skill preservation, and idempotence"
 test_custom_agent_roots
@@ -2031,10 +2638,30 @@ test_component_selection
 pass "optional components install, persist, and remove only owned links and keys"
 test_component_detection
 pass "installs without a saved selection keep their detected components"
+test_codex_rules_copies
+pass "Codex rules install as marked copies, replace earlier links, and keep user files"
+test_skill_tiers
+pass "skill tiers install and remove only their own skills"
+test_disabled_skills
+pass "skills disabled in the overlay are not installed"
+test_legacy_skill_selection
+pass "selections saved before skill tiers keep every skill"
+test_instruction_overlay
+pass "an instructions overlay is appended to the shared instructions"
 test_component_profiles
 pass "a selection saved for other agent roots is not applied to these roots"
 test_guard_hooks
 pass "guards install Claude Code hooks that block test removal and secret reads"
+test_permissions
+pass "permissions add guardrail rules and remove only the rules they added"
+test_notify_hooks
+pass "notify installs and removes the agent hub hooks for both agents"
+test_context_hooks
+pass "context adds session-start hooks beside notify and removes only its own"
+test_format_hooks
+pass "format adds file-edit hooks for both agents and removes only its own"
+test_subagents
+pass "subagents link Claude Code and copy Codex definitions, apply the model overlay, and keep user agents"
 test_replaced_status_line_script
 pass "a status-line script replaced by a local file keeps its setting"
 test_status_line_removal_after_update

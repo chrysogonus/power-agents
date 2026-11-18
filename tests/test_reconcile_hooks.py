@@ -117,6 +117,19 @@ class ReconcileHooksTests(unittest.TestCase):
         self.assertEqual(self.reconcile(first).returncode, 0)
         self.assertEqual(self.output_path.read_text(encoding="utf-8"), first)
 
+    def test_events_and_hooks_keep_their_positions(self) -> None:
+        gate = managed("claude")
+        installed = {
+            "hooks": {
+                "UserPromptSubmit": gate["UserPromptSubmit"],
+                "Stop": gate["Stop"] + FOREIGN["hooks"]["Stop"],
+            },
+            "model": "opus",
+        }
+        self.assertEqual(self.reconcile(installed).returncode, 0)
+        self.assertEqual(list(self.output()), ["hooks", "model"])
+        self.assertEqual(list(self.output()["hooks"]), ["UserPromptSubmit", "Stop"])
+
     def test_stale_managed_entries_are_replaced(self) -> None:
         stale = json.loads(json.dumps(FOREIGN))
         stale["hooks"]["Stop"].insert(0, {"hooks": [
