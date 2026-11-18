@@ -166,9 +166,12 @@ until you select it:
 | `format` | After each file edit, both agents run the formatter you set for that repository, such as `prettier --write` or `ruff format`, on the edited files. Nothing runs in a repository without one. [Details](docs/installation.md#choosing-components) |
 | `subagents` | Both agents can hand work to three helpers: a read-only `reviewer` for an independent look at a change, a `docs-researcher` for current documentation, and a `test-runner` that reports only what failed. Pick their models in the [overlay](#personal-overlay). |
 
-Pass a comma-separated list, or `all` or `none`:
+Pass a comma-separated list, or `recommended`, `all`, or `none`.
+`recommended` is a sensible starting set: `instructions`, `skills`,
+`statusline`, `permissions`, `notify`, and `context`.
 
 ```bash
+./install.sh --components recommended
 ./install.sh --components skills,instructions
 ./install.sh --components all
 ```

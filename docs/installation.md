@@ -75,7 +75,9 @@ The verify gate is always installed. Select optional components with
 `./install.sh --components LIST`, where `LIST` is a comma-separated subset of
 `instructions`, `skills`, `skills-extra`, `statusline`, `codex-rules`,
 `guards`, `permissions`, `notify`, `context`, `format`, and `subagents`, or
-`all` or `none`. An unknown name fails before anything changes.
+`recommended`, `all`, or `none`. `recommended` selects `instructions`,
+`skills`, `statusline`, `permissions`, `notify`, and `context`. An unknown name
+fails before anything changes.
 
 - **The selection is saved.** The installer writes it to
   `~/.config/power-agents/components`, together with the Codex and Claude roots

@@ -38,6 +38,7 @@ GUARDS_LINK=""
 AGENT_HUB_COMMAND=""
 # The verify gate is always installed; these components are optional.
 ALL_COMPONENTS="instructions,skills,skills-extra,statusline,codex-rules,guards,permissions,notify,context,format,subagents"
+RECOMMENDED_COMPONENTS="instructions,skills,statusline,permissions,notify,context"
 # Components whose hooks run the agent hub, from settings/<agent>/<component>-hooks.json.
 HUB_COMPONENTS=(notify context format)
 HUB_FRAGMENTS=()
@@ -175,8 +176,8 @@ Usage: ./install.sh [--components LIST]
 Installs the verify gate for Codex and Claude Code. LIST selects optional
 components: a comma-separated subset of instructions, skills, skills-extra,
 statusline, codex-rules, guards, permissions, notify, context, format, and
-subagents,
-or "all" or "none".
+subagents; "recommended" for instructions, skills, statusline, permissions,
+notify, and context; or "all" or "none".
 Without --components, the selection saved by the previous install is reused.
 
 --uninstall removes the verify gate and every component this checkout
@@ -230,6 +231,7 @@ normalize_components() {
 
   case "$list" in
     all) list="$ALL_COMPONENTS" ;;
+    recommended) list="$RECOMMENDED_COMPONENTS" ;;
     none) list="" ;;
   esac
 
@@ -237,7 +239,7 @@ normalize_components() {
   for name in "${names[@]}"; do
     if [[ -n "$name" && ",$ALL_COMPONENTS," != *",$name,"* ]]; then
       echo "ERROR: Unknown component: $name" >&2
-      echo "       Choose from $ALL_COMPONENTS, all, or none." >&2
+      echo "       Choose from $ALL_COMPONENTS, recommended, all, or none." >&2
       return 1
     fi
   done

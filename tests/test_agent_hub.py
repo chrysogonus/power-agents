@@ -459,7 +459,7 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(self.recorded(), [str(self.repo), "--quiet", str(path)])
         self.assertEqual(path.read_text(encoding="utf-8"), "HELLO\n")
         self.assertIn("src/my app.py", message)
-        self.assertIn("Read them again", message)
+        self.assertIn("Read it again", message)
 
     def test_an_already_formatted_file_prints_nothing(self) -> None:
         path = self.write("a.py", "HELLO\n")
@@ -480,6 +480,7 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(self.recorded(),
                          [str(self.repo), "--quiet", str(added), str(updated), str(moved)])
         self.assertIn("new/moved.py", message)
+        self.assertIn("Read them again", message)
 
     def test_other_tools_and_projects_without_a_formatter_run_nothing(self) -> None:
         path = self.write("a.py")

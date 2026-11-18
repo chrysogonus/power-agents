@@ -709,8 +709,9 @@ def format_files() -> None:
                             + (f" Output:\n{output[-MAX_FORMAT_OUTPUT:]}"
                                if output.strip() else ""))
         if changed:
+            them = "it" if len(changed) == 1 else "them"
             messages.append(f"The project formatter changed {', '.join(changed)} in "
-                            f"{root}. Read them again before you edit them.")
+                            f"{root}. Read {them} again before you edit {them}.")
     if messages:
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PostToolUse", "additionalContext": "\n".join(messages)}}))
