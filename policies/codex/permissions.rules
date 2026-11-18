@@ -1,0 +1,89 @@
+# Installed by the permissions component. Claude Code gets the same guardrails
+# from settings/claude/permissions.json. These match the command as written,
+# so they stop the usual form of a mistake and are not a security boundary.
+# Codex rules match whole words, so the default-branch rules name the origin
+# and upstream remotes, where Claude Code's match any remote.
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr"], ["/", "~", "~/", "$HOME", "$HOME/"]],
+    decision = "forbidden",
+    justification = "Deleting the root or home directory is never part of a coding task.",
+    match = [
+        "rm -rf /",
+        "rm -fr ~",
+        "rm -rf ~/ --no-preserve-root",
+        "rm -rf $HOME",
+    ],
+    not_match = [
+        "rm -rf /tmp/build",
+        "rm -rf ./build",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease"], ["origin", "upstream"], ["main", "master"]],
+    decision = "forbidden",
+    justification = "Force-pushing the default branch rewrites shared history.",
+    match = [
+        "git push --force origin main",
+        "git push -f origin master",
+        "git push --force upstream main",
+    ],
+    not_match = [
+        "git push --force origin feature",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["origin", "upstream"], ["main", "master"], ["--force", "-f", "--force-with-lease"]],
+    decision = "forbidden",
+    justification = "Force-pushing the default branch rewrites shared history.",
+    match = [
+        "git push origin main --force",
+        "git push upstream master -f",
+    ],
+    not_match = [
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["origin", "upstream"], ["+main", "+master"]],
+    decision = "forbidden",
+    justification = "Force-pushing the default branch rewrites shared history.",
+    match = [
+        "git push origin +main",
+    ],
+    not_match = [
+        "git push origin main",
+    ],
+)
+
+# Rules cannot see the current branch, so every other force-push asks.
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease"]],
+    decision = "prompt",
+    justification = "A force-push can discard commits on the remote branch.",
+    match = [
+        "git push --force",
+        "git push -f origin feature",
+    ],
+    not_match = [
+        "git push origin feature",
+    ],
+)
+
+# Rules cannot tell whether the discarded work was pushed, so this always asks.
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "prompt",
+    justification = "A hard reset discards uncommitted changes and can drop unpushed commits.",
+    match = [
+        "git reset --hard",
+        "git reset --hard HEAD~1",
+    ],
+    not_match = [
+        "git reset --soft HEAD~1",
+        "git reset",
+    ],
+)

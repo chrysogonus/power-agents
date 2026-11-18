@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf / *)",
+      "Bash(rm -fr / *)",
+      "Bash(rm -rf ~ *)",
+      "Bash(rm -fr ~ *)",
+      "Bash(rm -rf ~/ *)",
+      "Bash(rm -fr ~/ *)",
+      "Bash(rm -rf $HOME *)",
+      "Bash(rm -fr $HOME *)",
+      "Bash(rm -rf $HOME/ *)",
+      "Bash(rm -fr $HOME/ *)",
+      "Bash(rm -rf \"$HOME\" *)",
+      "Bash(rm -fr \"$HOME\" *)",
+      "Bash(git push --force* main)",
+      "Bash(git push -f * main)",
+      "Bash(git push * main --force*)",
+      "Bash(git push * main -f)",
+      "Bash(git push * +main)",
+      "Bash(git push --force* master)",
+      "Bash(git push -f * master)",
+      "Bash(git push * master --force*)",
+      "Bash(git push * master -f)",
+      "Bash(git push * +master)"
+    ],
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push * +*)",
+      "Bash(git reset --hard *)"
+    ]
+  }
+}
