@@ -780,8 +780,9 @@ class VerifyGateTests(unittest.TestCase):
         self.assert_verification_block(self.stop(CROSS_REVIEW="1"))
         self.assert_feedback_block(self.stop(CROSS_REVIEW="1"), "codex")
 
+        # The gate accepts, and ignores, the format component's key.
         self.write_projects({str(self.repo): {
-            "min_chars": 10, "cross_review_scope": "all"}})
+            "min_chars": 10, "cross_review_scope": "all", "format": "true"}})
         self.session += 1
         self.mark()
         self.assert_verification_block(self.stop(answer="Short, but long enough."))
