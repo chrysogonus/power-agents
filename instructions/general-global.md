@@ -11,6 +11,10 @@ Repository instructions take precedence over these preferences.
 - Refactoring working code without changing behavior: use code-simplification.
 - Visual design or redesign: use frontend-design; for public-facing web pages
   (landing, marketing, portfolio), use design-taste-frontend.
+- Something the user wants kept for all projects: use remember. Put a rule
+  they want applied every time in their instructions overlay,
+  `~/.config/power-agents/instructions.md`, and a note about one repository in
+  that repository's `AGENTS.md`.
 
 Otherwise, choose skills by their descriptions and use the fewest that cover
 the task.
@@ -26,7 +30,5 @@ the task.
 ## Git and safety
 
 - Do not commit, push, or rewrite history unless asked.
-- Keep commit messages short and concise. Never add a `Co-Authored-By`
-  trailer.
 - Ask before destructive or hard-to-reverse actions and before writing to
   external services.

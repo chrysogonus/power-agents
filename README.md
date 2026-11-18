@@ -1,7 +1,8 @@
 # Power Agents
 
-**Codex and Claude Code check their own work, and each other's, before they
-hand it to you.**
+**A tested setup for Codex and Claude Code. The agents check their own work,
+and each other's, before they hand it to you. You can add shared instructions,
+skills, and safety guards.**
 
 [![Checks](https://github.com/chrysogonus/power-agents/actions/workflows/checks.yml/badge.svg)](https://github.com/chrysogonus/power-agents/actions/workflows/checks.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -9,11 +10,17 @@ hand it to you.**
 ![Agents: Codex and Claude Code](https://img.shields.io/badge/agents-Codex%20%7C%20Claude%20Code-8A2BE2.svg)
 
 Coding agents often stop as soon as an answer *sounds* right: they report a
-fix without re-running the tests, or describe code they never re-read. Power
-Agents adds one hook, the **verify gate**, to both agents. Before a
-substantial turn can end, the gate sends the agent back once to check its
-work against real files and tests. If you want, it also asks the *other*
-agent for a second opinion.
+fix without re-running the tests, or describe code they never re-read. The
+core of Power Agents is one hook, the **verify gate**, installed in both
+agents. Before a substantial turn can end, the gate sends the agent back once
+to check its work against real files and tests. If you want, it also asks the
+*other* agent for a second opinion.
+
+Around that core, Power Agents is a kit of optional components that both
+agents share: global instructions with a personal overlay, a core set and an
+extra set of skills, status lines, safety guards, permission rules, desktop
+notifications, session-start context, a per-project formatter, and subagents.
+Each component is tested, and the installer can add or remove it on its own.
 
 ## At a Glance
 
@@ -22,7 +29,7 @@ agent for a second opinion.
 | ✅ | **Self-check** · on | Before it finishes, the agent re-reads what it changed, runs the checks, and fixes what is wrong. |
 | 🔁 | **Cross-review** · opt-in | Codex reviews Claude Code's work and Claude Code reviews Codex's work. The original agent then accepts or rejects each point. |
 | 🧾 | **Summary line** | Every checked turn ends with one line saying what was checked, what was fixed, and what is still open. |
-| 🧩 | **Optional extras** | Shared coding preferences, 26 skills, status lines, Codex command rules, and Claude Code guards. [Pick only what you want](#optional-components). |
+| 🧩 | **Optional components** | Shared instructions with a personal overlay, 16 core and 12 extra skills, status lines, Codex command rules, Claude Code guards, permission guardrails, desktop notifications, session-start context, a per-project formatter, and subagents. [Pick only what you want](#optional-components). |
 
 ## Quick Start
 
@@ -147,11 +154,17 @@ until you select it:
 
 | Component | What it means for you |
 | --- | --- |
-| `instructions` | Both agents follow the same personal coding preferences in every project ([`instructions/general-global.md`](instructions/general-global.md)). |
-| `skills` | 26 ready-made guides for specific jobs, such as minimal bug fixes, test-first development, debugging, code reviews, architecture, issue triage, git worktrees, skill testing, browser automation, React, Postgres, security, and UI design. [Browse the skills →](skills/README.md) |
+| `instructions` | Both agents follow the same coding preferences in every project ([`instructions/general-global.md`](instructions/general-global.md)), plus your own from the [personal overlay](#personal-overlay). |
+| `skills` | 16 core skills for everyday work: minimal bug fixes, test-first development, debugging, refactoring, design interviews, handoffs, code reviews, git worktrees, issue triage, writing agent instructions, [shared memory](#shared-memory), and an overview across your projects. [Browse the skills →](skills/README.md) |
+| `skills-extra` | 12 skills for specific stacks and jobs: browser automation, UI design, React, Postgres, security, performance, architecture reviews, README updates, and skill testing. |
 | `statusline` | Both agents show the project, the model, the context used, and usage limits at the bottom of the terminal. |
 | `codex-rules` | Codex asks before running some test commands: `.venv/bin/pytest`, `python -m pytest`, and `.venv/bin/python -m pytest`. |
 | `guards` | Claude Code refuses to delete or skip tests to make a suite pass, and to read or leak secrets such as `.env` files and SSH keys. Needs Node.js. |
+| `permissions` | Both agents refuse to delete your home or root directory and to force-push `main` or `master`, and ask before any other force-push or a `git reset --hard`. Your own permission rules stay. [Details](docs/installation.md#permissions) |
+| `notify` | A desktop notification when an agent finishes or waits for your approval: a Windows toast under WSL, which brings the agent's window and Windows Terminal tab forward when you click it, `notify-send` on Linux, or a terminal bell. |
+| `context` | Every new session starts knowing the git branch and uncommitted changes, any handoffs waiting for the project, and the [shared memory](#shared-memory) index. Sessions are also coordinated: a second session in the same repository is warned and pointed at a worktree, and every project you work in is listed for the `portfolio` skill. |
+| `format` | After each file edit, both agents run the formatter you set for that repository, such as `prettier --write` or `ruff format`, on the edited files. Nothing runs in a repository without one. [Details](docs/installation.md#choosing-components) |
+| `subagents` | Both agents can hand work to three helpers: a read-only `reviewer` for an independent look at a change, a `docs-researcher` for current documentation, and a `test-runner` that reports only what failed. Pick their models in the [overlay](#personal-overlay). |
 
 Pass a comma-separated list, or `all` or `none`:
 
@@ -160,18 +173,54 @@ Pass a comma-separated list, or `all` or `none`:
 ./install.sh --components all
 ```
 
+Installs saved before the skill tiers existed keep every skill: their
+`skills` selection becomes `skills,skills-extra`.
+
 The installer saves your choice in `~/.config/power-agents/components`, so
 later runs of `make install` and `make sync` keep it. If you leave a component
 out of a new list, the installer removes what it added for that component and
 nothing else. [Details →](docs/installation.md#choosing-components)
 
-With the `skills` component, ask for a skill by name, or just describe the
-task and let the agent choose one:
+With a skills component, ask for a skill by name, or just describe the task
+and let the agent choose one:
 
 | Agent | Example prompt |
 | --- | --- |
 | Codex | `$ponytail fix this bug using the smallest suitable change` |
 | Claude Code | `/ponytail fix this bug using the smallest suitable change` |
+
+### Personal Overlay
+
+Your own preferences stay out of this repository, in
+`~/.config/power-agents/`:
+
+| File | Effect |
+| --- | --- |
+| `instructions.md` | Appended to the shared instructions for both agents. While it exists, the installer writes the combined text to `~/.agents/instructions.md` and links both agents to that file. Rerun `make install` after you edit either file. |
+| `disabled-skills` | Skill names, one per line, that are never installed even when their tier is selected. `#` starts a comment. Unknown names produce a warning. |
+| `agent-models.json` | Models for the [subagents](docs/installation.md#choosing-components), per agent and role, for example `{"claude": {"reviewer": "opus"}, "codex": {"reviewer": "gpt-5.5"}}`. |
+
+All three files may be symlinks, for example from a dotfiles repository.
+
+### Shared Memory
+
+Facts that hold across projects, such as your tools, your machines, or a
+recurring decision, live in `~/.agents/memory/`: one Markdown file per fact and
+an index, `MEMORY.md`, in Claude Code's memory format. Both agents use it:
+
+- **Saving.** Ask either agent to remember something for all projects. The
+  `remember` skill (in `skills`) saves it only when you asked or agreed,
+  records the project and session it came from, and commits it to a local git
+  repository, so every change can be reviewed or reverted. The store never
+  gets a remote.
+- **Reading.** With the `context` component, each session starts with the
+  index, and the agent opens a fact when it applies.
+- **What goes elsewhere.** Rules you want applied every time belong in your
+  [overlay](#personal-overlay). Facts about one project belong in its
+  `AGENTS.md`; Claude Code's own per-project memory keeps working as before.
+
+Edit or delete the files freely; then ask an agent to rebuild the index, or
+run `python3 ~/.agents/skills/remember/scripts/memory.py index`.
 
 ## Turning Cross-Review On or Off
 
@@ -230,12 +279,19 @@ Run these from your checkout. `make` on its own lists them.
 
   Optional components
   instructions/general-global.md ──▶ ~/.codex/AGENTS.md, ~/.claude/CLAUDE.md
+    + your overlay, if any       ──▶ through ~/.agents/instructions.md
   skills/<name>/                 ──▶ ~/.agents/skills/<name>, ~/.claude/skills/<name>
   settings/ (status lines)       ──▶ ~/.claude/statusline-command.sh, merged into
                                      ~/.claude/settings.json, ~/.codex/config.toml
-  policies/codex/shared.rules    ──▶ ~/.codex/rules/shared.rules
+  policies/codex/shared.rules    ──▶ copied to ~/.codex/rules/shared.rules
   hooks/guards/                  ──▶ ~/.agents/hooks/guards, merged into
                                      ~/.claude/settings.json
+  settings/claude/permissions.json ──▶ merged into ~/.claude/settings.json
+  policies/codex/permissions.rules ──▶ copied to ~/.codex/rules/permissions.rules
+  hooks/agent-hub.py             ──▶ ~/.agents/hooks/agent-hub.py, merged into
+                                     ~/.claude/settings.json, ~/.codex/hooks.json
+  subagents/<role>.md            ──▶ rendered to ~/.agents/agents/, linked from
+                                     ~/.claude/agents/, copied to ~/.codex/agents/
 
   Installer state                    ~/.config/power-agents/
 ```
@@ -246,6 +302,9 @@ place of `~/.codex` and `~/.claude`.
 - 🔗 **Most files are linked, not copied.** They are symlinks back to this
   checkout, so an edit here reaches both agents right away. **Keep the
   checkout where it is:** moving or deleting it breaks your agents' setup.
+  Codex rules files and subagents are the exception: Codex ignores symlinked
+  ones, so they are copied, and an edit to them needs `./install.sh` to take
+  effect.
 - 🧷 **Settings files are merged, not replaced.** The installer changes only
   the keys it manages. The exception is the `statusline` component: it
   **replaces** your status-line setting in each agent (Claude Code's
@@ -270,7 +329,7 @@ Every installed path is listed in the
 | --- | --- |
 | Install and use | GNU/Linux, Bash 4.4 or newer, GNU coreutils, `git`, `make`, `jq`, `python3` |
 | Use the `statusline` component | `tomlkit` (`python3-tomlkit`) |
-| Use the `skills` component | PyYAML (`python3-yaml`) |
+| Use the `skills` or `skills-extra` component | PyYAML (`python3-yaml`) |
 | Use the `guards` component | Node.js (`node`) |
 | Read compressed Codex transcripts | `zstd`, optional |
 | Run `make check`, `make test`, `make ci` | all of the above, plus `shellcheck`, `tomlkit`, PyYAML, and Node.js |
@@ -306,12 +365,18 @@ run `make install` and restart your agent sessions.
 | The self-check and cross-review behavior | [`hooks/verify-gate.py`](hooks/verify-gate.py) ([guide](docs/verify-gate.md)) |
 | Gate settings or a check command for one repository | `~/.config/power-agents/projects.json` ([format](docs/verify-gate.md#per-project-settings)) |
 | Which optional components are installed | Run `./install.sh --components LIST` |
-| Your coding preferences for all projects | [`instructions/general-global.md`](instructions/general-global.md) |
+| Coding preferences for everyone who uses this kit | [`instructions/general-global.md`](instructions/general-global.md) |
+| Your own preferences, or skills to leave out | `~/.config/power-agents/instructions.md` and `disabled-skills` ([overlay](#personal-overlay)) |
+| Which skills are core and which are extra | [`skills/extras.txt`](skills/extras.txt) |
 | A skill, or add a new one | `skills/<name>/SKILL.md` ([skill format](skills/README.md#skill-format)) |
 | Codex command rules | [`policies/codex/shared.rules`](policies/codex/shared.rules) |
 | Codex status line | [`settings/codex/tui.toml`](settings/codex/tui.toml) |
 | Claude Code status line | [`settings/claude/statusline-command.sh`](settings/claude/statusline-command.sh) |
 | Claude Code guard hooks | [`hooks/guards/`](hooks/guards/) and [`settings/claude/guards-hooks.json`](settings/claude/guards-hooks.json) |
+| Permission guardrails | [`settings/claude/permissions.json`](settings/claude/permissions.json) and [`policies/codex/permissions.rules`](policies/codex/permissions.rules) |
+| Notifications, session context, and formatting | [`hooks/agent-hub.py`](hooks/agent-hub.py) and `settings/*/{notify,context,format}-hooks.json` |
+| A repository's formatter or check command | `~/.config/power-agents/projects.json` ([format](docs/verify-gate.md#per-project-settings)) |
+| Subagents | [`subagents/`](subagents/) and `~/.config/power-agents/agent-models.json` |
 
 ## Quality Checks
 
@@ -330,10 +395,11 @@ What the checks cover is described in the
 
 ```text
 power-agents/
-├── hooks/          The verify gate (self-check and cross-review) and the guards
+├── hooks/          The verify gate, the guards, and the agent hub (notify, context, format)
 ├── settings/       Agent-specific settings: hook entries and status lines
 ├── instructions/   Coding preferences installed for both agents
 ├── skills/         One folder per skill, each with a SKILL.md
+├── subagents/      One file per subagent, rendered for both agents
 ├── policies/       Codex command approval rules
 ├── install.sh      The installer (run through `make install`)
 ├── sync.sh         Fast-forward updater (run through `make sync`)
