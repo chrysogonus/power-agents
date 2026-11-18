@@ -1052,6 +1052,12 @@ test_component_selection() {
   assert_contains "$test_home/install.log" "ERROR: Unknown component: bogus"
   [[ -z "$(saved_components "$test_home")" ]] ||
     fail "Rejected component selection changed the saved selection"
+
+  run_installer_args "$test_home" --components recommended ||
+    fail "Recommended install failed: $(<"$test_home/install.log")"
+  [[ "$(saved_components "$test_home")" == \
+    "instructions,skills,statusline,permissions,notify,context" ]] ||
+    fail "The recommended preset saved an unexpected selection"
 }
 
 test_component_detection() {
