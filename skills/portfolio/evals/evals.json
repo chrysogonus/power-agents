@@ -1,0 +1,63 @@
+{
+  "skill_name": "portfolio",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What am I working on across my projects right now?",
+      "expected_output": "Load portfolio and plan to run the agent hub's portfolio report to answer across all tracked projects.",
+      "assertions": [
+        "portfolio is loaded.",
+        "The response refers to running the portfolio report or to ~/.agents/portfolio.json rather than inspecting only the current directory."
+      ],
+      "routing": {
+        "required": [
+          "portfolio"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Which of my repos have uncommitted changes or handoffs waiting for me?",
+      "expected_output": "Load portfolio: the question spans repositories and handoffs.",
+      "assertions": [
+        "portfolio is loaded."
+      ],
+      "routing": {
+        "required": [
+          "portfolio"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Which files in this repository have I changed since the last commit?",
+      "expected_output": "Answer for the current repository, such as with git status; the portfolio is not needed.",
+      "assertions": [
+        "portfolio is not loaded.",
+        "The response answers for the current repository only, for example by pointing to git status or git diff, or by noting that the current directory is not a git repository."
+      ],
+      "routing": {
+        "forbidden": [
+          "portfolio"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "I'm done for today. Write a handoff so I can pick up this refactor tomorrow.",
+      "expected_output": "Load handoff, not portfolio: writing a handoff is not an overview across projects.",
+      "assertions": [
+        "handoff is loaded.",
+        "portfolio is not loaded."
+      ],
+      "routing": {
+        "required": [
+          "handoff"
+        ],
+        "forbidden": [
+          "portfolio"
+        ]
+      }
+    }
+  ]
+}

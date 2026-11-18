@@ -88,6 +88,7 @@ match the session's directory itself:
 | `cross_review` | `true` or `false`, in place of the global toggle. |
 | `cross_review_scope` | `"changes"` or `"all"`, like `CROSS_REVIEW_SCOPE`. |
 | `min_chars` | Like `VERIFY_GATE_MIN_CHARS`. |
+| `format` | A formatter command for the `format` component, which runs it on the files an agent edits. The gate itself ignores it. See [Choosing Components](installation.md#choosing-components). |
 
 Environment variables take precedence over this file, and the file over the
 global toggle. The file belongs to you, not to the repository, so a repository

@@ -46,7 +46,7 @@ path; environment variables take precedence):
   {"~/src/app": {"check": "make test", "cross_review": false,
                  "cross_review_scope": "all", "min_chars": 800}}
   "check" runs in the repository on turns that changed files; its result
-  goes into the verification prompt.
+  goes into the verification prompt. "format" is for the format component.
 
 Experiment (~/.config/power-agents/experiment.json, see
 docs/experiment.md):
@@ -822,7 +822,8 @@ def cross_review_enabled(project=None):
 # A file the user owns, not one in the repository: a cloned repository
 # must not choose commands to run or send transcripts to another vendor.
 PROJECT_KEYS = {"check": str, "cross_review": bool,
-                "cross_review_scope": str, "min_chars": int}
+                "cross_review_scope": str, "min_chars": int,
+                "format": str}  # read by the agent hub's format hook
 
 
 def load_projects():

@@ -17,22 +17,49 @@ directory remains `~/.agents/skills`, even when `CODEX_HOME` is set.
 | always | Codex verify-gate hooks | `<Codex root>/hooks.json` | `settings/codex/hooks.json` | Managed entries |
 | always | Verify gate script | `~/.agents/hooks/verify-gate.py` | `hooks/verify-gate.py` | Symlink |
 | always | Component selection | `~/.config/power-agents/components` | none | Written by the installer |
-| `instructions` | Codex instructions | `<Codex root>/AGENTS.md` | `instructions/general-global.md` | Symlink |
-| `instructions` | Claude Code instructions | `<Claude root>/CLAUDE.md` | `instructions/general-global.md` | Symlink |
-| `skills` | Codex skills | `~/.agents/skills/<name>` | `skills/<name>` | Per-skill symlink |
-| `skills` | Claude Code skills | `<Claude root>/skills/<name>` | `skills/<name>` | Per-skill symlink |
+| `instructions` | Codex instructions | `<Codex root>/AGENTS.md` | `instructions/general-global.md`, or the generated file below | Symlink |
+| `instructions` | Claude Code instructions | `<Claude root>/CLAUDE.md` | `instructions/general-global.md`, or the generated file below | Symlink |
+| `instructions` | Shared instructions with your overlay | `~/.agents/instructions.md` | `instructions/general-global.md` and `~/.config/power-agents/instructions.md` | Written by the installer, only while the overlay exists |
+| `skills` | Codex core skills | `~/.agents/skills/<name>` | `skills/<name>` not listed in `skills/extras.txt` | Per-skill symlink |
+| `skills` | Claude Code core skills | `<Claude root>/skills/<name>` | `skills/<name>` not listed in `skills/extras.txt` | Per-skill symlink |
+| `skills-extra` | Codex extra skills | `~/.agents/skills/<name>` | `skills/<name>` listed in `skills/extras.txt` | Per-skill symlink |
+| `skills-extra` | Claude Code extra skills | `<Claude root>/skills/<name>` | `skills/<name>` listed in `skills/extras.txt` | Per-skill symlink |
 | `statusline` | Claude Code settings | `<Claude root>/settings.json` | `settings/claude/settings.json` | Managed keys |
 | `statusline` | Claude Code status line | `<Claude root>/statusline-command.sh` | `settings/claude/statusline-command.sh` | Symlink |
 | `statusline` | Codex TUI settings | `<Codex root>/config.toml` | `settings/codex/tui.toml` | Managed keys |
 | `statusline` | Installed Codex TUI values | `~/.config/power-agents/codex-tui.toml` | `settings/codex/tui.toml` | Copy |
-| `codex-rules` | Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Symlink |
+| `codex-rules` | Codex authored rules | `<Codex root>/rules/shared.rules` | `policies/codex/shared.rules` | Marked copy |
 | `guards` | Claude Code guard hooks | `<Claude root>/settings.json` (`hooks.PreToolUse`) | `settings/claude/guards-hooks.json` | Managed entries |
 | `guards` | Guard hook scripts | `~/.agents/hooks/guards` | `hooks/guards` | Symlink |
+| `permissions` | Claude Code permission rules | `<Claude root>/settings.json` (`permissions.deny`, `permissions.ask`) | `settings/claude/permissions.json` | Managed entries |
+| `permissions` | Added Claude Code permission rules | `~/.config/power-agents/claude-permissions.json` | `settings/claude/permissions.json` | Written by the installer |
+| `permissions` | Codex permission rules | `<Codex root>/rules/permissions.rules` | `policies/codex/permissions.rules` | Marked copy |
+| `notify` | Claude Code notify hooks | `<Claude root>/settings.json` (`hooks.Notification`, `hooks.Stop`, `hooks.UserPromptSubmit`) | `settings/claude/notify-hooks.json` | Managed entries |
+| `notify` | Codex notify hooks | `<Codex root>/hooks.json` (`PermissionRequest`, `Stop`, `UserPromptSubmit`) | `settings/codex/notify-hooks.json` | Managed entries |
+| `notify` | Session windows, on WSL | `~/.agents/windows/<session>` | none | Written by the hooks |
+| `notify` | Notification click handler, on WSL | `HKCU\Software\Classes\power-agents-focus` and `%LOCALAPPDATA%\power-agents\focus-window.exe` | `hooks/agent-hub.py` | Written by the installer |
+| `notify`, `context`, `format` | Agent hub script | `~/.agents/hooks/agent-hub.py` | `hooks/agent-hub.py` | Symlink |
+| `context` | Claude Code context and session hooks | `<Claude root>/settings.json` (`hooks.SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`) | `settings/claude/context-hooks.json` | Managed entries |
+| `context` | Codex context and session hooks | `<Codex root>/hooks.json` (`SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`) | `settings/codex/context-hooks.json` | Managed entries |
+| `context` | Portfolio, session locks, and handoff inbox | `~/.agents/portfolio.json`, `~/.agents/locks/`, `~/.agents/handoffs/` | none | Written by the hooks |
+| `format` | Claude Code format hook | `<Claude root>/settings.json` (`hooks.PostToolUse`) | `settings/claude/format-hooks.json` | Managed entries |
+| `format` | Codex format hook | `<Codex root>/hooks.json` (`PostToolUse`) | `settings/codex/format-hooks.json` | Managed entries |
+| `subagents` | Rendered subagent definitions | `~/.agents/agents/claude/<role>.md`, `~/.agents/agents/codex/<role>.toml` | `subagents/<role>.md` and `~/.config/power-agents/agent-models.json` | Written by the installer |
+| `subagents` | Claude Code subagents | `<Claude root>/agents/<role>.md` | the rendered definition | Symlink |
+| `subagents` | Codex subagents | `<Codex root>/agents/<role>.toml` | the rendered definition | Marked copy |
 
 The installer also creates `~/.agents`, `~/.agents/hooks`, the Codex and Claude
 roots, and `~/.config/power-agents` when they are missing, so even a gate-only
 install creates both agents' roots and hook files whether or not both agents are
-installed. `codex-rules` also creates `<Codex root>/rules`. The managed
+installed. `codex-rules` and `permissions` also create `<Codex root>/rules`.
+Codex skips symlinked rules files and refuses to spawn a symlinked agent role,
+so those two components and `subagents` copy these files into the Codex root
+instead of linking them. Each copy's first line, `# Managed by power-agents.`,
+marks it as the installer's: a rerun updates a marked copy, a deselected
+component or role removes it, and an unmarked file of the same name stops the
+installer. Edit the file in this repository and rerun `./install.sh` for Codex
+to see a change. Files linked by an earlier version of the installer are
+replaced with copies on the next install. The managed
 `statusLine.command` is always written as the absolute
 `<Claude root>/statusline-command.sh`, not the `~/.claude/...` value shown in
 `settings/claude/settings.json`.
@@ -46,8 +73,9 @@ created through interactive approvals.
 
 The verify gate is always installed. Select optional components with
 `./install.sh --components LIST`, where `LIST` is a comma-separated subset of
-`instructions`, `skills`, `statusline`, `codex-rules`, and `guards`, or `all` or `none`.
-An unknown name fails before anything changes.
+`instructions`, `skills`, `skills-extra`, `statusline`, `codex-rules`,
+`guards`, `permissions`, `notify`, `context`, `format`, and `subagents`, or
+`all` or `none`. An unknown name fails before anything changes.
 
 - **The selection is saved.** The installer writes it to
   `~/.config/power-agents/components`, together with the Codex and Claude roots
@@ -90,9 +118,9 @@ An unknown name fails before anything changes.
   whatever `CODEX_HOME` is, and both agents run the gate from
   `~/.agents/hooks/verify-gate.py`. Deselecting `skills` for one profile
   removes the shared Codex skill links; the next install for a profile that
-  still selects `skills` restores them. The `~/.agents/hooks/guards` link is
-  kept when the saved selection belongs to other agent roots, since their
-  Claude settings may still run it.
+  still selects `skills` restores them. The `~/.agents/hooks/guards` and
+  `~/.agents/hooks/agent-hub.py` links are kept when the saved selection
+  belongs to other agent roots, since their settings may still run them.
 - **`guards` applies to Claude Code only.** It adds two `PreToolUse` groups
   that run `protect-tests.js` and `protect-secrets.js` through
   `~/.agents/hooks/guards`, after any hooks of your own. Entries whose command
@@ -102,9 +130,164 @@ An unknown name fails before anything changes.
   how much they block. `protect-secrets.js` denies a call whose check takes more
   than 5 seconds, which only very large or highly repetitive commands should
   reach. Codex hooks are not changed.
+- **`notify` runs `agent-hub.py notify` on Claude Code's `Notification`
+  (permission prompts and questions) and `Stop` events, and on Codex's
+  `PermissionRequest` and `Stop` events.** It shows a Windows toast through
+  `powershell.exe` when that is on `PATH` (WSL), otherwise uses `notify-send`,
+  otherwise rings the terminal bell, and never blocks or fails the agent's
+  turn. Hook entries whose command runs `~/.agents/hooks/agent-hub.py` are
+  managed. When the verify gate sends an agent back for a check, that turn can
+  notify twice. Codex asks you to trust the new hooks with `/hooks`.
+
+  Under WSL, clicking a toast brings the session's window, and in Windows
+  Terminal its tab, forward. On each prompt, `agent-hub.py window` records the
+  window in front, where you just typed, and in Windows Terminal the selected
+  tab's UI Automation ID, in `~/.agents/windows/<session>` (records idle for a
+  week are removed), and the session's toasts link to them. The installer
+  registers the `power-agents-focus:` link for your Windows user under
+  `HKCU\Software\Classes`, run by
+  `%LOCALAPPDATA%\power-agents\focus-window.exe`, which accepts only a window
+  number and an optional tab ID, brings that window forward if it still
+  exists, and selects that tab if it is still open in it. The installer
+  compiles that small program from C# with PowerShell's `Add-Type`, because a
+  PowerShell script would flash a console window first. Removing `notify`
+  removes both. A toast shown within about a second of a prompt is not
+  clickable. After you close the tab or move it to another
+  window, the window comes forward with its current tab. A split pane is not
+  focused, and Windows can decline to bring a window forward and flash its
+  taskbar button instead. If registering fails, the installer warns and
+  notifications work without the click.
+- **`context` runs `agent-hub.py context` when a session starts.** Both
+  agents add its output to the model's context. It reports, when present:
+  other active sessions in the same repository, the branch and up to 15 lines
+  of `git status`, up to five handoffs from `~/.agents/handoffs/<project>/*.md`
+  (newest first, with age and first line), a pointer to the portfolio, and the
+  first 150 lines or 8 KB of `~/.agents/memory/MEMORY.md`. `<project>` is the
+  name of the git top-level directory, so two repositories with the same name
+  share an inbox. The whole text stays under 9,000 characters, below Codex's
+  limit for hook context. A resumed or forked session gets no text, because its
+  transcript already has it, but still takes its lock. It runs `git` with
+  `core.fsmonitor` disabled and without optional locks, so opening a
+  repository does not run a program from its git config. `notify`,
+  `context`, and `format` share the `~/.agents/hooks/agent-hub.py` link, which
+  stays while any of them is selected.
+- **`context` also coordinates sessions.** In a git repository, the session
+  start records the repository, branch, time, and agent in
+  `~/.agents/portfolio.json` (under a file lock, written atomically; a file
+  that is not valid JSON is left alone and reported), which the `portfolio`
+  skill reads. Each session keeps a lock file in
+  `~/.agents/locks/<hash of the repository path>/<session>.json`, refreshed on
+  every prompt and at the end of every turn and removed when the session ends.
+  A lock untouched for 30 minutes is stale and deleted. When a session starts
+  while another one holds a fresh lock for the same repository, the agent is
+  told to warn you and to suggest a separate worktree (`using-git-worktrees`);
+  nothing is blocked. A worktree has its own path and so its own lock. The
+  hooks also create `~/.agents/handoffs/`; while it exists, the `handoff` skill
+  saves there instead of the temporary directory. An agent that continues a
+  handoff moves it into `done/` next to it.
+- **`format` runs `agent-hub.py format` after each file edit:** Claude Code's
+  `Edit`, `Write`, and `MultiEdit`, and Codex's `apply_patch` (for Codex,
+  the added, updated, and moved files in the patch). It looks up the edited
+  file's git repository in `~/.config/power-agents/projects.json` and, when
+  that entry has a `format` command, runs it at the top of the repository with
+  the edited files' absolute paths appended, quoted for the shell, such as
+  `"format": "npx prettier --write"`. Like `check`, the command comes from your
+  file, never from the repository. Files outside a git repository, outside
+  their repository (also through a symbolic link), or in a repository without a
+  `format` command are left alone, and an invalid `projects.json` turns
+  formatting off. The formatter is stopped after 45 seconds. When it changes a
+  file, the agent is told to read the file again before its next edit; when it
+  fails or times out, the agent gets its exit code and the last 2,000
+  characters of its output. The formatter formats whole files, so it can also
+  change lines the agent did not touch. Codex asks you to trust the new hook
+  with `/hooks`.
+- **`subagents` adds three subagents to both agents:** `reviewer`, which
+  reviews a change and reports verified findings; `docs-researcher`, which
+  looks up current documentation; and `test-runner`, which runs a noisy test
+  command and reports only the results. Each is defined once in
+  `subagents/<role>.md`; `scripts/render-subagents.py` writes the Claude Code
+  and Codex versions to `~/.agents/agents/`; Claude Code's `agents` directory
+  links to them, and Codex's holds marked copies of them. Claude Code uses `opus`, `sonnet`, and `haiku`
+  respectively; Codex uses its default model with `high`, `medium`, and `low`
+  reasoning effort, because its model names change often. Set other models in
+  `~/.config/power-agents/agent-models.json` (see
+  [Personal Overlay](#personal-overlay)). The Claude Code reviewer gets only
+  `Read`, `Grep`, and `Glob`. In Codex a subagent always inherits the parent
+  session's sandbox and approvals, so the reviewer stays read-only only
+  because its instructions say so. Agent files of your own with other names
+  are never touched; one with the same name as a subagent stops the installer.
+  Codex finds the agents without any `config.toml` change.
 - **Python modules are needed only by their component.** `statusline` needs
-  `tomlkit`, also for removing it, and `skills` needs PyYAML for validation. A
+  `tomlkit`, also for removing it, and `skills` and `skills-extra` need PyYAML
+  for validation. A
   gate-only install needs neither. `guards` needs Node.js (`node`) instead.
+
+### Permissions
+
+`permissions` adds guardrails, not a security boundary: both agents match the
+command as written, so `/bin/rm -rf ~` or `sh -c '...'` is not caught. Use
+each agent's sandbox when a limit must hold.
+
+| Command | Claude Code | Codex |
+| --- | --- | --- |
+| `rm -rf` (or `-fr`) of `/`, `~`, `~/`, or `$HOME` | denied | denied |
+| Force-push naming `main` or `master` (`--force*`, `-f`, or `+main`) | denied | denied when the remote is `origin` or `upstream` |
+| Any other force-push | asks | asks when `--force`, `-f`, or `--force-with-lease` follows `git push` |
+| `git reset --hard` | asks | asks |
+
+Neither agent can tell from a rule whether a hard reset discards unpushed work
+or which branch a bare `git push --force` targets, so those always ask. There
+is no allow list: Claude Code already runs read-only commands such as `ls` and
+`git status` without asking, and a Codex `allow` rule would run the command
+outside the sandbox.
+
+Claude Code's `deny` and `ask` lists are merged: rules you wrote stay, and the
+installer records the rules it added, and the Claude root it added them to, in
+`~/.config/power-agents/claude-permissions.json`. A later install replaces
+those rules with the current ones, so a rule removed from this repository is
+removed from your settings too; deselecting `permissions` removes them. A rule
+you already had before the install is never recorded and always stays. Rules
+for another Claude root are left alone. There is one record for all Claude
+roots: installing `permissions` for a second root replaces the first root's
+record, and the rules added to the first root then stay until you remove them
+by hand. Invalid `permissions.deny` or
+`permissions.ask` values stop the installer with `Invalid Claude permissions`.
+
+### Personal Overlay
+
+These files in `~/.config/power-agents/` belong to you, not to the
+installer. Each may be a symlink to a regular file; anything else stops the
+installer before it changes anything.
+
+- **`instructions.md`.** With the `instructions` component, the installer
+  writes `instructions/general-global.md`, a blank line, and this file to
+  `~/.agents/instructions.md`, and links both agents' instruction files there.
+  Without the overlay, the links point at `instructions/general-global.md` as
+  before, and an unused generated file is removed. Like the verify gate, the
+  generated file is shared by all agent roots: it is kept while a selection
+  saved for other roots may still use it. The combined file is a copy, so
+  rerun `make install` after editing either source.
+- **`disabled-skills`.** One skill name per line; `#` starts a comment. Listed
+  skills are not installed, and links to them that point into this checkout
+  are removed, whichever tier they belong to. A name that matches no skill
+  produces a warning.
+- **`agent-models.json`.** Models for the `subagents` component, per agent and
+  role, such as
+  `{"claude": {"reviewer": "claude-opus-5-5"}, "codex": {"reviewer": "gpt-5.5"}}`.
+  Roles you leave out keep their defaults. An unknown agent or role, or a
+  model name with characters other than letters, digits, and `._:/[]-`, stops
+  the installer before it changes anything.
+
+### Skill Tiers
+
+`skills/extras.txt` lists the skills of the `skills-extra` component; every
+other skill directory belongs to `skills`. A name in that file without a
+matching directory stops the installer. A tier that is not selected has its
+links removed, while links to other skills stay.
+
+A selection saved without a `format=2` line predates the tiers, when `skills`
+meant every skill, so the installer reads it as `skills,skills-extra` and
+saves the result in the new format.
 
 ## Installation Details
 
@@ -266,8 +449,9 @@ only `tui.status_line` and `tui.status_line_use_colors` in
 
 ## Updating the Authored Command Policy
 
-Edit `policies/codex/shared.rules`. Keep rules created through Codex approval
-prompts in the application-managed `<Codex root>/rules/default.rules` file.
+Edit `policies/codex/shared.rules`, then rerun `./install.sh` to update the
+installed copy. Keep rules created through Codex approval prompts in the
+application-managed `<Codex root>/rules/default.rules` file.
 
 Test the authored rules against a command with:
 
@@ -299,14 +483,22 @@ This removes, for the agent roots selected by `CODEX_HOME` and
 `CLAUDE_CONFIG_DIR`:
 
 - every optional component, exactly as `./install.sh --components none` does:
-  it unlinks only links that resolve into this checkout, and removes managed
+  it unlinks only links that resolve into this checkout, removes only Codex
+  rules and agent files that carry the managed first line, and removes managed
   status-line values only while they are unchanged;
 - the verify-gate entries in `<Claude root>/settings.json` and
   `<Codex root>/hooks.json`, along with any matcher group, event, or `hooks`
   object that becomes empty as a result. Every other setting and hook is kept;
 - the `~/.agents/hooks/verify-gate.py` link, if it points into this checkout;
-- the guard entries in `<Claude root>/settings.json`, and the
-  `~/.agents/hooks/guards` link unless the saved selection belongs to other
+- the guard and notify entries in `<Claude root>/settings.json` and
+  `<Codex root>/hooks.json`, and the `~/.agents/hooks/guards` and
+  `~/.agents/hooks/agent-hub.py` links unless the saved selection belongs to
+  other agent roots;
+- on WSL, the notification click handler, under the same condition;
+- the Claude Code permission rules the installer added, and
+  `~/.config/power-agents/claude-permissions.json`, when it was written for
+  this Claude root;
+- `~/.agents/instructions.md`, unless the saved selection belongs to other
   agent roots;
 - `~/.config/power-agents/components` and `~/.config/power-agents/codex-tui.toml`.
 
@@ -321,7 +513,11 @@ it; reinstall that profile afterwards. Removing the Codex status line needs
 
 It keeps the cross-review toggle (`~/.config/power-agents/cross-review-on`),
 your [per-project settings](verify-gate.md#per-project-settings)
-(`~/.config/power-agents/projects.json`), any
+(`~/.config/power-agents/projects.json`), your
+[personal overlay](#personal-overlay) (`instructions.md` and
+`disabled-skills`, and `agent-models.json`), the shared memory store
+(`~/.agents/memory`), the
+portfolio, session locks, and handoffs under `~/.agents`, any
 [experiment settings](experiment.md) (`~/.config/power-agents/experiment.json`),
 the guards' logs in `~/.claude/hooks-logs` (`CLAUDE_CONFIG_DIR` does not move
 them), and the gate's decision log and state in `$XDG_CACHE_HOME/verify-gate`

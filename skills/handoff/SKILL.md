@@ -12,7 +12,10 @@ Apply this skill to the requested target and task. User instructions and project
 conventions take precedence; loading it does not authorize commits, pushes,
 publishing, or unrelated changes.
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the temporary directory of the user's OS (`$TMPDIR`, else `/tmp`; `%TEMP%` on Windows) - not the current workspace. If the runtime provides a session scratchpad directory, use it instead. Tell the user the absolute path.
+Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save it outside the current workspace, and tell the user the absolute path:
+
+- If `~/.agents/handoffs/` exists, save to `~/.agents/handoffs/<project>/<timestamp>.md`, where `<project>` is the name of the git repository's top-level directory (or of the current directory outside git) and `<timestamp>` is the current UTC time, such as `2026-11-16T143005Z`. The next session in that project is shown the handoff when it starts.
+- Otherwise save to the temporary directory of the user's OS (`$TMPDIR`, else `/tmp`; `%TEMP%` on Windows). If the runtime provides a session scratchpad directory, use it instead.
 
 Include a "suggested skills" section in the document, naming which skills the next agent should load.
 

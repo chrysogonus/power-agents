@@ -211,10 +211,14 @@ def reconcile(
     validate_config(original, input_path)
 
     managed = managed_entries(source, script, placeholder)
-    candidate = without_managed(original, script)
-    hooks = candidate.setdefault("hooks", {})
-    for event, groups in managed.items():
-        hooks.setdefault(event, []).extend(groups)
+    kept = without_managed(original, script).get("hooks", {})
+    # Events stay where they were, so that reinstalling changes nothing.
+    hooks = {}
+    for event in [*original.get("hooks", {}), *managed]:
+        if event not in hooks and (event in kept or event in managed):
+            hooks[event] = kept.get(event, []) + managed.get(event, [])
+    candidate = copy.deepcopy(original)
+    candidate["hooks"] = hooks
 
     if without_managed(candidate, script) != without_managed(original, script):
         raise ValueError("generated hooks change unmanaged values")
